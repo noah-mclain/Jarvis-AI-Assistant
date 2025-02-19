@@ -1,0 +1,14 @@
+torch==2.2.0           # Core deep learning framework
+numpy==1.26.4           # Numerical computation
+tokenizers==0.21.0      # Hugging Face tokenizer library
+requests==2.32.3        # HTTP requests
+tqdm==4.67.1             # Progress bars
+transformers==4.48.3   # Hugging Face Transformers (utilities, architectures)
+spacy==3.8.4             # NLP library (preprocessing)
+regex==2024.11.6         # Improves text parsing/handling
+python-dateutil==2.9.0.post0 # Needed for smooth implementation
+PyYAML==6.0.2           # config files/ data persistence
+filelock==3.17.0            # multiple process handling
+cloudpathlib==0.20.0            # Cloud implementation access
+fsspec==2025.2.0 # Access to structured datasets
+Pillow

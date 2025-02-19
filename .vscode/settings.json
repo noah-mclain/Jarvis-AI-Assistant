@@ -1,0 +1,13 @@
+{
+  "cSpell.words": [
+    "cloudpathlib",
+    "dateutil",
+    "filelock",
+    "fsspec",
+    "multinomial",
+    "numpy",
+    "spacy",
+    "tqdm",
+    "venv"
+  ]
+}
