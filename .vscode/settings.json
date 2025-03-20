@@ -1,7 +1,9 @@
 {
   "cSpell.words": [
+    "backprop",
     "cloudpathlib",
     "dateutil",
+    "ents",
     "filelock",
     "fsspec",
     "multinomial",

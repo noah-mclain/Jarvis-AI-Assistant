@@ -12,3 +12,4 @@ filelock==3.17.0            # multiple process handling
 cloudpathlib==0.20.0            # Cloud implementation access
 fsspec==2025.2.0 # Access to structured datasets
 Pillow
+datasets
