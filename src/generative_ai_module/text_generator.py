@@ -9,16 +9,25 @@ class CombinedModel(nn.Module):
     def __init__(self, input_size, hidden_size, output_size, num_layers):
         super(CombinedModel, self).__init__()
         
-        self.encoder = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
-        self.decoder = nn.LSTM(hidden_size, hidden_size, num_layers, batch_first=True)
-        self.linear = nn.Linear(hidden_size, output_size)
+        # Simple LSTM model
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        self.fc = nn.Linear(hidden_size, output_size)
         self.dropout = nn.Dropout(0.2)
-    def forward(self, input, hidden):
-        encoder_out, hidden = self.encoder(input, hidden)
-        decoder_out, hidden = self.decoder(encoder_out, hidden)
-        out = self.linear(decoder_out[:, -1, :])
+    
+    def forward(self, x, hidden=None):
+        # x shape: [batch_size, seq_len, input_size]
         
-        return out, hidden
+        # Pass through LSTM
+        lstm_out, hidden = self.lstm(x, hidden)
+        
+        # Get output from last time step only
+        last_output = lstm_out[:, -1, :]
+        
+        # Apply dropout and linear layer
+        last_output = self.dropout(last_output)
+        output = self.fc(last_output)
+        
+        return output, hidden
     
 class TextGenerator:
     def __init__(self):
@@ -60,32 +69,154 @@ class TextGenerator:
             
     
     def generate(self, initial_str="", pred_len=1000, temperature=0.8):
+        """Generate text starting from initial_str"""
         self.model.eval()
         
-        hidden = self.context or (torch.zeros(2, 1, 128), torch.zeros(2, 1, 128))
-        initial_input = self.char_indices_tensor(initial_str).unsqueeze(0)
-        device = next(self.model.parameters()).device
-        initial_input = initial_input.to(device)
+        # Start with the initial string
         predicted = initial_str
         
+        # Convert to input format
+        char_to_idx = self.char_to_index
+        n_chars = len(char_to_idx)
+        unknown_token = self.unknown_token
+        device = next(self.model.parameters()).device
+        
+        # Initial hidden state
+        hidden = None
+        
+        # Generation loop
         with torch.no_grad():
             for _ in range(pred_len):
-                output, hidden = self.model(initial_input, hidden)
-                output_dist = F.softmax(output.squeeze() / temperature, dim=0)
-                predicted_index = torch.multinomial(output_dist, 1)[0].item()
-                predicted_char = self.index_to_char[predicted_index]
-                predicted += predicted_char
-                initial_input = self.char_indices_tensor(predicted_char).unsqueeze(0).to(device)
+                # Get the last 'sequence_length' characters (or pad with spaces if not enough)
+                context = predicted[-100:] if len(predicted) >= 100 else ' ' * (100 - len(predicted)) + predicted
                 
-        self.context = hidden
+                # Convert to one-hot input tensor
+                input_tensor = torch.zeros(1, len(context), n_chars)
+                for t, char in enumerate(context):
+                    idx = char_to_idx.get(char, char_to_idx[unknown_token])
+                    input_tensor[0, t, idx] = 1.0
+                
+                # Move to device
+                input_tensor = input_tensor.to(device)
+                
+                # Get prediction
+                output, hidden = self.model(input_tensor, hidden)
+                
+                # Apply temperature scaling and sample
+                probs = F.softmax(output.squeeze() / temperature, dim=-1)
+                next_char_idx = torch.multinomial(probs, 1).item()
+                
+                # Convert to character and append to result
+                next_char = self.index_to_char.get(next_char_idx, unknown_token)
+                predicted += next_char
+        
         return predicted
                 
-    def train(self, text, epochs=10):
+    def train(self, data, epochs=10):
+        """
+        Train the model on batched data
+        
+        Args:
+            data: List of (input_batch, target_batch) tuples
+            epochs: Number of epochs to train
+            
+        Returns:
+            List of losses
+        """
         self.model.train()
-        for epoch in range(epochs):
-            hidden = None
-            for char in text:
-                input_tensor = self.char_indices_tensor(char).unsqueeze(0)
-                output, hidden = self.model(input_tensor, hidden)
-                # Add loss calculation and backprop here
+        losses = []
+        criterion = nn.CrossEntropyLoss()
+        
+        # If data is a string, use character-by-character training
+        if isinstance(data, str):
+            return self.train_character_model_step(data, [])
+        
+        # Otherwise, assume it's batched data
+        try:
+            # Training loop
+            for epoch in range(epochs):
+                epoch_loss = 0
+                batch_count = 0
+                
+                for input_batch, target_batch in data:
+                    try:
+                        # Move to device
+                        device = next(self.model.parameters()).device
+                        input_batch = input_batch.float().to(device)  # Ensure it's float for one-hot
+                        target_batch = target_batch.long().to(device)  # Ensure it's long for CE loss
+                        
+                        # Print batch shapes for debugging
+                        print(f"Batch {batch_count+1}: input {input_batch.shape}, target {target_batch.shape}")
+                        
+                        # Forward pass
+                        self.optimizer.zero_grad()
+                        output, _ = self.model(input_batch)
+                        
+                        # Calculate loss
+                        loss = criterion(output, target_batch.squeeze())
+                        
+                        # Backward pass
+                        loss.backward()
+                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 5)
+                        self.optimizer.step()
+                        
+                        # Log metrics
+                        epoch_loss += loss.item()
+                        batch_count += 1
+                        
+                    except Exception as e:
+                        print(f"Error in batch: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        continue
+                
+                # Log epoch metrics
+                if batch_count > 0:
+                    avg_loss = epoch_loss / batch_count
+                    losses.append(avg_loss)
+                    print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}")
+                else:
+                    print(f"Epoch {epoch+1}/{epochs}: No valid batches processed")
+            
+            return losses
+        
+        except Exception as e:
+            print(f"Training error: {e}")
+            import traceback
+            traceback.print_exc()
+            return losses
+
+    def train_character_model_step(self, text, losses):
+        input_sequence = self.char_indices_tensor(text[:-1])
+        target_sequence = self.char_indices_tensor(text[1:])
+
+        criterion = torch.nn.CrossEntropyLoss()
+        hidden = None
+
+        # Train on the entire sequence
+        self.optimizer.zero_grad()
+        output, hidden = self.model(input_sequence.unsqueeze(0), hidden)
+        loss = criterion(output, target_sequence.unsqueeze(0))
+        loss.backward()
+        self.optimizer.step()
+
+        losses.append(loss.item())
+                
+    def reinitialize_for_sequence_length(self, sequence_length):
+        """
+        Reinitialize the model for a different sequence length
+        
+        Args:
+            sequence_length: New sequence length to use
+        """
+        # Create a new model with the same parameters but potentially different architecture
+        self.model = CombinedModel(self.n_chars, 128, self.n_chars, 2)
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.002)
+        self.context = None
+        
+        # Move to the same device if it was on GPU
+        for param in self.model.parameters():
+            if param.device.type != 'cpu':
+                self.model = self.model.to(param.device)
+                break
                 

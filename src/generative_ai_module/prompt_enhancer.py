@@ -4,6 +4,7 @@ import logging
 from PIL import Image
 import spacy
 from typing import Union
+import zipfile
 
 from .utils import is_zipfile
 
