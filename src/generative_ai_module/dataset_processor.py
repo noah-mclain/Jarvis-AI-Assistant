@@ -117,7 +117,7 @@ class DatasetProcessor:
         
         # Create character-level sequences
         sequences = []
-        for i in range(0, len(text) - sequence_length - 1):
+        for i in range(len(text) - sequence_length - 1):
             # Input is sequence_length characters
             input_seq = text[i:i+sequence_length]
             # Target is the next character
@@ -256,17 +256,14 @@ class DatasetProcessor:
         try:
             # Load the dataset
             dataset = self._load_persona_chat_dataset(split, cache_dir)
-            
+
             # Print dataset structure for debugging
             self._print_dataset_structure(dataset[0])
-            
+
             if max_samples:
                 dataset = dataset.select(range(min(max_samples, len(dataset))))
-            
-            # Process the dataset
-            combined_text = self._process_persona_chat_items(dataset)
-            return combined_text
-            
+
+            return self._process_persona_chat_items(dataset)
         except Exception as e:
             print(f"Error loading Persona Chat dataset: {e}")
             print("Trying to generate fallback sample data...")

@@ -6,6 +6,8 @@ import torch.nn.functional as F
 import random
 import string
 from tqdm import tqdm
+import gensim.downloader as api
+from nltk.translate.bleu_score import sentence_bleu
 
 # Add the parent directory to the Python path if needed
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -20,6 +22,14 @@ except ImportError:
     print("Datasets library not available. Using sample data only.")
     load_dataset = None
 
+# Load pretrained word embeddings
+word_vectors = None
+try:
+    word_vectors = api.load("glove-wiki-gigaword-100")
+    print(f"Loaded word vectors with dimension: {word_vectors.vectors.shape[1]}")
+except Exception as e:
+    print(f"Could not load word vectors: {e}. Proceeding without pre-trained embeddings.")
+
 # Simple LSTM model for character-level generation
 class CharLSTM(nn.Module):
     def __init__(self, vocab_size, embedding_dim, hidden_dim):
@@ -27,6 +37,14 @@ class CharLSTM(nn.Module):
         self.embedding = nn.Embedding(vocab_size, embedding_dim)
         self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True)
         self.fc = nn.Linear(hidden_dim, vocab_size)
+        
+        # Only copy word vectors if dimensions match
+        if embedding_dim == 100 and word_vectors is not None:
+            try:
+                self.embedding.weight.data.copy_(torch.from_numpy(word_vectors.vectors))
+                print("Initialized with pre-trained embeddings")
+            except Exception as e:
+                print(f"Could not initialize with pre-trained embeddings: {e}")
         
     def forward(self, x, hidden=None):
         # x shape: [batch_size, seq_len]
@@ -83,9 +101,9 @@ class CharTokenizer:
         self.chars.append('<UNK>')
         # Create mappings
         self.char_to_idx = {ch: i for i, ch in enumerate(self.chars)}
-        self.idx_to_char = {i: ch for i, ch in enumerate(self.chars)}
+        self.idx_to_char = dict(enumerate(self.chars))
         self.vocab_size = len(self.chars)
-        
+
         print(f"Vocabulary size: {self.vocab_size}")
         print(f"Last character index: {self.vocab_size - 1}")
     
@@ -176,7 +194,7 @@ def create_sequences(tokenized_text, seq_length=50):
     """Create input-target sequences for training"""
     sequences = []
     
-    for i in range(0, len(tokenized_text) - seq_length):
+    for i in range(len(tokenized_text) - seq_length):
         # Input is the current sequence
         seq_in = tokenized_text[i:i+seq_length]
         # Target is the next character
@@ -206,6 +224,45 @@ def create_batches(sequences, batch_size=32):
         batches.append((input_tensor, target_tensor))
     
     return batches
+
+def train_epoch(model, data_batches):
+    """Train for one epoch and return average loss"""
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = model.to(device)
+    
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    criterion = nn.CrossEntropyLoss()
+    
+    total_loss = 0
+    batch_count = 0
+    
+    for batch in tqdm(data_batches, desc="Training"):
+        try:
+            # Get inputs and targets
+            inputs, targets = batch
+            inputs = inputs.to(device)
+            targets = targets.to(device)
+            
+            # Forward pass
+            optimizer.zero_grad()
+            outputs, _ = model(inputs)
+            
+            # Calculate loss
+            loss = criterion(outputs, targets)
+            
+            # Backward pass
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
+            optimizer.step()
+            
+            total_loss += loss.item()
+            batch_count += 1
+            
+        except Exception as e:
+            print(f"Error in batch: {e}")
+            continue
+    
+    return total_loss / max(1, batch_count)  # Avoid division by zero
 
 def train_model(model, data_batches, epochs=5, lr=0.001):
     """Train the model on batched data"""
@@ -285,6 +342,60 @@ def generate_text(model, tokenizer, seed_text, max_length=100, temperature=0.8):
     
     return generated_text
 
+def generate_improved_text(model, tokenizer, seed_text, max_length=200, temperature=0.7):
+    """Generate text with better sampling strategy"""
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = model.to(device)
+    model.eval()
+    
+    # Tokenize the seed text
+    with torch.no_grad():
+        # Encode the seed text
+        context_tokens = tokenizer.encode(seed_text)
+        
+        # Use the last 100 tokens as context (or pad if needed)
+        if len(context_tokens) < 100:
+            # Pad with spaces
+            pad_length = 100 - len(context_tokens)
+            context_tokens = tokenizer.encode(' ' * pad_length) + context_tokens
+        else:
+            # Use the last 100 tokens
+            context_tokens = context_tokens[-100:]
+            
+        context_tensor = torch.tensor([context_tokens], dtype=torch.long).to(device)
+        
+        # Generate text
+        generated_text = seed_text
+        
+        for _ in range(max_length):
+            # Get predictions
+            outputs, _ = model(context_tensor)
+            
+            # Apply temperature and sample
+            probs = F.softmax(outputs / temperature, dim=-1)
+            
+            # Top-k sampling (restrict to most likely tokens)
+            top_k = 40
+            top_k_probs, top_k_indices = torch.topk(probs, top_k)
+            
+            # Renormalize probabilities for top-k
+            top_k_probs = top_k_probs / top_k_probs.sum()
+            
+            # Sample from top-k
+            next_token_idx = torch.multinomial(top_k_probs, 1).item()
+            next_token = top_k_indices[0, next_token_idx].item()
+            
+            # Add to generated text
+            next_char = tokenizer.idx_to_char[next_token]
+            generated_text += next_char
+            
+            # Update context
+            context_tokens.append(next_token)
+            context_tokens = context_tokens[-100:]  # Keep last 100 tokens
+            context_tensor = torch.tensor([context_tokens], dtype=torch.long).to(device)
+    
+    return generated_text
+
 def main():
     # Create directories
     os.makedirs("models", exist_ok=True)
@@ -293,16 +404,25 @@ def main():
     tokenizer = CharTokenizer()
     
     # Parameters
-    seq_length = 50  # Shorter sequences for stability
-    batch_size = 32
-    epochs = 3
+    seq_length = 100  # Longer sequences capture more context
+    batch_size = 64   # Larger batches for more stable training
+    learning_rate = 0.001  # Standard learning rate for Adam
+    
+    # Initialize optimizer (moved here from inside functions)
+    optimizer = None  # Will be initialized for each model
+    
+    # Add learning rate scheduling function
+    def get_scheduler(optimizer):
+        return torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, 'min', factor=0.5, patience=2, verbose=True
+        )
     
     # Train on Persona Chat
     try:
         print("\n===== Training on Persona Chat Dataset =====")
         
         # Load and tokenize data
-        persona_tokens = load_dataset_text("persona_chat", tokenizer, max_samples=50)
+        persona_tokens = load_dataset_text("persona_chat", tokenizer, max_samples=500)
         print(f"Loaded {len(persona_tokens)} tokens from Persona Chat dataset")
         
         # Create sequences and batches
@@ -310,21 +430,30 @@ def main():
         persona_batches = create_batches(persona_sequences, batch_size)
         print(f"Created {len(persona_sequences)} sequences and {len(persona_batches)} batches")
         
-        # Create and train model
-        persona_model = CharLSTM(
+        # Create model
+        persona_model = ImprovedCharLSTM(
             vocab_size=tokenizer.vocab_size,
-            embedding_dim=64,
-            hidden_dim=128
+            embedding_dim=100,
+            hidden_dim=256,
+            num_layers=2,
+            dropout=0.3
         )
         
-        persona_model = train_model(persona_model, persona_batches, epochs=epochs)
+        # Initialize optimizer
+        optimizer = torch.optim.Adam(persona_model.parameters(), lr=learning_rate)
+        
+        # Initialize scheduler
+        scheduler = get_scheduler(optimizer)
+        
+        # Train with early stopping
+        persona_model = train_with_early_stopping(persona_model, persona_batches, epochs=10, patience=3)
         
         # Save model
         torch.save(persona_model.state_dict(), "models/persona_chat_model.pt")
         
         # Generate sample text
         seed = "<PERSONA>\n- I am a"
-        generated = generate_text(persona_model, tokenizer, seed, max_length=100)
+        generated = generate_improved_text(persona_model, tokenizer, seed, max_length=200)
         print(f"\nGenerated Persona Chat text:\n{generated}")
         
     except Exception as e:
@@ -337,7 +466,7 @@ def main():
         print("\n===== Training on Writing Prompts Dataset =====")
         
         # Load and tokenize data
-        prompts_tokens = load_dataset_text("writing_prompts", tokenizer, max_samples=20)
+        prompts_tokens = load_dataset_text("writing_prompts", tokenizer, max_samples=200)
         print(f"Loaded {len(prompts_tokens)} tokens from Writing Prompts dataset")
         
         # Create sequences and batches
@@ -348,11 +477,11 @@ def main():
         # Create and train model
         prompts_model = CharLSTM(
             vocab_size=tokenizer.vocab_size,
-            embedding_dim=64, 
+            embedding_dim=100,
             hidden_dim=128
         )
         
-        prompts_model = train_model(prompts_model, prompts_batches, epochs=epochs)
+        prompts_model = train_with_early_stopping(prompts_model, prompts_batches, epochs=10, patience=3)
         
         # Save model
         torch.save(prompts_model.state_dict(), "models/writing_prompts_model.pt")
@@ -390,6 +519,111 @@ def inspect_dataset_structure(self, dataset_name):
     except Exception as e:
         print(f"Error inspecting dataset {dataset_name}: {e}")
         return None
+
+class ImprovedCharLSTM(nn.Module):
+    def __init__(self, vocab_size, embedding_dim=128, hidden_dim=256, num_layers=2, dropout=0.3):
+        super(ImprovedCharLSTM, self).__init__()
+        self.embedding = nn.Embedding(vocab_size, embedding_dim)
+        self.lstm = nn.LSTM(
+            embedding_dim, 
+            hidden_dim, 
+            num_layers=num_layers, 
+            batch_first=True,
+            dropout=dropout if num_layers > 1 else 0
+        )
+        self.dropout = nn.Dropout(dropout)
+        self.fc = nn.Linear(hidden_dim, vocab_size)
+        
+        # Only attempt to use pre-trained embeddings if dimensions match
+        if embedding_dim == 100 and word_vectors is not None:
+            try:
+                self.embedding.weight.data.copy_(torch.from_numpy(word_vectors.vectors))
+                print("Initialized with pre-trained embeddings")
+            except Exception as e:
+                print(f"Could not initialize with pre-trained embeddings: {e}")
+        
+    def forward(self, x, hidden=None):
+        embedded = self.embedding(x)
+        lstm_out, hidden = self.lstm(embedded, hidden)
+        output = self.dropout(lstm_out[:, -1, :])
+        output = self.fc(output)
+        return output, hidden
+
+def train_with_early_stopping(model, train_batches, epochs=10, patience=3):
+    best_loss = float('inf')
+    no_improve_epochs = 0
+    best_model_state = None
+    
+    for epoch in range(epochs):
+        epoch_loss = train_epoch(model, train_batches)
+        print(f"Epoch {epoch+1}/{epochs}, Loss: {epoch_loss:.4f}")
+        
+        if epoch_loss < best_loss:
+            best_loss = epoch_loss
+            no_improve_epochs = 0
+            # Save best model state
+            best_model_state = model.state_dict().copy()
+        else:
+            no_improve_epochs += 1
+            if no_improve_epochs >= patience:
+                print(f"Early stopping after {epoch+1} epochs")
+                break
+    
+    # Load the best model state
+    if best_model_state is not None:
+        model.load_state_dict(best_model_state)
+    
+    return model  # Return the model after training
+
+def clean_text(text):
+    """Clean and normalize text"""
+    # Remove excess whitespace
+    text = ' '.join(text.split())
+    
+    # Normalize dialogue tags
+    text = text.replace("USER:", "<USER>").replace("ASSISTANT:", "<ASSISTANT>")
+    
+    # Add space around special tokens for better tokenization
+    for token in ['<PERSONA>', '<DIALOGUE>', '<END>', '<PROMPT>', '<STORY>']:
+        text = text.replace(token, f" {token} ")
+    
+    return text
+
+def evaluate_model(model, tokenizer, test_data, seq_length=50):
+    """Evaluate model performance on test data"""
+    model.eval()
+    criterion = nn.CrossEntropyLoss()
+    total_loss = 0
+    total_bleu = 0
+    num_samples = 0
+    
+    with torch.no_grad():
+        for input_seq, target_seq in test_data:
+            # Generate prediction
+            output, _ = model(input_seq)
+            
+            # Calculate metrics
+            loss = criterion(output, target_seq)
+            total_loss += loss.item()
+            
+            # Generate text for BLEU calculation
+            seed = tokenizer.decode(input_seq[0].tolist())
+            generated = generate_improved_text(model, tokenizer, seed, max_length=50)
+            reference = tokenizer.decode(target_seq[0].tolist())
+            
+            # Calculate BLEU score
+            bleu = sentence_bleu([reference], generated)
+            total_bleu += bleu
+            
+            num_samples += 1
+    
+    avg_loss = total_loss / num_samples
+    avg_bleu = total_bleu / num_samples
+    
+    return {
+        'loss': avg_loss,
+        'bleu': avg_bleu
+    }
 
 if __name__ == "__main__":
     main() 
