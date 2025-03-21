@@ -8,12 +8,17 @@ import string
 from tqdm import tqdm
 import gensim.downloader as api
 from nltk.translate.bleu_score import sentence_bleu
+import matplotlib.pyplot as plt
+from collections import Counter
 
 # Add the parent directory to the Python path if needed
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from generative_ai_module.text_generator import TextGenerator
 from generative_ai_module.dataset_processor import DatasetProcessor
+
+# Add this import to fix the "ImprovedCharTokenizer not defined" error
+from improved_preprocessing import ImprovedCharTokenizer, create_improved_sequences, clean_and_normalize_text
 
 # Try to import datasets, but don't fail if not available
 try:
@@ -625,5 +630,217 @@ def evaluate_model(model, tokenizer, test_data, seq_length=50):
         'bleu': avg_bleu
     }
 
+def verify_preprocessed_data(preprocessed_path, sample_text_path=None):
+    """
+    Verify preprocessed data saved by improved_preprocessing.py
+    
+    Args:
+        preprocessed_path: Path to the .pt file with preprocessed data
+        sample_text_path: Optional path to a sample text file for testing
+    """
+    print(f"\n===== Verifying Preprocessed Data: {preprocessed_path} =====")
+    
+    # Load preprocessed data
+    try:
+        data = torch.load(preprocessed_path)
+        print(f"Successfully loaded data for {data['dataset_name']}")
+        
+        # Print basic statistics
+        print(f"Vocabulary size: {data['vocab_size']}")
+        print(f"Token count: {len(data['tokens'])}")
+        print(f"Sequence count: {len(data['sequences'])}")
+        print(f"Batch count: {len(data['batches'])}")
+        
+        # Reconstruct the tokenizer from the loaded data
+        tokenizer = None
+        if 'vocab_size' in data:
+            # Create a compatible tokenizer for testing
+            tokenizer = ImprovedCharTokenizer(add_special_tokens=True)
+            
+        # Test a sequence example
+        if data['sequences'] and tokenizer:
+            print("\nSample sequence:")
+            seq_in, seq_out = data['sequences'][0]
+            input_text = tokenizer.decode(seq_in)
+            target_text = tokenizer.decode([seq_out])
+            print(f"Input: {input_text[:50]}...")
+            print(f"Target: '{target_text}'")
+            
+        # Check a batch example
+        if data['batches']:
+            inputs, targets = data['batches'][0]
+            print(f"\nBatch shapes - Input: {inputs.shape}, Target: {targets.shape}")
+            
+        # Test with sample_text if provided
+        if sample_text_path and tokenizer:
+            test_with_sample_text(tokenizer, sample_text_path)
+            
+        return data, tokenizer
+        
+    except Exception as e:
+        print(f"Error loading preprocessed data: {e}")
+        return None, None
+    
+def test_with_sample_text(tokenizer, sample_text_path):
+    """Test tokenizer with a sample text file"""
+    print(f"\n===== Testing with sample text: {sample_text_path} =====")
+    
+    try:
+        # Load the sample text
+        with open(sample_text_path, 'r', encoding='utf-8') as f:
+            sample_text = f.read()
+            
+        # Clean and tokenize
+        cleaned_text = clean_and_normalize_text(sample_text)
+        tokens = tokenizer.encode(cleaned_text)
+        
+        print(f"Sample text length: {len(sample_text)}")
+        print(f"Cleaned text length: {len(cleaned_text)}")
+        print(f"Number of tokens: {len(tokens)}")
+        
+        # Show token distribution
+        counter = Counter(tokens)
+        print(f"Unique tokens: {len(counter)} out of {tokenizer.vocab_size}")
+        
+        # Show most common tokens
+        print("\nMost common tokens:")
+        for token, count in counter.most_common(10):
+            char_repr = tokenizer.idx_to_char.get(token, '<UNK>')
+            if char_repr in ['\n', '\t', ' ']:
+                char_repr = f"'{repr(char_repr)[1:-1]}'"
+            print(f"  {token}: '{char_repr}' ({count} occurrences, {count/len(tokens)*100:.2f}%)")
+        
+        # Create sequences for testing
+        sequences = create_improved_sequences(tokens, seq_length=50, stride=25)
+        print(f"\nCreated {len(sequences)} test sequences")
+        
+        # Show a sample sequence
+        if sequences:
+            seq_in, seq_out = sequences[0]
+            input_text = tokenizer.decode(seq_in)
+            target_text = tokenizer.decode([seq_out])
+            print(f"\nSample sequence:")
+            print(f"Input: {input_text[:50]}...")
+            print(f"Target: '{target_text}'")
+            
+        # Recreate the original text to verify tokenization is reversible
+        decoded_text = tokenizer.decode(tokens)
+        match_percent = sum(1 for a, b in zip(cleaned_text, decoded_text) if a == b) / len(cleaned_text) * 100
+        print(f"\nTokenization reversibility: {match_percent:.2f}% match")
+        
+        # Plot token distribution
+        plot_token_distribution(tokens, tokenizer, "manual_test")
+        
+    except Exception as e:
+        print(f"Error testing with sample text: {e}")
+
+def plot_token_distribution(tokens, tokenizer, filename_prefix):
+    """Plot the distribution of tokens"""
+    try:
+        # Count token frequencies
+        counter = Counter(tokens)
+        
+        # Get most common for plotting
+        most_common = counter.most_common(20)
+        tokens_to_plot = [token for token, _ in most_common]
+        frequencies = [count for _, count in most_common]
+        
+        # Convert token IDs to characters for labels
+        labels = [tokenizer.idx_to_char.get(token, '<UNK>') for token in tokens_to_plot]
+        # Replace special whitespace characters for display
+        labels = [repr(label)[1:-1] if label in ['\n', '\t', ' '] else label for label in labels]
+        
+        # Create plot
+        fig, ax = plt.subplots(figsize=(12, 6))
+        ax.bar(range(len(tokens_to_plot)), frequencies)
+        ax.set_xticks(range(len(tokens_to_plot)))
+        ax.set_xticklabels(labels, rotation=45, ha='right')
+        ax.set_title('Token Frequency Distribution (Sample Text)')
+        ax.set_ylabel('Frequency')
+        ax.set_xlabel('Token')
+        
+        plt.tight_layout()
+        
+        # Create directory for plots
+        os.makedirs("preprocessing_analysis", exist_ok=True)
+        plt.savefig(f"preprocessing_analysis/{filename_prefix}_tokens.png")
+        plt.close()
+        
+        print(f"Token distribution plot saved to preprocessing_analysis/{filename_prefix}_tokens.png")
+        
+    except Exception as e:
+        print(f"Error creating token distribution plot: {e}")
+        
+def verify_model_compatibility(data, model_class=None):
+    """Verify that the processed data is compatible with the model"""
+    if not data or 'batches' not in data or not data['batches']:
+        print("No batches available to test model compatibility")
+        return
+        
+    try:
+        # Create a model with the right vocabulary size
+        if model_class is None:
+            from verify_preprocessing import CharLSTM
+            model = CharLSTM(
+                vocab_size=data['vocab_size'],
+                embedding_dim=128,
+                hidden_dim=256
+            )
+        else:
+            model = model_class(vocab_size=data['vocab_size'])
+            
+        # Test a forward pass with the first batch
+        inputs, targets = data['batches'][0]
+        outputs, _ = model(inputs)
+        
+        # Check output shape
+        expected_shape = (inputs.shape[0], data['vocab_size'])
+        print(f"\nModel output shape: {outputs.shape}, Expected: {expected_shape}")
+        
+        if outputs.shape == expected_shape:
+            print("✓ Model compatibility verified: Output shape matches expectation")
+        else:
+            print("✗ Model compatibility issue: Output shape doesn't match expected shape")
+            
+    except Exception as e:
+        print(f"Error verifying model compatibility: {e}")
+
+# Add this to your main function
+def manual_verification():
+    """Manually verify the preprocessing with saved files"""
+    print("\n====== Manual Preprocessing Verification ======")
+    
+    # Check if preprocessed data exists
+    if not os.path.exists("preprocessed_data"):
+        print("Preprocessed data directory not found. Run improved_preprocessing.py first.")
+        return
+        
+    # Get paths to preprocessed files
+    persona_path = os.path.join("preprocessed_data", "persona_chat_preprocessed.pt")
+    prompts_path = os.path.join("preprocessed_data", "writing_prompts_preprocessed.pt")
+    
+    # Verify both datasets
+    persona_data, persona_tokenizer = verify_preprocessed_data(persona_path)
+    prompts_data, prompts_tokenizer = verify_preprocessed_data(prompts_path)
+    
+    # Check model compatibility
+    if persona_data:
+        verify_model_compatibility(persona_data)
+        
+    # Test with additional sample text if available
+    sample_text_path = "data/sample_text.txt"
+    if os.path.exists(sample_text_path) and persona_tokenizer:
+        test_with_sample_text(persona_tokenizer, sample_text_path)
+    else:
+        print(f"\nSample text file not found at {sample_text_path}")
+        print("To test with your own text, create a file at this location.")
+        
+    print("\n====== Manual Verification Complete ======")
+
+# Add this to your main() function
 if __name__ == "__main__":
-    main() 
+    # Run the regular preprocessing steps if needed
+    # main()
+    
+    # Or just run the manual verification
+    manual_verification() 

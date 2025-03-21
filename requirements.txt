@@ -13,3 +13,4 @@ cloudpathlib==0.20.0            # Cloud implementation access
 fsspec==2025.2.0 # Access to structured datasets
 Pillow
 datasets
+matplotlib
