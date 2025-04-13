@@ -61,3 +61,44 @@ class CodeGenerator:
             batched_data = self.dataset_processor.prepare_code_dataset(code_snippets)
 
         return self.text_generator.train(batched_data, epochs=epochs)
+
+    def train_from_preprocessed(self, dataset_name="writing_prompts", epochs=5):
+        """
+        Train the model using preprocessed data
+        
+        Args:
+            dataset_name: Name of the preprocessed dataset to use
+            epochs: Number of training epochs
+            
+        Returns:
+            Training loss history
+        """
+        # Load preprocessed data using the dataset processor
+        batched_data = self.dataset_processor.prepare_from_preprocessed(dataset_name)
+        
+        if not batched_data:
+            raise ValueError(f"No valid batches found in preprocessed data: {dataset_name}")
+            
+        print(f"Training on {len(batched_data)} batches from preprocessed {dataset_name} dataset")
+        return self.text_generator.train(batched_data, epochs=epochs)
+        
+    def save_model(self, path="models/code_generator_model.pt"):
+        """Save the trained model to disk"""
+        import os
+        import torch
+        
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        
+        # Save the model
+        torch.save(self.text_generator.model.state_dict(), path)
+        print(f"Model saved to {path}")
+        
+    def load_model(self, path="models/code_generator_model.pt"):
+        """Load a trained model from disk"""
+        import torch
+        
+        # Load the model
+        self.text_generator.model.load_state_dict(torch.load(path))
+        self.text_generator.model.eval()  # Set to evaluation mode
+        print(f"Model loaded from {path}")

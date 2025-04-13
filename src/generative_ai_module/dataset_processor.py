@@ -2,8 +2,8 @@ import os
 import torch
 import random
 import glob
-from typing import List, Tuple, Dict, Union, Optional
-from .text_generator import TextGenerator
+from typing import List, Tuple, Dict, Union, Optional, Any
+from .text_generator import TextGenerator, CombinedModel
 from .utils import is_zipfile, process_zip
 
 try:
@@ -198,52 +198,48 @@ class DatasetProcessor:
         Returns:
             Preprocessed text ready for sequence creation
         """
+        # Define a fallback sample in case loading fails
+        if not self._generate_sample_writing_prompts():
+            print("Warning: Failed to generate sample writing prompts data")
+
         try:
-            # Use the correct identifier provided by the user
-            dataset = load_dataset("euclaise/writingprompts", split=split, cache_dir=cache_dir)
-            
+            # Try loading the dataset
+            dataset = load_dataset("writingprompts", split=split, cache_dir=cache_dir)
             if max_samples:
                 dataset = dataset.select(range(min(max_samples, len(dataset))))
-            
-            # Combine prompts and stories with clear separators
-            combined_text = ""
-            for item in tqdm(dataset, desc="Processing Writing Prompts"):
-                # Format: <PROMPT> prompt text <STORY> story text <END>
-                combined_text += f"<PROMPT> {item['prompt'].strip()}\n"
-                combined_text += f"<STORY> {item['story'].strip()}\n"
-                combined_text += "<END>\n\n"
-                
-            return combined_text
-            
+
+            return "".join(
+                f"<PROMPT>\n{item['prompt']}\n<STORY>\n{item['story']}\n<END>\n\n"
+                for item in tqdm(dataset, desc="Processing Writing Prompts")
+            )
         except Exception as e:
             print(f"Error loading Writing Prompts dataset: {e}")
-            # Fallback to sample data if needed
+            print("Falling back to sample data")
             return self._generate_sample_writing_prompts()
-
+    
     def _generate_sample_writing_prompts(self):
-        """Generate a small sample dataset for testing when the real dataset can't be loaded"""
-        samples = [
-            {
-                "prompt": "You wake up one day with the ability to see 10 seconds into the future.",
-                "story": "I blinked rapidly, trying to make sense of what was happening. The world seemed to flicker between now and... something else. I watched as my coffee mug tipped over before it actually happened, giving me just enough time to catch it. This was going to be interesting."
-            },
-            {
-                "prompt": "Aliens have been watching our TV shows for decades. They finally make contact.",
-                "story": "The massive ship hovered silently above New York. Everyone waited anxiously for first contact. The alien ambassador emerged and said, 'We come in peace. Also, we need to know if Ross and Rachel ever got back together. Our transmission cut out during season 8.'"
-            }
+        """Generate a small sample of writing prompts data"""
+        prompts = [
+            "The world ended five minutes ago. You're the only one who knows.",
+            "You discover that your everyday life is actually a virtual reality game.",
+            "You wake up in a world where everyone can read minds, except you."
         ]
         
-        combined_text = ""
-        for sample in samples:
-            combined_text += f"<PROMPT> {sample['prompt']}\n"
-            combined_text += f"<STORY> {sample['story']}\n"
-            combined_text += "<END>\n\n"
+        stories = [
+            "I stared at my watch in disbelief. Five minutes ago, everything changed...",
+            "The loading screen appeared before my eyes as I tried to reach for my coffee...",
+            "They all looked at me strangely, as if they knew something I didn't..."
+        ]
+        
+        text = ""
+        for p, s in zip(prompts, stories):
+            text += f"<PROMPT>\n{p}\n<STORY>\n{s}\n<END>\n\n"
             
-        return combined_text
-    
+        return text
+            
     def load_persona_chat(self, split='train', max_samples=None, cache_dir=None):
         """
-        Load and preprocess the Synthetic Persona Chat dataset
+        Load and preprocess the Persona Chat dataset
         
         Args:
             split: Dataset split ('train', 'test', or 'validation')
@@ -253,205 +249,191 @@ class DatasetProcessor:
         Returns:
             Preprocessed text ready for sequence creation
         """
+        # Load dataset
         try:
-            # Load the dataset
             dataset = self._load_persona_chat_dataset(split, cache_dir)
-
-            # Print dataset structure for debugging
-            self._print_dataset_structure(dataset[0])
-
             if max_samples:
                 dataset = dataset.select(range(min(max_samples, len(dataset))))
 
             return self._process_persona_chat_items(dataset)
         except Exception as e:
             print(f"Error loading Persona Chat dataset: {e}")
-            print("Trying to generate fallback sample data...")
+            print("Falling back to sample data")
             return self._generate_sample_persona_chat()
-
+        
     def _load_persona_chat_dataset(self, split, cache_dir):
-        """Load the persona chat dataset with error handling"""
+        """Helper to load the right persona chat dataset"""
         try:
-            return load_dataset("google/Synthetic-Persona-Chat", split=split, cache_dir=cache_dir)
-        except Exception as e:
-            print(f"Primary dataset source failed: {e}")
-            return load_dataset("facebook/personachat", split=split, cache_dir=cache_dir)
-
+            return load_dataset("bavard/personachat_truecased", split=split, cache_dir=cache_dir)
+        except Exception:
+            return load_dataset("persona_chat", split=split, cache_dir=cache_dir)
+    
     def _print_dataset_structure(self, item):
-        """Print the structure of a dataset item for debugging"""
-        print("Dataset structure example:")
-        for key in item.keys():
-            print(f"- Field: {key}, Type: {type(item[key])}")
-
+        """Debug helper to print dataset structure"""
+        print(f"Dataset keys: {item.keys()}")
+        for k, v in item.items():
+            print(f"{k}: {type(v)}")
+            if isinstance(v, list) and v:
+                print(f"  First item type: {type(v[0])}")
+                print(f"  Example: {v[0]}")
+    
     def _process_persona_chat_items(self, dataset):
-        """Process all items in the persona chat dataset"""
-        combined_text = ""
-        for item in tqdm(dataset, desc="Processing Persona Chat"):
-            # Add persona section
-            combined_text += "<PERSONA>\n"
-            combined_text += self._extract_persona_text(item)
-            
-            # Add dialogue section
-            combined_text += "<DIALOGUE>\n"
-            combined_text += self._extract_dialogue_text(item)
-            combined_text += "<END>\n\n"
-            
-        return combined_text
-
+        """Process persona chat dataset items into text format"""
+        compiled_text = ""
+        
+        # Look at first item to determine format
+        first_item = dataset[0]
+        
+        if 'personas' in first_item or 'personality' in first_item:
+            # Use standardized extraction
+            for item in tqdm(dataset, desc="Processing Persona Chat"):
+                # Extract persona and dialogue
+                persona_text = self._extract_persona_text(item)
+                dialogue_text = self._extract_dialogue_text(item)
+                
+                # Compile the complete text
+                text = f"<PERSONA>\n{persona_text}<DIALOGUE>\n{dialogue_text}<END>\n\n"
+                compiled_text += text
+                
+        return compiled_text
+    
     def _extract_persona_text(self, item):
-        """Extract persona information from a dataset item"""
-        # Handle Google Synthetic Persona Chat format
-        if 'user 1 personas' in item:
-            return f"- {item['user 1 personas'].strip()}\n"
+        """Extract persona information from different dataset formats"""
+        persona_text = ""
         
-        # Handle other formats (keep existing code)
-        if 'persona' in item:
-            personas = item['persona'] if isinstance(item['persona'], list) else [item['persona']]
-            return "\n".join(f"- {persona.strip()}" for persona in personas) + "\n"
+        # Handle different persona formats
+        if 'personas' in item:
+            # Bavard dataset format
+            for persona in item['personas']['persona_1']:
+                persona_text += f"- {persona}\n"
+        elif 'personality' in item:
+            # Original persona chat format
+            for persona in item['personality']:
+                persona_text += f"- {persona}\n"
         
-        if 'context' in item:
-            return f"- {item['context'].strip()}\n"
-        
-        return "- No persona information available\n"
-
+        return persona_text
+    
     def _extract_dialogue_text(self, item):
-        """Extract dialogue information from a dataset item"""
-        result = ""
+        """Extract dialogue from different dataset formats"""
+        dialogue_text = ""
         
-        # Handle Google Synthetic Persona Chat format
-        if 'Best Generated Conversation' in item:
-            # Parse the conversation text into turns
-            conversation = item['Best Generated Conversation']
-            lines = conversation.strip().split('\n')
+        # Handle different dialogue formats
+        if 'utterances' in item:
+            # Original personachat format
+            utterances = item['utterances'][-1]['history']
+            dialogue_turns = self._process_dialogue_turns(utterances)
+            dialogue_text = dialogue_turns
+        elif 'dialog' in item:
+            # Bavard format
+            dialog = item['dialog']
+            turns = []
+            for i, utt in enumerate(dialog):
+                prefix = "USER: " if i % 2 == 0 else "ASSISTANT: "
+                turns.append(f"{prefix}{utt}")
+            dialogue_text = "\n".join(turns)
+        elif 'history' in item:
+            # Another possible format
+            history = item['history'] 
+            dialogue_turns = self._process_dialogue_turns(history)
+            dialogue_text = dialogue_turns
             
-            for line in lines:
-                line = line.strip()
-                if line.startswith('User:'):
-                    result += f"USER: {line[5:].strip()}\n"
-                elif line.startswith('Assistant:'):
-                    result += f"ASSISTANT: {line[10:].strip()}\n"
-            
-            return result
-        
-        # Handle other formats (keep existing code)
-        if 'dialogue' in item:
-            result += self._process_dialogue_turns(item['dialogue'])
-        elif 'input' in item and 'output' in item:
-            result += f"USER: {item['input'].strip()}\n"
-            result += f"ASSISTANT: {item['output'].strip()}\n"
-        
-        return result
-
+        return dialogue_text + "\n"
+    
     def _process_dialogue_turns(self, dialogue):
-        """Process dialogue turns in various formats"""
-        result = ""
-        turns = dialogue if isinstance(dialogue, list) else [dialogue]
-        
-        for i, turn in enumerate(turns):
-            if isinstance(turn, dict):
-                if 'user' in turn:
-                    result += f"USER: {turn['user'].strip()}\n"
-                if 'assistant' in turn:
-                    result += f"ASSISTANT: {turn['assistant'].strip()}\n"
-            elif i % 2 == 0:  # Assume even indices are user, odd are assistant
-                result += f"USER: {turn.strip()}\n"
+        """Convert dialogue list to alternating user/assistant turns"""
+        result = []
+        for i, utterance in enumerate(dialogue):
+            # Skip empty lines
+            if not utterance.strip():
+                continue
+                
+            # Add appropriate speaker prefix
+            if i % 2 == 0:
+                result.append(f"USER: {utterance}")
             else:
-                result += f"ASSISTANT: {turn.strip()}\n"
+                result.append(f"ASSISTANT: {utterance}")
         
-        return result
-
+        return "\n".join(result)
+    
     def _generate_sample_persona_chat(self):
-        """Generate a small sample dataset for testing when the real dataset can't be loaded"""
-        samples = [
-            {
-                "persona": ["I love hiking in the mountains.", "I have a dog named Max.", "I work as a software engineer."],
-                "dialogue": [
-                    {"user": "Hi there! Do you like outdoor activities?", 
-                     "assistant": "Yes, I love hiking in the mountains. Do you enjoy hiking too?"},
-                    {"user": "I do! What's your favorite hiking spot?",
-                     "assistant": "I really enjoy trails in the Rocky Mountains. I often take my dog Max with me."}
-                ]
-            },
-            {
-                "persona": ["I am a chef at a restaurant.", "I enjoy classical music.", "I have visited 15 countries."],
-                "dialogue": [
-                    {"user": "What do you do for a living?",
-                     "assistant": "I'm a chef at a restaurant. I specialize in Italian cuisine. Do you enjoy cooking?"},
-                    {"user": "That's cool! What's your favorite dish to prepare?",
-                     "assistant": "I love making homemade pasta with fresh ingredients. The process is as relaxing as listening to classical music."}
-                ]
-            }
-        ]
-        
-        combined_text = ""
-        for sample in samples:
-            combined_text += "<PERSONA>\n"
-            for persona in sample["persona"]:
-                combined_text += f"- {persona}\n"
-            
-            combined_text += "<DIALOGUE>\n"
-            for turn in sample["dialogue"]:
-                combined_text += f"USER: {turn['user']}\n"
-                combined_text += f"ASSISTANT: {turn['assistant']}\n"
-            
-            combined_text += "<END>\n\n"
-            
-        return combined_text
+        """Generate a small sample of persona chat data"""
+        return """<PERSONA>
+- I am a teacher.
+- I have two dogs named Max and Ruby.
+- I love to cook Italian food.
+- I've been to seven different countries.
+<DIALOGUE>
+USER: Hi there! How's your day going?
+ASSISTANT: Hello! My day is going well. I just got home from teaching and took my dogs Max and Ruby for a walk. How about you?
+USER: I'm doing fine. What do you teach?
+ASSISTANT: I teach high school mathematics. I really enjoy it, especially when students have those "aha" moments. When I'm not teaching, I love cooking Italian dishes.
+USER: That's cool! I love Italian food too. Have you ever been to Italy?
+ASSISTANT: Yes! Italy was one of my favorite countries to visit. I've been to seven countries in total, and Italy was definitely a highlight. I learned some amazing pasta recipes there that I still make.
+<END>
+
+<PERSONA>
+- I work as a software engineer.
+- I play guitar in a band on weekends.
+- I am training for a marathon.
+- I prefer tea over coffee.
+<DIALOGUE>
+USER: Hey, how's it going?
+ASSISTANT: Hi there! Just got back from my morning run, training for a marathon. Now having some tea before I start work. How are you?
+USER: I'm good. What kind of work do you do?
+ASSISTANT: I'm a software engineer during the week. But on weekends, I play guitar in a small band. It's a nice balance between technical and creative work.
+<END>
+"""
     
     def prepare_dialogue_dataset(self, source='persona_chat', split='train', 
                                sequence_length=100, batch_size=64, max_samples=None, 
                                cache_dir=None):
         """
-        Prepare dialogue datasets (Persona Chat or Writing Prompts) for training
+        Prepare dialogue dataset for training
         
         Args:
-            source: Dataset source ('persona_chat' or 'writing_prompts')
-            split: Dataset split
+            source: Source dataset ('persona_chat' or 'writing_prompts')
+            split: Dataset split ('train', 'test', or 'validation')
             sequence_length: Length of sequences
             batch_size: Batch size
-            max_samples: Maximum number of samples to load
+            max_samples: Maximum number of samples to load (None for all)
             cache_dir: Optional directory to cache the downloaded dataset
             
         Returns:
             Batched dataset ready for training
         """
-        # Reinitialize the text generator model for this sequence length
-        # This ensures the model can handle the requested sequence length
-        if hasattr(self.text_generator, 'reinitialize_for_sequence_length'):
-            self.text_generator.reinitialize_for_sequence_length(sequence_length)
-        
-        self.sequence_length = sequence_length
-        
+        # Load and preprocess text data
         if source == 'persona_chat':
             raw_text = self.load_persona_chat(split, max_samples, cache_dir)
         elif source == 'writing_prompts':
             raw_text = self.load_writing_prompts(split, max_samples, cache_dir)
         else:
-            raise ValueError(f"Unsupported dataset source: {source}. Choose 'persona_chat' or 'writing_prompts'")
+            # Treat as path to local file or directory
+            raw_text = self.load_data(source)
         
-        # Clean and prepare sequences
-        cleaned_text = self.clean_text(raw_text)
+        # Create batches
+        return self.prepare_text_batches(raw_text, sequence_length, batch_size)
+    
+    def prepare_code_dataset(self, source, sequence_length=100, batch_size=64):
+        """
+        Prepare code dataset for training
         
-        # Check if we have enough text data
-        if len(cleaned_text) <= sequence_length:
-            raise ValueError(f"Text length ({len(cleaned_text)}) must be greater than sequence length ({sequence_length})")
+        Args:
+            source: Path to file, directory, or list of paths containing code
+            sequence_length: Length of sequences
+            batch_size: Batch size
             
-        sequences = self.create_sequences(cleaned_text, sequence_length)
+        Returns:
+            Batched dataset ready for training
+        """
+        # Load code text
+        raw_text = self.load_data(source)
         
-        if not sequences:
-            raise ValueError("No sequences were created. Check your dataset and sequence length.")
-            
-        batches = self.create_batches(sequences, batch_size)
-        
-        if not batches:
-            raise ValueError("No batches were created. Check your batch size and dataset size.")
-            
-        print(f"Created {len(batches)} batches from {len(sequences)} sequences")
-        return batches
+        # Prepare batches
+        return self.prepare_text_batches(raw_text, sequence_length, batch_size)
     
     def prepare_local_dataset(self, data_dir, sequence_length=100, batch_size=64):
         """
-        Prepare a dataset from local text files
+        Prepare dataset from local files
         
         Args:
             data_dir: Directory containing text files
@@ -461,31 +443,220 @@ class DatasetProcessor:
         Returns:
             Batched dataset ready for training
         """
-        self.sequence_length = sequence_length
+        # Check if path exists
+        if not os.path.exists(data_dir):
+            print(f"Warning: Data directory {data_dir} does not exist")
+            return []
         
-        # Load all text files from the directory
-        text_files = glob.glob(os.path.join(data_dir, "*.txt"))
-        
-        if not text_files:
-            raise ValueError(f"No text files found in {data_dir}")
-        
-        print(f"Found {len(text_files)} text files in {data_dir}")
-        
-        # Load and combine text
+        # Load data
         raw_text = ""
-        for file_path in text_files:
-            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
-                raw_text += f.read() + "\n\n"
         
-        # Clean and prepare sequences
-        cleaned_text = self.clean_text(raw_text)
-        
-        # Check if we have enough text data
-        if len(cleaned_text) <= sequence_length:
-            raise ValueError(f"Text length ({len(cleaned_text)}) must be greater than sequence length ({sequence_length})")
+        if os.path.isdir(data_dir):
+            # Compile all .txt files in the directory
+            file_paths = glob.glob(os.path.join(data_dir, "*.txt"))
             
-        sequences = self.create_sequences(cleaned_text, sequence_length)
-        batches = self.create_batches(sequences, batch_size)
+            if not file_paths:
+                print(f"Warning: No .txt files found in {data_dir}")
+                return []
+                
+            for file_path in file_paths:
+                try:
+                    with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                        raw_text += f.read() + "\n\n"
+                except Exception as e:
+                    print(f"Error reading {file_path}: {e}")
+                    
+        elif os.path.isfile(data_dir) and data_dir.endswith('.txt'):
+            # Single text file
+            with open(data_dir, 'r', encoding='utf-8', errors='replace') as f:
+                raw_text = f.read()
+        else:
+            print(f"Warning: {data_dir} is not a valid directory or .txt file")
+            return []
+            
+        # Prepare batches
+        print(f"Loaded {len(raw_text)} characters from {data_dir}")
+        return self.prepare_text_batches(raw_text, sequence_length, batch_size)
+    
+    def load_preprocessed_data(self, dataset_name: str) -> Dict[str, Any]:
+        """Load preprocessed data for a specific dataset"""
+        # Define the correct path for preprocessed data
+        preprocessed_path = os.path.join(
+            "src", "generative_ai_module", "examples", "preprocessed_data",
+            f"{dataset_name}_preprocessed.pt"
+        )
         
-        print(f"Created {len(batches)} batches from {len(sequences)} sequences")
-        return batches
+        # Check if the file exists
+        if not os.path.exists(preprocessed_path):
+            raise FileNotFoundError(f"Preprocessed data not found at {preprocessed_path}")
+        
+        # Load the data
+        try:
+            data = torch.load(preprocessed_path)
+            print(f"Loaded preprocessed data from {preprocessed_path}")
+            return data
+        except Exception as e:
+            print(f"Error loading preprocessed data: {e}")
+            return None
+
+    def save_tokenized_data(self, data: Dict[str, Any], output_dir: str, dataset_name: str):
+        """Save tokenized data to disk"""
+        # Ensure the output directory exists
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Save the preprocessed data
+        output_path = os.path.join(output_dir, f"{dataset_name}_preprocessed.pt")
+        torch.save(data, output_path)
+        print(f"Saved preprocessed data to {output_path}")
+        
+        # Save a sample of the text for inspection
+        sample_path = os.path.join(output_dir, f"{dataset_name}_sample.txt")
+        with open(sample_path, 'w') as f:
+            if 'batches' in data and len(data['batches']) > 0:
+                sample_batch = data['batches'][0]
+                if isinstance(sample_batch, tuple) and len(sample_batch) > 0:
+                    sample_text = self.decode_tokens(sample_batch[0][0].tolist())
+                    f.write(sample_text)
+        print(f"Saved text sample to {sample_path}")
+    
+    def prepare_from_preprocessed(self, dataset_name="persona_chat", preprocessed_path=None,
+                                batch_size=None):
+        """
+        Prepare batches from preprocessed data
+        
+        Args:
+            dataset_name: Name of the preprocessed dataset
+            preprocessed_path: Optional specific path to the preprocessed file
+            batch_size: Optional batch size to reshape batches (None to keep original)
+            
+        Returns:
+            List of (input_batch, target_batch) tuples
+        """
+        # Load the preprocessed data
+        try:
+            data = self.load_preprocessed_data(dataset_name)
+
+            # Check if data contains batches
+            if 'batches' not in data or not data['batches']:
+                print("Warning: No batches found in preprocessed data")
+                return []
+
+            # If no reshaping is needed, return the batches directly
+            if batch_size is None:
+                return data['batches']
+
+            # Otherwise, reshape the batches
+            print(f"Reshaping batches to size {batch_size}")
+
+            # Create a flat list of samples
+            flat_samples = []
+            for input_batch, target_batch in data['batches']:
+                flat_samples.extend(
+                    (input_batch[i], target_batch[i])
+                    for i in range(input_batch.shape[0])
+                )
+            # Create new batches
+            return self.create_batches(flat_samples, batch_size)
+
+        except Exception as e:
+            print(f"Error preparing from preprocessed data: {e}")
+            return []
+    
+    def adapt_preprocessed_data(self, data):
+        """
+        Adapt preprocessed data format to match what the model expects
+        
+        Args:
+            data: Dictionary containing preprocessed data
+            
+        Returns:
+            Dictionary with adapted data batches
+        """
+        if 'batches' not in data or not data['batches']:
+            print("WARNING: No batches found in preprocessed data")
+            return data
+        
+        adapted_batches = []
+        
+        for i, (inputs, targets) in enumerate(data['batches']):
+            # Print the shape and structure of a few batches for debugging
+            if i < 3:
+                print(f"Original batch {i} shapes: inputs {inputs.shape}, targets {targets.shape}")
+                print(f"Inputs data type: {inputs.dtype}, Targets data type: {targets.dtype}")
+            
+            # Ensure inputs are in the right shape
+            if inputs.dim() == 2:
+                # If [batch_size, features], keep as is - already correct format
+                adapted_inputs = inputs
+            elif inputs.dim() == 3 and inputs.shape[1] == 1:
+                # If [batch_size, 1, features], remove the sequence dimension
+                adapted_inputs = inputs.squeeze(1)
+            else:
+                # Keep as is
+                adapted_inputs = inputs
+                
+            # Ensure targets are in the right shape
+            if targets.dim() > 1 and targets.shape[1] == 1:
+                # If [batch_size, 1], squeeze to [batch_size]
+                adapted_targets = targets.squeeze(1)
+            else:
+                # Keep as is
+                adapted_targets = targets
+                
+            adapted_batches.append((adapted_inputs, adapted_targets))
+            
+            # Print adapted shape for a few batches for debugging
+            if i < 3:
+                print(f"Adapted batch {i} shapes: inputs {adapted_inputs.shape}, targets {adapted_targets.shape}")
+        
+        # Create a new data dictionary with adapted batches
+        adapted_data = data.copy()
+        adapted_data['batches'] = adapted_batches
+        
+        print(f"Adapted {len(adapted_batches)} batches")
+        return adapted_data
+    
+    def initialize_with_tokenizer(self, tokenizer, vocab_size=None):
+        """
+        Initialize text generator with tokenizer
+        
+        Args:
+            tokenizer: Tokenizer object with encode/decode methods
+            vocab_size: Vocabulary size (if None, will be determined from tokenizer)
+            
+        Returns:
+            None (modifies the text_generator in place)
+        """
+        if not hasattr(self.text_generator, 'model'):
+            print("Warning: TextGenerator does not have a model attribute")
+            return
+
+        # Determine vocabulary size
+        if vocab_size is None:
+            vocab_size = tokenizer.vocab_size if hasattr(tokenizer, 'vocab_size') else 128
+        # Create new model with the correct vocabulary size
+        input_size = vocab_size
+        hidden_size = 128  # Default value
+        output_size = vocab_size
+        num_layers = 2  # Default value
+
+        print(f"Reinitializing model with vocabulary size: {vocab_size}")
+        self.text_generator.model = CombinedModel(input_size, hidden_size, output_size, num_layers)
+        self.text_generator.optimizer = torch.optim.Adam(self.text_generator.model.parameters(), lr=0.002)
+
+        # Create a dummy char index mapping for integer tokens
+        self.text_generator.char_to_index = {str(i): i for i in range(vocab_size)}
+        self.text_generator.index_to_char = {i: str(i) for i in range(vocab_size)}
+
+        # Special handling for common tokens if we know what they represent
+        common_tokens = {
+            0: '<PAD>',
+            1: '<START>',
+            2: '<END>',
+            5: ' ',  # Assuming 5 is the space character
+        }
+        self.text_generator.index_to_char |= common_tokens
+
+        # Set up token adaptation
+        self.text_generator.adapt_to_tokenizer(tokenizer)
+        print("TextGenerator initialized with tokenizer")

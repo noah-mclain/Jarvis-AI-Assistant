@@ -114,6 +114,55 @@ class PromptEnhancer:
                 "with appropriate technical specifications based on file type."
             )
 
+def analyze_prompt(prompt: str) -> str:
+    """
+    Analyze the prompt to determine which model is most appropriate.
+    Returns either 'persona_chat' or 'writing_prompts'.
+    """
+    # Convert to lowercase for analysis
+    prompt_lower = prompt.lower()
+
+    # Keywords that suggest dialogue/conversation
+    dialogue_keywords = [
+        'hello', 'hi', 'hey', 'how are you', 'what do you', 'can you',
+        'would you', 'tell me', 'explain', 'help me', 'i need', 'i want',
+        'question', 'ask', 'answer', 'chat', 'talk', 'conversation',
+        'discuss', 'advice', 'suggest', 'recommend'
+    ]
+
+    # Keywords that suggest story generation
+    story_keywords = [
+        'story', 'write', 'create', 'imagine', 'world where', 'what if',
+        'once upon', 'beginning', 'end', 'plot', 'character', 'setting',
+        'scene', 'describe', 'narrative', 'tale', 'fable', 'myth',
+        'adventure', 'journey', 'quest', 'tale', 'legend'
+    ]
+
+    # Count matches for each type
+    dialogue_matches = sum(
+        keyword in prompt_lower for keyword in dialogue_keywords
+    )
+    story_matches = sum(keyword in prompt_lower for keyword in story_keywords)
+
+    # Check for question marks (more likely to be dialogue)
+    question_mark_count = prompt_lower.count('?')
+
+    # Check for story-like formatting
+    story_format = any([
+        prompt_lower.startswith(('write', 'create', 'imagine')),
+        'story about' in prompt_lower,
+        'tale of' in prompt_lower
+    ])
+
+    # Decision logic
+    if story_format or story_matches > dialogue_matches + 2:
+        return 'writing_prompts'
+    elif question_mark_count > 0 or dialogue_matches > story_matches + 2:
+        return 'persona_chat'
+    else:
+        # Default to writing_prompts for creative/ambiguous prompts
+        return 'writing_prompts'
+
 # Example usage
 if __name__ == "__main__":
     enhancer = PromptEnhancer()
