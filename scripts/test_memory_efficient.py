@@ -41,11 +41,16 @@ def main():
         torch.cuda.empty_cache()
         gc.collect()
 
+    # Fix tokenizer paths using Path for proper resolution
+    data_dir = Path(__file__).parent.parent / "data" / "tokenizer"
     print("Loading tokenizer...")
-    tokenizer = CLIPTokenizer("./data/vocab.json", merges_file="./data/merges.txt")
+    tokenizer = CLIPTokenizer(
+        str(data_dir / "vocab.json"),
+        merges_file=str(data_dir / "merges.txt")
+    )
 
     print("Loading model file...")
-    model_file = "./data/v1-5-pruned-emaonly.ckpt"
+    model_file = str(Path(__file__).parent.parent / "checkpoints" / "v1-5-pruned-emaonly.ckpt")
 
     print("Loading models with memory efficient loader...")
     models = memory_efficient_loader.preload_models_from_standard_weights(model_file, DEVICE)
@@ -101,9 +106,21 @@ def main():
 
     filename = sanitize_filename(prompt) + ".png"
     print(f"Saving output image as '{filename}'...")
+    
     output_image_pil = Image.fromarray(output_image)
-    output_image_pil.save(f"./images/{filename}")
-    print(f"Done! Image saved as '{filename}'")
+    
+    try:
+        # Try to save in the project's images directory
+        images_dir = Path(__file__).parent.parent / "images"
+        images_dir.mkdir(exist_ok=True)
+        output_image_pil.save(images_dir / filename)
+        print(f"Done! Image saved in images directory as '{filename}'")
+    except Exception as e:
+        # Fallback: save in the same directory as the script
+        fallback_dir = Path(__file__).parent
+        output_image_pil.save(fallback_dir / filename)
+        print(f"Warning: Couldn't save to images directory ({str(e)})")
+        print(f"Image saved in script directory as '{filename}'")
 
 if __name__ == "__main__":
     main()
