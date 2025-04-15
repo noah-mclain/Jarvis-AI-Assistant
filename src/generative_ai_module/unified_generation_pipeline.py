@@ -101,176 +101,192 @@ def parse_args():
 def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = None) -> Tuple[torch.nn.Module, int]:
     """Train the text generator model"""
     print(f"\nTraining text generator on {dataset_name} dataset...")
-
+    
     # Initialize dataset processor
     dataset_processor = DatasetProcessor()
-
+    
     try:
-        return train_loop(
-            dataset_processor, dataset_name, epochs, model_path
+        # Load preprocessed data
+        data = dataset_processor.load_preprocessed_data(dataset_name)
+        if not data:
+            print(f"Error: No data loaded for {dataset_name}")
+            return None, None
+        
+        # Get vocabulary size
+        vocab_size = data.get('vocab_size', 0)
+        if vocab_size == 0:
+            print("Error: Invalid vocabulary size")
+            return None, None
+        
+        # Create model
+        model = CombinedModel(
+            input_size=vocab_size,
+            hidden_size=128,
+            output_size=vocab_size,
+            num_layers=2
         )
+        
+        # Initialize optimizer
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.002)
+        
+        # Check for CUDA
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Using device: {device}")
+        model = model.to(device)
+        
+        # Get batches
+        batches = data.get('batches', [])
+        if not batches:
+            print("Error: No batches found in data")
+            return None, None
+        
+        # Training loop
+        print(f"Training on {len(batches)} batches for {epochs} epochs")
+        model.train()
+        criterion = torch.nn.CrossEntropyLoss()
+        
+        # Enhanced metrics tracking
+        metrics = {
+            'epoch_losses': [],
+            'final_loss': None,
+            'training_time': None,
+            'device_used': str(device),
+            'vocab_size': vocab_size,
+            'num_batches': len(batches),
+            'batch_size': batches[0][0].size(0) if batches else 0,
+            'dataset': dataset_name,
+            'model_type': 'text',
+            'timestamp': datetime.datetime.now().isoformat(),
+            'training_progress': []
+        }
+        
+        import time
+        start_time = time.time()
+        
+        for epoch in range(epochs):
+            epoch_loss = 0
+            batch_count = 0
+            
+            for input_batch, target_batch in tqdm(batches, desc=f"Epoch {epoch+1}/{epochs}"):
+                input_batch = input_batch.to(device)
+                target_batch = target_batch.to(device)
+                
+                optimizer.zero_grad()
+                output, _ = model(input_batch)
+                loss = criterion(output.view(-1, output.size(-1)), target_batch.view(-1))
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
+                optimizer.step()
+                
+                epoch_loss += loss.item()
+                batch_count += 1
+            
+            if batch_count > 0:
+                avg_loss = epoch_loss / batch_count
+                metrics['epoch_losses'].append(avg_loss)
+                metrics['training_progress'].append({
+                    'epoch': epoch + 1,
+                    'loss': avg_loss,
+                    'time_elapsed': time.time() - start_time
+                })
+                print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}")
+        
+        # Calculate final metrics
+        metrics['final_loss'] = metrics['epoch_losses'][-1]
+        metrics['training_time'] = time.time() - start_time
+        
+        # Save model and metrics
+        if model_path:
+            # Ensure the models directory exists
+            models_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models")
+            os.makedirs(models_dir, exist_ok=True)
+            
+            # Save the model
+            model_path = os.path.join(models_dir, os.path.basename(model_path))
+            torch.save({
+                'model_state_dict': model.state_dict(),
+                'vocab_size': vocab_size,
+                'metrics': metrics
+            }, model_path)
+            print(f"Model saved to {model_path}")
+            
+            # Save metrics to a separate file
+            save_evaluation_metrics(metrics, dataset_name, "text")
+        
+        return model, vocab_size
+    
     except Exception as e:
         print(f"Error training text generator: {e}")
         import traceback
         traceback.print_exc()
         return None, None
 
-def train_loop(dataset_processor, dataset_name, epochs, model_path):
-    # Load preprocessed data from the correct location
-    data = dataset_processor.load_preprocessed_data(dataset_name)
-    if not data:
-        print(f"Error: No data loaded for {dataset_name}")
-        return None, None
-
-    # Get vocabulary size
-    vocab_size = data.get('vocab_size', 0)
-    if vocab_size == 0:
-        print("Error: Invalid vocabulary size")
-        return None, None
-
-    # Create model
-    model = CombinedModel(
-        input_size=vocab_size,
-        hidden_size=128,
-        output_size=vocab_size,
-        num_layers=2
-    )
-
-    # Initialize optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.002)
-
-    # Check for CUDA
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
-    model = model.to(device)
-
-    # Get batches
-    batches = data.get('batches', [])
-    if not batches:
-        print("Error: No batches found in data")
-        return None, None
-
-    # Training loop
-    print(f"Training on {len(batches)} batches for {epochs} epochs")
-    model.train()
-    criterion = torch.nn.CrossEntropyLoss()
-
-    # Enhanced metrics tracking
-    metrics = {
-        'epoch_losses': [],
-        'final_loss': None,
-        'training_time': None,
-        'device_used': str(device),
-        'vocab_size': vocab_size,
-        'num_batches': len(batches),
-        'batch_size': batches[0][0].size(0) if batches else 0,
-        'dataset': dataset_name,
-        'model_type': 'text',
-        'timestamp': datetime.datetime.now().isoformat(),
-        'training_progress': []
-    }
-
-    import time
-    start_time = time.time()
-
-    for epoch in range(epochs):
-        epoch_loss = 0
-        batch_count = 0
-
-        for input_batch, target_batch in tqdm(batches, desc=f"Epoch {epoch+1}/{epochs}"):
-            input_batch = input_batch.to(device)
-            target_batch = target_batch.to(device)
-
-            optimizer.zero_grad()
-            output, _ = model(input_batch)
-            loss = criterion(output.view(-1, output.size(-1)), target_batch.view(-1))
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
-            optimizer.step()
-
-            epoch_loss += loss.item()
-            batch_count += 1
-
-        if batch_count > 0:
-            avg_loss = epoch_loss / batch_count
-            metrics['epoch_losses'].append(avg_loss)
-            metrics['training_progress'].append({
-                'epoch': epoch + 1,
-                'loss': avg_loss,
-                'time_elapsed': time.time() - start_time
-            })
-            print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}")
-
-    # Calculate final metrics
-    metrics['final_loss'] = metrics['epoch_losses'][-1]
-    metrics['training_time'] = time.time() - start_time
-
-    # Save model and metrics
-    if model_path:
-        os.makedirs(os.path.dirname(model_path), exist_ok=True)
-        torch.save({
-            'model_state_dict': model.state_dict(),
-            'vocab_size': vocab_size,
-            'metrics': metrics
-        }, model_path)
-        print(f"Model saved to {model_path}")
-
-        # Save metrics to a separate file
-        save_evaluation_metrics(metrics, dataset_name, "text")
-
-    return model, vocab_size
-
 def train_code_generator(dataset_name="writing_prompts", epochs=50, model_path=None):
     """Train the CodeGenerator model with preprocessed data"""
     # For code generation, we use the writing prompts dataset as a proxy for code
     return train_text_generator(dataset_name, epochs, model_path)
 
-def load_model(model_path, model_type="text"):
+def load_model(model_path: str, model_type: str = "text") -> Tuple[torch.nn.Module, int]:
     """Load a trained model"""
-    if not os.path.exists(model_path):
-        # Try alternative paths
-        alt_paths = [
-            os.path.join("models", os.path.basename(model_path)),
-            os.path.join("src/generative_ai_module/models", os.path.basename(model_path)),
-            os.path.join(os.path.dirname(__file__), "models", os.path.basename(model_path))
-        ]
-        
-        for alt_path in alt_paths:
-            if os.path.exists(alt_path):
-                model_path = alt_path
-                break
-        else:
-            raise FileNotFoundError(f"Model file not found in any of these locations: {[model_path] + alt_paths}")
-    
-    print(f"Loading {model_type} model from {model_path}")
-    
-    # Load the checkpoint
-    checkpoint = torch.load(model_path)
-    
-    # If it's a state dict directly, not a checkpoint dict
-    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
-        state_dict = checkpoint['model_state_dict']
-        vocab_size = checkpoint.get('vocab_size', 104)
-        metrics = checkpoint.get('metrics', {})
-    else:
-        state_dict = checkpoint
-        vocab_size = 104  # Default vocabulary size
-        metrics = {}
-    
-    # Create and initialize the model
-    model = CombinedModel(
-        input_size=vocab_size,
-        hidden_size=128,
-        output_size=vocab_size,
-        num_layers=2
+    # Define all possible model paths
+    possible_paths = [
+        model_path,  # Original path
+        os.path.join("models", os.path.basename(model_path)),  # models directory
+        os.path.join("src/generative_ai_module/models", os.path.basename(model_path)),  # module models directory
+        os.path.join(os.path.dirname(__file__), "models", os.path.basename(model_path)),  # relative module models
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), "models", os.path.basename(model_path))  # project models
+    ]
+
+    # Try each path
+    for path in possible_paths:
+        if os.path.exists(path):
+            print(f"Loading model from {path}")
+            try:
+                checkpoint = torch.load(path)
+
+                # Get model parameters
+                if (
+                    isinstance(checkpoint, dict)
+                    and 'model_state_dict' in checkpoint
+                ):
+                    state_dict = checkpoint['model_state_dict']
+                    vocab_size = checkpoint.get('vocab_size', 104)
+                    metrics = checkpoint.get('metrics', {})
+                else:
+                    state_dict = checkpoint
+                    vocab_size = 104
+                    metrics = {}
+                # Create model
+                model = CombinedModel(
+                    input_size=vocab_size,
+                    hidden_size=128,
+                    output_size=vocab_size,
+                    num_layers=2
+                )
+
+                # Load state dict
+                model.load_state_dict(state_dict)
+                model.eval()
+
+                print(f"Successfully loaded {model_type} model with vocabulary size {vocab_size}")
+                return model, vocab_size
+
+            except Exception as e:
+                print(f"Error loading model from {path}: {e}")
+                continue
+
+    # If no model found, try to find any model file
+    model_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models")
+    if os.path.exists(model_dir):
+        if model_files := [
+            f for f in os.listdir(model_dir) if f.endswith('.pt')
+        ]:
+            print(f"Found existing model files: {model_files}")
+            print("Please specify the correct model file using --model-path")
+
+    raise FileNotFoundError(
+        "Model file not found. Please train a model first or specify the correct path."
     )
-    
-    # Load the state dict
-    model.load_state_dict(state_dict)
-    model.eval()  # Set to evaluation mode
-    print(f"Model loaded with vocabulary size: {vocab_size}")
-    
-    return model, vocab_size
 
 def generate_with_tokenizer(model, tokenizer, prompt, max_length=50, temperature=0.7):
     """Generate text using the model and tokenizer"""
@@ -360,12 +376,12 @@ def preprocess_data(args: argparse.Namespace) -> Dict[str, Any]:
     print(f"Preprocessing complete. Data saved to {output_dir}")
     return processed_data
 
-def evaluate_model(model: torch.nn.Module, 
-                  test_data: Dict[str, Any], 
-                  metrics: List[str] = ["perplexity", "accuracy"]) -> Dict[str, float]:
+def evaluate_model(model: torch.nn.Module, test_data: Dict[str, Any], metrics: List[str] = None) -> Dict[str, float]:
     """Evaluate model performance on test data"""
+    if metrics is None:
+        metrics = ["perplexity", "accuracy"]
     print("Starting model evaluation...")
-    
+
     results = {
         'perplexity': None,
         'accuracy': None,
@@ -374,37 +390,37 @@ def evaluate_model(model: torch.nn.Module,
         'evaluation_time': None,
         'device_used': str(next(model.parameters()).device)
     }
-    
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     model.eval()
-    
+
     criterion = torch.nn.CrossEntropyLoss()
     total_loss = 0
     total_tokens = 0
     correct_predictions = 0
-    
+
     import time
     start_time = time.time()
-    
+
     with torch.no_grad():
         for input_batch, target_batch in tqdm(test_data.get('batches', []), desc="Evaluating"):
             input_batch = input_batch.to(device)
             target_batch = target_batch.to(device)
-            
+
             # Forward pass
             output, _ = model(input_batch)
-            
+
             # Calculate loss
             loss = criterion(output.view(-1, output.size(-1)), target_batch.view(-1))
             total_loss += loss.item() * input_batch.size(0)
             total_tokens += input_batch.size(0)
-            
+
             # Calculate accuracy
             if "accuracy" in metrics:
                 predictions = output.argmax(dim=-1)
                 correct_predictions += (predictions == target_batch).sum().item()
-    
+
     # Calculate metrics
     if "perplexity" in metrics:
         results["perplexity"] = np.exp(total_loss / total_tokens)
@@ -413,7 +429,7 @@ def evaluate_model(model: torch.nn.Module,
     results["loss"] = total_loss / total_tokens
     results["num_samples"] = total_tokens
     results["evaluation_time"] = time.time() - start_time
-    
+
     print("\nEvaluation complete:")
     for metric, value in results.items():
         if value is not None:
@@ -421,7 +437,7 @@ def evaluate_model(model: torch.nn.Module,
                 print(f"{metric}: {value:.4f}")
             else:
                 print(f"{metric}: {value}")
-    
+
     return results
 
 def save_evaluation_metrics(metrics: Dict[str, Any], dataset_name: str, model_type: str):
@@ -606,69 +622,71 @@ def split_data(data: Dict[str, Any], eval_split: float = 0.2) -> Tuple[Dict[str,
 
 def main():
     args = parse_args()
-    
+
     if args.mode == "preprocess":
         # Preprocess all datasets
         datasets = preprocess_datasets(args)
-    
+
     elif args.mode == "train":
         # Preprocess and train on all datasets
         datasets = preprocess_datasets(args)
         train_on_datasets(args, datasets)
-    
+
     elif args.mode == "generate":
-        # Load appropriate model based on dataset
-        dataset_name = args.dataset
-        if args.gen_type == "text":
-            model_path = os.path.join(args.model_dir, f"text_gen_{dataset_name}.pt")
-        else:
-            model_path = os.path.join(args.model_dir, args.code_model)
-        
-        model, vocab_size = load_model(model_path, args.gen_type)
-        
-        # Generate response
-        if args.use_tokenizer and BasicTokenizer:
-            tokenizer = BasicTokenizer()
-            response, _ = generate_with_tokenizer(
-                model, tokenizer, args.prompt,
-                max_length=args.length,
-                temperature=args.temperature
-            )
-        else:
-            response = generate_with_char_model(
-                model, args.prompt, vocab_size,
-                max_length=args.length,
-                temperature=args.temperature
-            )
-        
-        print("\nGenerated response:")
-        print(response)
-    
+        load_correct_model(args)
     elif args.mode == "evaluate":
         # Load and evaluate models for each dataset
         datasets = preprocess_datasets(args)
         for dataset_name, data in datasets.items():
             print(f"\n===== Evaluating {dataset_name} dataset =====")
             _, eval_data = split_data(data, args.eval_split)
-            
+
             # Evaluate text model
             model_path = os.path.join(args.model_dir, f"text_gen_{dataset_name}.pt")
             if os.path.exists(model_path):
                 model, _ = load_model(model_path)
                 metrics = evaluate_model(model, eval_data, args.metrics)
                 save_evaluation_metrics(metrics, dataset_name, "text")
-    
+
     elif args.mode == "interactive":
         # Load model for the specified dataset
         dataset_name = args.dataset
         model_path = os.path.join(args.model_dir, f"text_gen_{dataset_name}.pt")
         model, vocab_size = load_model(model_path)
-        
+
         # Initialize tokenizer if requested
         tokenizer = BasicTokenizer() if args.use_tokenizer and BasicTokenizer else None
-        
+
         # Start interactive session
         interactive_generation(model, tokenizer, args.gen_type)
+
+def load_correct_model(args):
+    # Load appropriate model based on dataset
+    dataset_name = args.dataset
+    model_path = (
+        os.path.join(args.model_dir, f"text_gen_{dataset_name}.pt")
+        if args.gen_type == "text"
+        else os.path.join(args.model_dir, args.code_model)
+    )
+    model, vocab_size = load_model(model_path, args.gen_type)
+
+    # Generate response
+    if args.use_tokenizer and BasicTokenizer:
+        tokenizer = BasicTokenizer()
+        response, _ = generate_with_tokenizer(
+            model, tokenizer, args.prompt,
+            max_length=args.length,
+            temperature=args.temperature
+        )
+    else:
+        response = generate_with_char_model(
+            model, args.prompt, vocab_size,
+            max_length=args.length,
+            temperature=args.temperature
+        )
+
+    print("\nGenerated response:")
+    print(response)
 
 if __name__ == "__main__":
     main() 
