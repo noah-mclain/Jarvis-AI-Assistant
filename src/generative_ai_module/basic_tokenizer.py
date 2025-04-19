@@ -2,6 +2,8 @@
 Basic character-level tokenizer for use with the preprocessed datasets
 """
 
+
+
 import os
 import sys
 import torch
@@ -70,17 +72,13 @@ CHAR_TO_TOKEN = {
     # Add more as needed
 }
 
-# Build the reverse mapping
-TOKEN_TO_CHAR = {v: k for k, v in CHAR_TO_TOKEN.items()}
-
-# Add some special tokens
-TOKEN_TO_CHAR.update({
+TOKEN_TO_CHAR = {v: k for k, v in CHAR_TO_TOKEN.items()} | {
     0: '<PAD>',
     1: '<START>',
     2: '<END>',
     3: '<UNK>',
     4: '<SEP>',
-})
+}
 
 class BasicTokenizer:
     """Simple character-level tokenizer for the preprocessed datasets"""
@@ -144,21 +142,20 @@ class BasicTokenizer:
         """Load tokenizer from a JSON file"""
         with open(filepath, 'r') as f:
             data = json.load(f)
-        
+
         tokenizer = cls(vocab_size=data['vocab_size'])
         tokenizer.char_to_token = data['char_to_token']
         tokenizer.unk_token = data['unk_token']
-        
-        # Rebuild token_to_char
-        tokenizer.token_to_char = {v: k for k, v in tokenizer.char_to_token.items()}
-        tokenizer.token_to_char.update({
+
+        tokenizer.token_to_char = {
+            v: k for k, v in tokenizer.char_to_token.items()
+        } | {
             0: '<PAD>',
             1: '<START>',
             2: '<END>',
             3: '<UNK>',
             4: '<SEP>',
-        })
-        
+        }
         return tokenizer
 
 def test_tokenizer():

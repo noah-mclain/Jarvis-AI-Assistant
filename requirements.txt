@@ -14,3 +14,7 @@ fsspec==2025.2.0 # Access to structured datasets
 Pillow
 datasets
 matplotlib
+accelerate
+huggingface_hub
+peft
+bitsandbytes

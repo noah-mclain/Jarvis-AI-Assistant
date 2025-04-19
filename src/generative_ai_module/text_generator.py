@@ -24,10 +24,10 @@ class CombinedModel(nn.Module):
         # [batch_size, seq_len, input_size] (3D tensor) - one-hot encoded
         # [batch_size, seq_len] (2D tensor) - token indices
         # [batch_size, input_size] (2D tensor) - single time step one-hot
-        
+
         # Process input based on dimensionality and dtype
         if x.dim() == 2:
-            if x.dtype == torch.long or x.dtype == torch.int64:
+            if x.dtype in [torch.long, torch.int64]:
                 # Input is token indices [batch_size, seq_len]
                 # Pass through embedding layer
                 x = self.embedding(x)
@@ -40,26 +40,20 @@ class CombinedModel(nn.Module):
             # 3D tensor inputs are assumed to be one-hot encodings
             # No embedding needed, just make sure it's float
             x = x.float()
-            
+
         # Pass through LSTM
         lstm_out, hidden = self.lstm(x, hidden)
-        
+
         # Get output from last time step only
-        if lstm_out.dim() == 3:
-            # For 3D output: [batch_size, seq_len, hidden_size]
-            last_output = lstm_out[:, -1, :]
-        else:
-            # For 2D output: [batch_size, hidden_size]
-            last_output = lstm_out
-        
+        last_output = lstm_out[:, -1, :] if lstm_out.dim() == 3 else lstm_out
         # Apply dropout and linear layer
         last_output = self.dropout(last_output)
         output = self.fc(last_output)
-        
+
         return output, hidden
     
 class TextGenerator:
-    def __init__(self):
+    def __init__(self, force_gpu=False):
         self.all_chars = string.printable
         self.n_chars = len(self.all_chars)
         self.char_to_index = {char: i for i, char in enumerate(self.all_chars)}
@@ -68,15 +62,42 @@ class TextGenerator:
         self.all_chars += self.unknown_token
         self.char_to_index[self.unknown_token] = len(self.all_chars) - 1
         self.model = CombinedModel(self.n_chars, 128, self.n_chars, 2)
+        self.force_gpu = force_gpu
+        self.device = self._get_device()
+        self.model = self.model.to(self.device)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.002)
         self.context = None
-        
+    
+    def _get_device(self):
+        """Determine the best available device (MPS for Apple Silicon, CUDA for NVIDIA, or CPU)"""
+        if self.force_gpu:
+            # Try to use MPS (Metal Performance Shaders) for Apple Silicon
+            if hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                print("Using MPS (Apple Silicon GPU) for text generation")
+                return torch.device("mps")
+            # Fall back to CUDA if available
+            elif torch.cuda.is_available():
+                print(f"Using CUDA GPU for text generation: {torch.cuda.get_device_name(0)}")
+                return torch.device("cuda")
+            else:
+                print("Warning: GPU requested but neither MPS nor CUDA is available. Falling back to CPU.")
+                return torch.device("cpu")
+        elif hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            print("Using MPS (Apple Silicon GPU) for text generation")
+            return torch.device("mps")
+        elif torch.cuda.is_available():
+            print(f"Using CUDA GPU for text generation: {torch.cuda.get_device_name(0)}")
+            return torch.device("cuda")
+        else:
+            print("Using CPU for text generation (no GPU available)")
+            return torch.device("cpu")
+
     def char_indices_tensor(self, string):
         tensor = torch.zeros(len(string), dtype=torch.long)
         for i, char in enumerate(string):
             tensor[i] = self.char_to_index.get(char, self.char_to_index[self.unknown_token])
         
-        return tensor
+        return tensor.to(self.device)
     
     def handle_input(self, input_data):
         try:
@@ -109,7 +130,7 @@ class TextGenerator:
         idx_to_char = self.index_to_char
         n_chars = len(char_to_idx)
         unknown_token = self.unknown_token
-        device = next(self.model.parameters()).device
+        device = self.device
         
         # Initial hidden state
         hidden = None
@@ -126,13 +147,10 @@ class TextGenerator:
                         context = ' ' * (context_length - len(predicted)) + predicted
                     
                     # Convert to token indices - this works with the embedding layer
-                    token_indices = torch.zeros(1, len(context), dtype=torch.long)
+                    token_indices = torch.zeros(1, len(context), dtype=torch.long, device=device)
                     for t, char in enumerate(context):
                         idx = char_to_idx.get(char, char_to_idx[unknown_token])
                         token_indices[0, t] = idx
-                    
-                    # Move to device
-                    token_indices = token_indices.to(device)
                     
                     # Get prediction using token indices
                     output, hidden = self.model(token_indices, hidden)
@@ -198,69 +216,37 @@ class TextGenerator:
                 for input_batch, target_batch in data:
                     try:
                         # Move to device
-                        device = next(self.model.parameters()).device
-                        
-                        # Check input dtype and format
-                        if input_batch.dtype == torch.long or input_batch.dtype == torch.int64:
-                            # Token indices - keep as is
-                            input_batch = input_batch.to(device)
-                            print(f"Batch {batch_count+1}: Using tokenized input {input_batch.shape}")
-                        else:
-                            # One-hot or other format - convert to float
-                            # Ensure input is properly formatted
-                            if input_batch.dim() == 2:
-                                # If input is [batch_size, features], make sure it's float
-                                input_batch = input_batch.float().to(device)
-                            elif input_batch.dim() == 3:
-                                # If input is [batch_size, seq_len, features], make sure it's float
-                                input_batch = input_batch.float().to(device)
-                            else:
-                                raise ValueError(f"Unexpected input shape: {input_batch.shape}")
-                            print(f"Batch {batch_count+1}: Using one-hot input {input_batch.shape}")
-                        
-                        # Ensure target is long for CrossEntropyLoss
-                        target_batch = target_batch.long().to(device)
-                        
-                        # Print batch shapes for debugging (only for first few batches)
-                        if batch_count < 3:
-                            print(f"Batch {batch_count+1}: input {input_batch.shape}, target {target_batch.shape}")
+                        input_batch = input_batch.to(self.device)
+                        target_batch = target_batch.to(self.device)
                         
                         # Forward pass
                         self.optimizer.zero_grad()
-                        output, _ = self.model(input_batch)
+                        outputs, _ = self.model(input_batch)
                         
                         # Calculate loss
-                        loss = criterion(output, target_batch.squeeze())
+                        loss = criterion(outputs.view(-1, outputs.size(-1)), target_batch.view(-1))
                         
-                        # Backward pass
+                        # Backward pass and optimize
                         loss.backward()
-                        torch.nn.utils.clip_grad_norm_(self.model.parameters(), 5)
                         self.optimizer.step()
                         
-                        # Log metrics
                         epoch_loss += loss.item()
                         batch_count += 1
-                        
                     except Exception as e:
-                        print(f"Error in batch: {e}")
-                        import traceback
-                        traceback.print_exc()
+                        print(f"Error during batch training: {e}")
                         continue
                 
-                # Log epoch metrics
                 if batch_count > 0:
                     avg_loss = epoch_loss / batch_count
                     losses.append(avg_loss)
                     print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}")
                 else:
-                    print(f"Epoch {epoch+1}/{epochs}: No valid batches processed")
-            
+                    print(f"Epoch {epoch+1}/{epochs}, No valid batches.")
+                    
             return losses
-        
+                
         except Exception as e:
-            print(f"Training error: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"Error during training: {e}")
             return losses
 
     def train_character_model_step(self, text, losses):

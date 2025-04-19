@@ -55,8 +55,8 @@ def parse_args():
                       help="Number of training epochs")
     parser.add_argument("--save-model", action="store_true",
                       help="Save the trained models")
-    parser.add_argument("--dataset", choices=["persona_chat", "writing_prompts"], 
-                      default="persona_chat", help="Which dataset to use for text training")
+    parser.add_argument("--dataset", choices=["persona_chat", "writing_prompts", "code"], 
+                      default="persona_chat", help="Which dataset to use for training")
     
     # Generation options
     parser.add_argument("--gen-type", choices=["text", "code"], default="text",
@@ -96,30 +96,48 @@ def parse_args():
     parser.add_argument("--code-model", default="code_gen_model.pt",
                       help="Filename for code generator model")
     
+    # Deepseek options
+    parser.add_argument("--use-deepseek", action="store_true",
+                      help="Use deepseek-coder for code generation and training")
+    parser.add_argument("--deepseek-batch-size", type=int, default=4,
+                      help="Batch size for deepseek training")
+    parser.add_argument("--learning-rate", type=float, default=2e-5,
+                      help="Learning rate for deepseek fine-tuning")
+    parser.add_argument("--sequence-length", type=int, default=512,
+                      help="Maximum sequence length for deepseek")
+    parser.add_argument("--warmup-steps", type=int, default=100,
+                      help="Number of warmup steps for deepseek")
+    parser.add_argument("--code-subset", default="python",
+                      help="Language subset for code dataset (for deepseek)")
+    parser.add_argument("--all-code-subsets", type=lambda x: (str(x).lower() == 'true'), default=True,
+                      help="Whether to use all language subsets for code (default: True)")
+    parser.add_argument("--force-gpu", action="store_true", default=True,
+                      help="Force the use of GPU (MPS for Apple Silicon, CUDA for NVIDIA)")
+    
     return parser.parse_args()
 
 def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = None,
                         learning_rate: float = 0.002, clip_value: float = 5.0,
-                        use_scheduler: bool = False) -> Tuple[torch.nn.Module, int]:
+                        use_scheduler: bool = False, force_gpu: bool = True) -> Tuple[torch.nn.Module, int]:
     """Train the text generator model with enhanced configuration"""
     print(f"\nTraining text generator on {dataset_name} dataset...")
-    
+
     # Initialize dataset processor
     dataset_processor = DatasetProcessor()
-    
+
     try:
         # Load preprocessed data
         data = dataset_processor.load_preprocessed_data(dataset_name)
         if not data:
             print(f"Error: No data loaded for {dataset_name}")
             return None, None
-        
+
         # Get vocabulary size
         vocab_size = data.get('vocab_size', 0)
         if vocab_size == 0:
             print("Error: Invalid vocabulary size")
             return None, None
-        
+
         # Create model with enhanced configuration for writing prompts
         if dataset_name == "writing_prompts":
             hidden_size = 256  # Increased hidden size
@@ -127,39 +145,59 @@ def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = 
         else:
             hidden_size = 128
             num_layers = 2
-        
+
         model = CombinedModel(
             input_size=vocab_size,
             hidden_size=hidden_size,
             output_size=vocab_size,
             num_layers=num_layers
         )
-        
+
         # Initialize optimizer with learning rate
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-        
+
         # Add learning rate scheduler if requested
         if use_scheduler:
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
                 optimizer, mode='min', factor=0.5, patience=2, verbose=True
             )
-        
-        # Check for CUDA
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Check for GPU
+        device = torch.device("cpu")
+        if force_gpu:
+            # Try to use MPS (Metal Performance Shaders) for Apple Silicon
+            if hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                print("Using MPS (Apple Silicon GPU)")
+                device = torch.device("mps")
+            # Fall back to CUDA if available
+            elif torch.cuda.is_available():
+                print(f"Using CUDA GPU: {torch.cuda.get_device_name(0)}")
+                device = torch.device("cuda")
+            else:
+                print("Warning: GPU requested but neither MPS nor CUDA is available. Falling back to CPU.")
+        elif hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            print("Using MPS (Apple Silicon GPU)")
+            device = torch.device("mps")
+        elif torch.cuda.is_available():
+            print(f"Using CUDA GPU: {torch.cuda.get_device_name(0)}")
+            device = torch.device("cuda")
+        else:
+            print("Using CPU (no GPU available)")
+
         print(f"Using device: {device}")
         model = model.to(device)
-        
+
         # Get batches
         batches = data.get('batches', [])
         if not batches:
             print("Error: No batches found in data")
             return None, None
-        
+
         # Training loop
         print(f"Training on {len(batches)} batches for {epochs} epochs")
         model.train()
         criterion = torch.nn.CrossEntropyLoss()
-        
+
         # Enhanced metrics tracking
         metrics = {
             'epoch_losses': [],
@@ -182,57 +220,58 @@ def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = 
                 'use_scheduler': use_scheduler
             }
         }
-        
+
         import time
         start_time = time.time()
-        
+
         for epoch in range(epochs):
             epoch_loss = 0
             batch_count = 0
-            
+
             for input_batch, target_batch in tqdm(batches, desc=f"Epoch {epoch+1}/{epochs}"):
+                # Move data to device
                 input_batch = input_batch.to(device)
                 target_batch = target_batch.to(device)
-                
+
                 optimizer.zero_grad()
                 output, _ = model(input_batch)
                 loss = criterion(output.view(-1, output.size(-1)), target_batch.view(-1))
                 loss.backward()
-                
+
                 # Apply gradient clipping
                 torch.nn.utils.clip_grad_norm_(model.parameters(), clip_value)
-                
+
                 optimizer.step()
-                
+
                 epoch_loss += loss.item()
                 batch_count += 1
-            
+
             if batch_count > 0:
                 avg_loss = epoch_loss / batch_count
                 metrics['epoch_losses'].append(avg_loss)
-                
+
                 # Update learning rate if using scheduler
                 if use_scheduler:
                     scheduler.step(avg_loss)
                     metrics['learning_rates'].append(optimizer.param_groups[0]['lr'])
-                
+
                 metrics['training_progress'].append({
                     'epoch': epoch + 1,
                     'loss': avg_loss,
                     'time_elapsed': time.time() - start_time
                 })
                 print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}")
-        
+
         # Calculate final metrics
         metrics['final_loss'] = metrics['epoch_losses'][-1]
         metrics['training_time'] = time.time() - start_time
-        
+
         # Save model and metrics
         if model_path:
             # Ensure the models directory exists
             models_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models")
             os.makedirs(models_dir, exist_ok=True)
-            
+
             # Save the model
             model_path = os.path.join(models_dir, os.path.basename(model_path))
             torch.save({
@@ -241,12 +280,12 @@ def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = 
                 'metrics': metrics
             }, model_path)
             print(f"Model saved to {model_path}")
-            
+
             # Save metrics to a separate file
             save_evaluation_metrics(metrics, dataset_name, "text")
-        
+
         return model, vocab_size
-    
+
     except Exception as e:
         print(f"Error training text generator: {e}")
         import traceback
@@ -371,6 +410,24 @@ def generate_with_char_model(model, prompt, vocab_size, max_length=50, temperatu
 def preprocess_data(args: argparse.Namespace) -> Dict[str, Any]:
     """Enhanced preprocessing pipeline"""
     print("Starting data preprocessing...")
+    
+    # Handle code dataset separately for deepseek model
+    if args.dataset == "code" and args.use_deepseek:
+        from generative_ai_module.code_preprocessing import load_and_preprocess_dataset
+        train_data, valid_data = load_and_preprocess_dataset(
+            max_samples=args.max_samples,
+            sequence_length=args.sequence_length,
+            subset=args.code_subset,
+            all_subsets=args.all_code_subsets
+        )
+        # Return dummy data structure to match expected format
+        return {
+            'train_dataset': train_data,
+            'valid_dataset': valid_data,
+            'vocab_size': None,  # Not used for deepseek
+            'batches': [],  # Not used for deepseek
+            'preprocessing_time': 0
+        }
     
     # Initialize preprocessor
     preprocessor = ImprovedPreprocessor(
@@ -523,8 +580,31 @@ def preprocess_datasets(args: argparse.Namespace) -> Dict[str, Dict[str, Any]]:
     print("Starting preprocessing for all datasets...")
     datasets = {}
     
-    # Process each dataset
-    for dataset_name in ["persona_chat", "writing_prompts"]:
+    # Handle 'code' dataset for deepseek separately
+    if args.dataset == "code" and args.use_deepseek:
+        print("\n===== Processing code dataset for deepseek =====")
+        from generative_ai_module.code_preprocessing import load_and_preprocess_dataset
+        
+        train_dataset, valid_dataset = load_and_preprocess_dataset(
+            max_samples=args.max_samples,
+            sequence_length=args.sequence_length,
+            subset=args.code_subset,
+            all_subsets=args.all_code_subsets
+        )
+        
+        datasets["code"] = {
+            'train_dataset': train_dataset,
+            'valid_dataset': valid_dataset
+        }
+        
+        return datasets
+    
+    # Process standard datasets
+    dataset_list = ["persona_chat", "writing_prompts"]
+    if args.dataset != "all":
+        dataset_list = [args.dataset]
+        
+    for dataset_name in dataset_list:
         print(f"\n===== Processing {dataset_name} dataset =====")
         args.dataset = dataset_name
         processed_data = preprocess_data(args)
@@ -548,6 +628,53 @@ def train_on_datasets(args: argparse.Namespace, datasets: Dict[str, Dict[str, An
     
     # Create model directory if it doesn't exist
     os.makedirs(args.model_dir, exist_ok=True)
+    
+    # Handle code dataset with deepseek separately
+    if args.dataset == "code" and args.use_deepseek and args.train_type in ["code", "both"]:
+        from generative_ai_module.code_generator import CodeGenerator
+        
+        print("\n===== Training deepseek-coder model on code dataset =====")
+        # Get the code dataset
+        code_data = datasets.get("code", {})
+        train_dataset = code_data.get("train_dataset")
+        eval_dataset = code_data.get("valid_dataset")
+        
+        if train_dataset is None or eval_dataset is None:
+            print("Error: Missing code datasets for deepseek. Attempting to load directly.")
+            from generative_ai_module.code_preprocessing import load_and_preprocess_dataset
+            train_dataset, eval_dataset = load_and_preprocess_dataset(
+                max_samples=args.max_samples,
+                sequence_length=args.sequence_length,
+                subset=args.code_subset,
+                all_subsets=args.all_code_subsets
+            )
+        
+        if train_dataset is None or eval_dataset is None:
+            print("Error: Failed to load code datasets for deepseek training.")
+            return
+        
+        # Initialize CodeGenerator with deepseek
+        code_gen = CodeGenerator(use_deepseek=True)
+        
+        # Set output directory
+        output_dir = os.path.join(args.model_dir, "deepseek_finetuned")
+        
+        # Fine-tune the model
+        training_metrics = code_gen.fine_tune_deepseek(
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            output_dir=output_dir,
+            epochs=args.epochs,
+            batch_size=args.deepseek_batch_size,
+            sequence_length=args.sequence_length,
+            learning_rate=args.learning_rate,
+            warmup_steps=args.warmup_steps,
+            subset=args.code_subset,
+            all_subsets=args.all_code_subsets
+        )
+        
+        print(f"Deepseek training completed with metrics: {training_metrics}")
+        return
     
     # Train text generator on each dataset
     for dataset_name, data in datasets.items():
@@ -582,7 +709,8 @@ def train_on_datasets(args: argparse.Namespace, datasets: Dict[str, Dict[str, An
                 model_path=model_path if args.save_model else None,
                 learning_rate=learning_rate,
                 clip_value=clip_value,
-                use_scheduler=use_scheduler
+                use_scheduler=use_scheduler,
+                force_gpu=args.force_gpu
             )
             
             # Evaluate text model
@@ -592,7 +720,7 @@ def train_on_datasets(args: argparse.Namespace, datasets: Dict[str, Dict[str, An
                 save_evaluation_metrics(metrics, dataset_name, "text")
         
         # Train code generator (only on writing_prompts)
-        if args.train_type in ["code", "both"] and dataset_name == "writing_prompts":
+        if args.train_type in ["code", "both"] and dataset_name == "writing_prompts" and not args.use_deepseek:
             model_path = os.path.join(args.model_dir, args.code_model)
             code_model, vocab_size = train_code_generator(
                 dataset_name=dataset_name,
@@ -608,7 +736,8 @@ def train_on_datasets(args: argparse.Namespace, datasets: Dict[str, Dict[str, An
 
 def interactive_generation(model: torch.nn.Module, 
                          tokenizer: Any = None,
-                         model_type: str = "text") -> None:
+                         model_type: str = "text",
+                         force_gpu: bool = True) -> None:
     """Interactive generation mode for user prompts"""
     print("\nStarting interactive generation mode...")
     print("Type 'quit' to exit")
@@ -635,6 +764,19 @@ def interactive_generation(model: torch.nn.Module,
             
             model, vocab_size = load_model(model_path)
             
+            # Get device
+            device = torch.device("cpu")
+            if force_gpu:
+                if hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                    device = torch.device("mps")
+                    print("Using Apple Silicon GPU (MPS) for generation")
+                elif torch.cuda.is_available():
+                    device = torch.device("cuda")
+                    print("Using NVIDIA GPU for generation")
+                else:
+                    print("Warning: GPU requested but not available. Using CPU.")
+            model = model.to(device)
+            
             # Generate response
             if tokenizer:
                 response, _ = generate_with_tokenizer(
@@ -643,9 +785,13 @@ def interactive_generation(model: torch.nn.Module,
                     temperature=args.temperature
                 )
             else:
-                response = generate_with_char_model(
-                    model, prompt, vocab_size,
-                    max_length=args.length,
+                # Create a text generator with the loaded model
+                text_gen = TextGenerator(force_gpu=force_gpu)
+                text_gen.model = model
+                
+                response = text_gen.generate(
+                    initial_str=prompt, 
+                    pred_len=args.length,
                     temperature=args.temperature
                 )
             
@@ -699,6 +845,15 @@ def main():
     elif args.mode == "evaluate":
         # Load and evaluate models for each dataset
         datasets = preprocess_datasets(args)
+        
+        # Special case for deepseek code model
+        if args.use_deepseek and args.dataset == "code":
+            print("\n===== Evaluating deepseek code model =====")
+            # This would typically be handled in the fine-tuning process
+            print("Deepseek evaluation is performed during the fine-tuning process")
+            print("To evaluate the model again, run in train mode")
+            return
+        
         for dataset_name, data in datasets.items():
             print(f"\n===== Evaluating {dataset_name} dataset =====")
             _, eval_data = split_data(data, args.eval_split)
@@ -711,7 +866,37 @@ def main():
                 save_evaluation_metrics(metrics, dataset_name, "text")
     
     elif args.mode == "interactive":
-        # Load model for the specified dataset
+        # Special case for deepseek code generation
+        if args.gen_type == "code" and args.use_deepseek:
+            from generative_ai_module.code_generator import CodeGenerator
+            print("\nStarting interactive code generation mode with deepseek...")
+            print("Type 'quit' to exit")
+            
+            code_gen = CodeGenerator(use_deepseek=True)
+            
+            while True:
+                try:
+                    prompt = input("\nEnter code description: ")
+                    if prompt.lower() == 'quit':
+                        break
+                    
+                    print("\nGenerating code...")
+                    response = code_gen.generate_code(
+                        prompt=prompt,
+                        length=args.length,
+                        temperature=args.temperature
+                    )
+                    
+                    print("\nGenerated code:")
+                    print(response)
+                    
+                except KeyboardInterrupt:
+                    break
+                except Exception as e:
+                    print(f"Error generating code: {e}")
+            return
+        
+        # Regular text generation
         dataset_name = args.dataset
         model_path = os.path.join(args.model_dir, f"text_gen_{dataset_name}.pt")
         
@@ -727,9 +912,22 @@ def main():
         tokenizer = BasicTokenizer() if args.use_tokenizer and BasicTokenizer else None
         
         # Start interactive session
-        interactive_generation(model, tokenizer, args.gen_type)
+        interactive_generation(model, tokenizer, args.gen_type, force_gpu=args.force_gpu)
 
 def load_correct_model(args):
+    # Generate with deepseek if requested
+    if args.gen_type == "code" and args.use_deepseek:
+        from generative_ai_module.code_generator import CodeGenerator
+        code_gen = CodeGenerator(use_deepseek=True)
+        response = code_gen.generate_code(
+            prompt=args.prompt,
+            length=args.length,
+            temperature=args.temperature
+        )
+        print("\nGenerated code:")
+        print(response)
+        return
+
     # Load appropriate model based on dataset
     dataset_name = args.dataset
     model_path = (
