@@ -49,7 +49,7 @@ def test_imports():
     
     # Test importing the BasicTokenizer
     try:
-        from src.generative_ai_module.examples.basic_tokenizer import BasicTokenizer
+        from generative_ai_module.basic_tokenizer import BasicTokenizer
         print("✓ Successfully imported BasicTokenizer")
     except ImportError as e:
         print(f"✗ Failed to import BasicTokenizer: {e}")
@@ -69,22 +69,24 @@ def test_imports():
 
 def load_preprocessed_data(dataset_name="persona_chat"):
     """Load preprocessed data from disk"""
-    # Get the absolute path to the examples directory
+    # Get the current directory (where this file lives) and project root
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    examples_dir = os.path.join(current_dir, "examples")
-    preprocessed_dir = os.path.join(examples_dir, "preprocessed_data")
+    project_root = os.path.abspath(os.path.join(current_dir, "../../.."))
+
+    # Path to 'preprocessed_data' at the root
+    preprocessed_dir = os.path.join(project_root, "preprocessed_data")
     preprocessed_path = os.path.join(preprocessed_dir, f"{dataset_name}_preprocessed.pt")
-    
+
     print(f"Looking for preprocessed data at: {preprocessed_path}")
-    
+
     if not os.path.exists(preprocessed_path):
         print(f"❌ Preprocessed data not found at {preprocessed_path}")
         return None
-    
+
     print(f"✅ Found preprocessed data at {preprocessed_path}")
     try:
         data = torch.load(preprocessed_path)
-        print(f"✅ Successfully loaded data")
+        print("✅ Successfully loaded data")
         return data
     except Exception as e:
         print(f"❌ Error loading data: {e}")
@@ -95,52 +97,56 @@ def inspect_data_structure(data):
     if data is None:
         print("❌ No data to inspect")
         return
-    
+
     print("\n=== Data Structure ===")
-    
+
     # Check top-level keys
     print(f"Top-level keys: {', '.join(data.keys())}")
-    
+
     # Check batches
     if 'batches' in data:
         batches = data['batches']
         print(f"Number of batches: {len(batches)}")
-        
+
         if batches:
-            # Look at the first batch
-            inputs, targets = batches[0]
-            print(f"First batch input shape: {inputs.shape}")
-            print(f"First batch target shape: {targets.shape}")
-            print(f"Input dtype: {inputs.dtype}")
-            print(f"Target dtype: {targets.dtype}")
-            
-            # Sample some values
-            print("\nSample input values:")
-            try:
-                if inputs.dim() == 2:
-                    print(inputs[0, :10])  # First row, first 10 columns
-                elif inputs.dim() == 3:
-                    print(inputs[0, 0, :10])  # First row, first seq, first 10 features
-            except Exception as e:
-                print(f"Error sampling input values: {e}")
-                
-            print("\nSample target values:")
-            try:
-                if targets.dim() == 1:
-                    print(targets[:10])  # First 10 values
-                else:
-                    print(targets[0, :10] if targets.shape[1] >= 10 else targets[0])
-            except Exception as e:
-                print(f"Error sampling target values: {e}")
+            batch_inspection(batches)
     else:
         print("❌ No batches found in data")
-    
+
     # Check other structures like vocabulary if present
     if 'vocab_size' in data:
         print(f"\nVocabulary size: {data['vocab_size']}")
-    
+
     if 'dataset_name' in data:
         print(f"Dataset name: {data['dataset_name']}")
+
+
+def batch_inspection(batches):
+    # Look at the first batch
+    inputs, targets = batches[0]
+    print(f"First batch input shape: {inputs.shape}")
+    print(f"First batch target shape: {targets.shape}")
+    print(f"Input dtype: {inputs.dtype}")
+    print(f"Target dtype: {targets.dtype}")
+
+    # Sample some values
+    print("\nSample input values:")
+    try:
+        if inputs.dim() == 2:
+            print(inputs[0, :10])  # First row, first 10 columns
+        elif inputs.dim() == 3:
+            print(inputs[0, 0, :10])  # First row, first seq, first 10 features
+    except Exception as e:
+        print(f"Error sampling input values: {e}")
+
+    print("\nSample target values:")
+    try:
+        if targets.dim() == 1:
+            print(targets[:10])  # First 10 values
+        else:
+            print(targets[0, :10] if targets.shape[1] >= 10 else targets[0])
+    except Exception as e:
+        print(f"Error sampling target values: {e}")
 
 def adapt_data_for_model(data, verbose=True):
     """Adapt data format for the model"""
@@ -159,12 +165,10 @@ def adapt_data_for_model(data, verbose=True):
             print(f"  Original target shape: {targets.shape}")
         
         # Ensure inputs are appropriate shape
-        if inputs.dim() == 3:
-            # If 3D tensor with seq_len=1, squeeze it
-            if inputs.shape[1] == 1:
-                inputs = inputs.squeeze(1)
-                if verbose and i < 3:
-                    print(f"  ➡️ Squeezed input to shape: {inputs.shape}")
+        if inputs.dim() == 3 and inputs.shape[1] == 1:
+            inputs = inputs.squeeze(1)
+            if verbose and i < 3:
+                print(f"  ➡️ Squeezed input to shape: {inputs.shape}")
         
         # Ensure targets are appropriate shape  
         if targets.dim() > 1:
@@ -183,46 +187,44 @@ def adapt_data_for_model(data, verbose=True):
 def test_data_loading():
     """Test data loading and preprocessing"""
     print("\n===== Testing Data Loading and Adaptation =====")
-    
+
     # 1. Test persona_chat data
     print("\n== Testing persona_chat dataset ==")
-    persona_data = load_preprocessed_data("persona_chat")
-    if persona_data:
+    if persona_data := load_preprocessed_data("persona_chat"):
         inspect_data_structure(persona_data)
         adapted_persona = adapt_data_for_model(persona_data)
-        
+
     # 2. Test writing_prompts data
     print("\n== Testing writing_prompts dataset ==")
-    prompts_data = load_preprocessed_data("writing_prompts")
-    if prompts_data:
+    if prompts_data := load_preprocessed_data("writing_prompts"):
         inspect_data_structure(prompts_data)
         adapted_prompts = adapt_data_for_model(prompts_data)
-    
+
     print("\n=== Test Complete ===")
 
 def test_preprocessing():
     """Test preprocessing and dataset functionality"""
     print("\n===== Testing Preprocessing Functionality =====")
-    
+
     try:
         from generative_ai_module.dataset_processor import DatasetProcessor
         from generative_ai_module.text_generator import TextGenerator
-        
+
         # Initialize processor and generator
         generator = TextGenerator()
         processor = DatasetProcessor(generator)
-        
+
         print("✓ Successfully initialized DatasetProcessor and TextGenerator")
-        
+
         # Test loading preprocessed data
         print("\nTesting preprocessed data loading:")
         try:
             data = processor.load_preprocessed_data("persona_chat")
-            print(f"✓ Successfully loaded preprocessed data")
+            print("✓ Successfully loaded preprocessed data")
             print(f"  Dataset contains {len(data.get('batches', []))} batches")
         except Exception as e:
             print(f"✗ Failed to load preprocessed data: {e}")
-        
+
         # Test sequence creation with sample text
         print("\nTesting sequence creation:")
         try:
@@ -231,17 +233,17 @@ def test_preprocessing():
 <DIALOGUE>
 USER: What do you do for a living?
 ASSISTANT: I teach mathematics at a high school."""
-            
+
             cleaned_text = processor.clean_text(sample_text)
             sequences = processor.create_sequences(cleaned_text, sequence_length=50)
-            
+
             print(f"✓ Successfully created {len(sequences)} sequences from sample text")
-            
+
             # Create batches
             if sequences:
                 batches = processor.create_batches(sequences, batch_size=16)
                 print(f"✓ Successfully created {len(batches)} batches")
-                
+
                 if batches:
                     inputs, targets = batches[0]
                     print(f"  Batch input shape: {inputs.shape}")
@@ -250,10 +252,10 @@ ASSISTANT: I teach mathematics at a high school."""
             print(f"✗ Failed in sequence/batch creation: {e}")
             import traceback
             traceback.print_exc()
-            
+
     except ImportError as e:
         print(f"✗ Failed to import preprocessing components: {e}")
-    
+
     print("\n=== Preprocessing Test Complete ===")
 
 def main():

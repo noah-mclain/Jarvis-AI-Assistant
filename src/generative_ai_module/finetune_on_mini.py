@@ -53,46 +53,52 @@ def load_model(model_path):
 def prepare_mini_dataset(file_path, processor, seq_length=50, batch_size=2):
     """Prepare the mini dataset for training"""
     print(f"Preparing mini dataset from {file_path}")
-    
+
     # Check if file exists
     if not os.path.exists(file_path):
         print(f"Error: Mini dataset file not found at {file_path}")
         return []
-    
+
     try:
-        # Load and clean the data
-        with open(file_path, 'r', encoding='utf-8') as f:
-            text_data = f.read()
-        
-        print(f"Loaded text data: {len(text_data)} characters")
-        
-        # Clean the text
-        cleaned_text = processor.clean_text(text_data)
-        print(f"Cleaned text: {len(cleaned_text)} characters")
-        
-        # Print a sample of the cleaned text
-        print(f"Sample of cleaned text: '{cleaned_text[:100]}...'")
-        
-        # Create sequences
-        sequences = processor.create_sequences(cleaned_text, seq_length)
-        print(f"Created {len(sequences)} sequences with length {seq_length}")
-        
-        # Create batches
-        batches = processor.create_batches(sequences, batch_size)
-        print(f"Created {len(batches)} batches with batch size {batch_size}")
-        
-        # Check batch structure
-        if batches:
-            inputs, targets = batches[0]
-            print(f"First batch - Inputs shape: {inputs.shape}, Targets shape: {targets.shape}")
-        
-        return batches
-        
+        return load_clean_data(
+            file_path, processor, seq_length, batch_size
+        )
     except Exception as e:
         print(f"Error preparing mini dataset: {e}")
         import traceback
         traceback.print_exc()
         return []
+
+
+# TODO Rename this here and in `prepare_mini_dataset`
+def load_clean_data(file_path, processor, seq_length, batch_size):
+    # Load and clean the data
+    with open(file_path, 'r', encoding='utf-8') as f:
+        text_data = f.read()
+
+    print(f"Loaded text data: {len(text_data)} characters")
+
+    # Clean the text
+    cleaned_text = processor.clean_text(text_data)
+    print(f"Cleaned text: {len(cleaned_text)} characters")
+
+    # Print a sample of the cleaned text
+    print(f"Sample of cleaned text: '{cleaned_text[:100]}...'")
+
+    # Create sequences
+    sequences = processor.create_sequences(cleaned_text, seq_length)
+    print(f"Created {len(sequences)} sequences with length {seq_length}")
+
+    # Create batches
+    batches = processor.create_batches(sequences, batch_size)
+    print(f"Created {len(batches)} batches with batch size {batch_size}")
+
+    # Check batch structure
+    if batches:
+        inputs, targets = batches[0]
+        print(f"First batch - Inputs shape: {inputs.shape}, Targets shape: {targets.shape}")
+
+    return batches
 
 def finetune_model(model, batches, epochs=10, learning_rate=0.0005):
     """Fine-tune the model on the mini dataset"""
@@ -201,7 +207,7 @@ def generate_sample(model, vocab_size, prompt, max_length=100, temperature=0.4):
 def main():
     # Get the current directory and project root for absolute paths
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.abspath(os.path.join(current_dir, "../.."))
+    project_root = os.path.abspath(os.path.join(current_dir, "../../.."))
     
     # Paths with absolute references - using model files we know exist
     model_dir = os.path.join(project_root, "models")
@@ -210,22 +216,18 @@ def main():
     model_options = [
         os.path.join(model_dir, "text_gen_model.pt"),
         os.path.join(model_dir, "text_generator_model.pt"),
-        os.path.join(current_dir, "examples", "best_model.pt"),
-        os.path.join(current_dir, "examples", "models", "persona_chat_model.pt")
+        os.path.join(model_dir, "best_model.pt"), 
+        os.path.join(model_dir, "persona_chat_model.pt")
     ]
     
     # Find the first existing model file
-    input_model = None
-    for model_file in model_options:
-        if os.path.exists(model_file):
-            input_model = model_file
-            break
+    input_model = next((model for model in model_options if os.path.exists(model)), None)
     
     # Output model path
     output_model = os.path.join(model_dir, "finetuned_model.pt")
     
     # Use absolute path for the mini dataset
-    mini_dataset = os.path.join(current_dir, "examples", "mini_dataset.txt")
+    mini_dataset = os.path.join(current_dir, "mini_dataset.txt")
     
     print(f"Mini dataset path: {mini_dataset}")
     print(f"Selected input model: {input_model}")

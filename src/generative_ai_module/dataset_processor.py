@@ -481,9 +481,9 @@ ASSISTANT: I'm a software engineer during the week. But on weekends, I play guit
     def load_preprocessed_data(self, dataset_name: str) -> Dict[str, Any]:
         """Load preprocessed data for a specific dataset"""
         # Define the correct path for preprocessed data
+        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         preprocessed_path = os.path.join(
-            "src", "generative_ai_module", "examples", "preprocessed_data",
-            f"{dataset_name}_preprocessed.pt"
+            root_dir, "preprocessed_data", f"{dataset_name}_preprocessed.pt"
         )
         
         # Check if the file exists

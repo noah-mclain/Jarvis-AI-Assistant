@@ -35,7 +35,7 @@ from generative_ai_module.improved_preprocessing import ImprovedPreprocessor
 
 # Try to import tokenizer from examples directory
 try:
-    from generative_ai_module.examples.basic_tokenizer import BasicTokenizer
+    from generative_ai_module.basic_tokenizer import BasicTokenizer
 except ImportError:
     print("Warning: BasicTokenizer not found. Character-level generation will be used.")
     BasicTokenizer = None
@@ -98,8 +98,10 @@ def parse_args():
     
     return parser.parse_args()
 
-def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = None) -> Tuple[torch.nn.Module, int]:
-    """Train the text generator model"""
+def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = None,
+                        learning_rate: float = 0.002, clip_value: float = 5.0,
+                        use_scheduler: bool = False) -> Tuple[torch.nn.Module, int]:
+    """Train the text generator model with enhanced configuration"""
     print(f"\nTraining text generator on {dataset_name} dataset...")
     
     # Initialize dataset processor
@@ -118,16 +120,29 @@ def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = 
             print("Error: Invalid vocabulary size")
             return None, None
         
-        # Create model
+        # Create model with enhanced configuration for writing prompts
+        if dataset_name == "writing_prompts":
+            hidden_size = 256  # Increased hidden size
+            num_layers = 3     # Increased number of layers
+        else:
+            hidden_size = 128
+            num_layers = 2
+        
         model = CombinedModel(
             input_size=vocab_size,
-            hidden_size=128,
+            hidden_size=hidden_size,
             output_size=vocab_size,
-            num_layers=2
+            num_layers=num_layers
         )
         
-        # Initialize optimizer
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.002)
+        # Initialize optimizer with learning rate
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+        
+        # Add learning rate scheduler if requested
+        if use_scheduler:
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer, mode='min', factor=0.5, patience=2, verbose=True
+            )
         
         # Check for CUDA
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -157,7 +172,15 @@ def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = 
             'dataset': dataset_name,
             'model_type': 'text',
             'timestamp': datetime.datetime.now().isoformat(),
-            'training_progress': []
+            'training_progress': [],
+            'learning_rates': [] if use_scheduler else None,
+            'model_config': {
+                'hidden_size': hidden_size,
+                'num_layers': num_layers,
+                'learning_rate': learning_rate,
+                'clip_value': clip_value,
+                'use_scheduler': use_scheduler
+            }
         }
         
         import time
@@ -175,7 +198,10 @@ def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = 
                 output, _ = model(input_batch)
                 loss = criterion(output.view(-1, output.size(-1)), target_batch.view(-1))
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
+                
+                # Apply gradient clipping
+                torch.nn.utils.clip_grad_norm_(model.parameters(), clip_value)
+                
                 optimizer.step()
                 
                 epoch_loss += loss.item()
@@ -184,6 +210,12 @@ def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = 
             if batch_count > 0:
                 avg_loss = epoch_loss / batch_count
                 metrics['epoch_losses'].append(avg_loss)
+                
+                # Update learning rate if using scheduler
+                if use_scheduler:
+                    scheduler.step(avg_loss)
+                    metrics['learning_rates'].append(optimizer.param_groups[0]['lr'])
+                
                 metrics['training_progress'].append({
                     'epoch': epoch + 1,
                     'loss': avg_loss,
@@ -354,7 +386,9 @@ def preprocess_data(args: argparse.Namespace) -> Dict[str, Any]:
     )
     
     # Save preprocessed data in the correct location
-    output_dir = os.path.join("src", "generative_ai_module", "examples", "preprocessed_data")
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    # Join with 'preprocessed_data'
+    output_dir = os.path.join(root_dir, "preprocessed_data")
     os.makedirs(output_dir, exist_ok=True)
     
     # Save tokenized data
@@ -525,10 +559,30 @@ def train_on_datasets(args: argparse.Namespace, datasets: Dict[str, Dict[str, An
         # Train text generator
         if args.train_type in ["text", "both"]:
             model_path = os.path.join(args.model_dir, f"text_gen_{dataset_name}.pt")
+            
+            # Enhanced training configuration for writing prompts
+            if dataset_name == "writing_prompts":
+                # Increase epochs for better training
+                epochs = args.epochs * 2
+                # Use smaller learning rate for better convergence
+                learning_rate = 0.001
+                # Use gradient clipping to prevent exploding gradients
+                clip_value = 1.0
+                # Use learning rate scheduler
+                use_scheduler = True
+            else:
+                epochs = args.epochs
+                learning_rate = 0.002
+                clip_value = 5.0
+                use_scheduler = False
+            
             text_model, vocab_size = train_text_generator(
                 dataset_name=dataset_name,
-                epochs=args.epochs,
-                model_path=model_path if args.save_model else None
+                epochs=epochs,
+                model_path=model_path if args.save_model else None,
+                learning_rate=learning_rate,
+                clip_value=clip_value,
+                use_scheduler=use_scheduler
             )
             
             # Evaluate text model
@@ -572,6 +626,13 @@ def interactive_generation(model: torch.nn.Module,
             
             # Load the appropriate model
             model_path = os.path.join(args.model_dir, f"text_gen_{dataset_name}.pt")
+            
+            # Check if model exists, if not, train it
+            if not os.path.exists(model_path):
+                print(f"Model not found at {model_path}. Training new model...")
+                datasets = preprocess_datasets(args)
+                train_on_datasets(args, datasets)
+            
             model, vocab_size = load_model(model_path)
             
             # Generate response
@@ -622,41 +683,49 @@ def split_data(data: Dict[str, Any], eval_split: float = 0.2) -> Tuple[Dict[str,
 
 def main():
     args = parse_args()
-
+    
     if args.mode == "preprocess":
         # Preprocess all datasets
         datasets = preprocess_datasets(args)
-
+    
     elif args.mode == "train":
         # Preprocess and train on all datasets
         datasets = preprocess_datasets(args)
         train_on_datasets(args, datasets)
-
+    
     elif args.mode == "generate":
         load_correct_model(args)
+    
     elif args.mode == "evaluate":
         # Load and evaluate models for each dataset
         datasets = preprocess_datasets(args)
         for dataset_name, data in datasets.items():
             print(f"\n===== Evaluating {dataset_name} dataset =====")
             _, eval_data = split_data(data, args.eval_split)
-
+            
             # Evaluate text model
             model_path = os.path.join(args.model_dir, f"text_gen_{dataset_name}.pt")
             if os.path.exists(model_path):
                 model, _ = load_model(model_path)
                 metrics = evaluate_model(model, eval_data, args.metrics)
                 save_evaluation_metrics(metrics, dataset_name, "text")
-
+    
     elif args.mode == "interactive":
         # Load model for the specified dataset
         dataset_name = args.dataset
         model_path = os.path.join(args.model_dir, f"text_gen_{dataset_name}.pt")
+        
+        # Check if model exists, if not, train it
+        if not os.path.exists(model_path):
+            print(f"Model not found at {model_path}. Training new model...")
+            datasets = preprocess_datasets(args)
+            train_on_datasets(args, datasets)
+        
         model, vocab_size = load_model(model_path)
-
+        
         # Initialize tokenizer if requested
         tokenizer = BasicTokenizer() if args.use_tokenizer and BasicTokenizer else None
-
+        
         # Start interactive session
         interactive_generation(model, tokenizer, args.gen_type)
 
