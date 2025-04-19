@@ -55,8 +55,8 @@ def parse_args():
                       help="Number of training epochs")
     parser.add_argument("--save-model", action="store_true",
                       help="Save the trained models")
-    parser.add_argument("--dataset", choices=["persona_chat", "writing_prompts", "code"], 
-                      default="persona_chat", help="Which dataset to use for training")
+    parser.add_argument("--dataset", choices=["persona_chat", "writing_prompts", "code", "all", "both"], 
+                      default="both", help="Which dataset to use for training")
     
     # Generation options
     parser.add_argument("--gen-type", choices=["text", "code"], default="text",
@@ -581,7 +581,7 @@ def preprocess_datasets(args: argparse.Namespace) -> Dict[str, Dict[str, Any]]:
     datasets = {}
     
     # Handle 'code' dataset for deepseek separately
-    if args.dataset == "code" and args.use_deepseek:
+    if args.use_deepseek or args.dataset == "code":
         print("\n===== Processing code dataset for deepseek =====")
         from generative_ai_module.code_preprocessing import load_and_preprocess_dataset
         
@@ -596,19 +596,21 @@ def preprocess_datasets(args: argparse.Namespace) -> Dict[str, Dict[str, Any]]:
             'train_dataset': train_dataset,
             'valid_dataset': valid_dataset
         }
-        
-        return datasets
     
-    # Process standard datasets
+    # Always process both text datasets when using 'all' or 'both'
     dataset_list = ["persona_chat", "writing_prompts"]
-    if args.dataset != "all":
+    if args.dataset not in ["all", "both", "code"] and args.dataset in ["persona_chat", "writing_prompts"]:
         dataset_list = [args.dataset]
         
     for dataset_name in dataset_list:
         print(f"\n===== Processing {dataset_name} dataset =====")
+        # Save original dataset setting
+        original_dataset = args.dataset
         args.dataset = dataset_name
         processed_data = preprocess_data(args)
         datasets[dataset_name] = processed_data
+        # Restore original dataset setting
+        args.dataset = original_dataset
         
         # Save preprocessing metrics
         metrics = {
@@ -629,8 +631,8 @@ def train_on_datasets(args: argparse.Namespace, datasets: Dict[str, Dict[str, An
     # Create model directory if it doesn't exist
     os.makedirs(args.model_dir, exist_ok=True)
     
-    # Handle code dataset with deepseek separately
-    if args.dataset == "code" and args.use_deepseek and args.train_type in ["code", "both"]:
+    # Handle code dataset with deepseek if deepseek is enabled
+    if args.use_deepseek and args.train_type in ["code", "both"]:
         from generative_ai_module.code_generator import CodeGenerator
         
         print("\n===== Training deepseek-coder model on code dataset =====")
@@ -651,88 +653,88 @@ def train_on_datasets(args: argparse.Namespace, datasets: Dict[str, Dict[str, An
         
         if train_dataset is None or eval_dataset is None:
             print("Error: Failed to load code datasets for deepseek training.")
-            return
-        
-        # Initialize CodeGenerator with deepseek
-        code_gen = CodeGenerator(use_deepseek=True)
-        
-        # Set output directory
-        output_dir = os.path.join(args.model_dir, "deepseek_finetuned")
-        
-        # Fine-tune the model
-        training_metrics = code_gen.fine_tune_deepseek(
-            train_dataset=train_dataset,
-            eval_dataset=eval_dataset,
-            output_dir=output_dir,
-            epochs=args.epochs,
-            batch_size=args.deepseek_batch_size,
-            sequence_length=args.sequence_length,
-            learning_rate=args.learning_rate,
-            warmup_steps=args.warmup_steps,
-            subset=args.code_subset,
-            all_subsets=args.all_code_subsets
-        )
-        
-        print(f"Deepseek training completed with metrics: {training_metrics}")
-        return
-    
-    # Train text generator on each dataset
-    for dataset_name, data in datasets.items():
-        print(f"\n===== Training on {dataset_name} dataset =====")
-        
-        # Split data for evaluation
-        train_data, eval_data = split_data(data, args.eval_split)
-        
-        # Train text generator
-        if args.train_type in ["text", "both"]:
-            model_path = os.path.join(args.model_dir, f"text_gen_{dataset_name}.pt")
+        else:
+            # Initialize CodeGenerator with deepseek
+            code_gen = CodeGenerator(use_deepseek=True)
             
-            # Enhanced training configuration for writing prompts
-            if dataset_name == "writing_prompts":
-                # Increase epochs for better training
-                epochs = args.epochs * 2
-                # Use smaller learning rate for better convergence
-                learning_rate = 0.001
-                # Use gradient clipping to prevent exploding gradients
-                clip_value = 1.0
-                # Use learning rate scheduler
-                use_scheduler = True
-            else:
-                epochs = args.epochs
-                learning_rate = 0.002
-                clip_value = 5.0
-                use_scheduler = False
+            # Set output directory
+            output_dir = os.path.join(args.model_dir, "deepseek_finetuned")
             
-            text_model, vocab_size = train_text_generator(
-                dataset_name=dataset_name,
-                epochs=epochs,
-                model_path=model_path if args.save_model else None,
-                learning_rate=learning_rate,
-                clip_value=clip_value,
-                use_scheduler=use_scheduler,
-                force_gpu=args.force_gpu
-            )
-            
-            # Evaluate text model
-            if text_model:
-                print(f"\nEvaluating text model on {dataset_name}:")
-                metrics = evaluate_model(text_model, eval_data, args.metrics)
-                save_evaluation_metrics(metrics, dataset_name, "text")
-        
-        # Train code generator (only on writing_prompts)
-        if args.train_type in ["code", "both"] and dataset_name == "writing_prompts" and not args.use_deepseek:
-            model_path = os.path.join(args.model_dir, args.code_model)
-            code_model, vocab_size = train_code_generator(
-                dataset_name=dataset_name,
+            # Fine-tune the model
+            training_metrics = code_gen.fine_tune_deepseek(
+                train_dataset=train_dataset,
+                eval_dataset=eval_dataset,
+                output_dir=output_dir,
                 epochs=args.epochs,
-                model_path=model_path if args.save_model else None
+                batch_size=args.deepseek_batch_size,
+                sequence_length=args.sequence_length,
+                learning_rate=args.learning_rate,
+                warmup_steps=args.warmup_steps,
+                subset=args.code_subset,
+                all_subsets=args.all_code_subsets
             )
             
-            # Evaluate code model
-            if code_model:
-                print(f"\nEvaluating code model on {dataset_name}:")
-                metrics = evaluate_model(code_model, eval_data, args.metrics)
-                save_evaluation_metrics(metrics, dataset_name, "code")
+            print(f"Deepseek training completed with metrics: {training_metrics}")
+    
+    # Train text generator on both datasets
+    # Always train on persona_chat and writing_prompts datasets
+    for dataset_name, data in datasets.items():
+        if dataset_name in ["persona_chat", "writing_prompts"]:
+            print(f"\n===== Training on {dataset_name} dataset =====")
+            
+            # Split data for evaluation
+            train_data, eval_data = split_data(data, args.eval_split)
+            
+            # Train text generator
+            if args.train_type in ["text", "both"]:
+                model_path = os.path.join(args.model_dir, f"text_gen_{dataset_name}.pt")
+                
+                # Enhanced training configuration for writing prompts
+                if dataset_name == "writing_prompts":
+                    # Increase epochs for better training
+                    epochs = args.epochs * 2
+                    # Use smaller learning rate for better convergence
+                    learning_rate = 0.001
+                    # Use gradient clipping to prevent exploding gradients
+                    clip_value = 1.0
+                    # Use learning rate scheduler
+                    use_scheduler = True
+                else:
+                    epochs = args.epochs
+                    learning_rate = 0.002
+                    clip_value = 5.0
+                    use_scheduler = False
+                
+                text_model, vocab_size = train_text_generator(
+                    dataset_name=dataset_name,
+                    epochs=epochs,
+                    model_path=model_path if args.save_model else None,
+                    learning_rate=learning_rate,
+                    clip_value=clip_value,
+                    use_scheduler=use_scheduler,
+                    force_gpu=args.force_gpu
+                )
+                
+                # Evaluate text model
+                if text_model:
+                    print(f"\nEvaluating text model on {dataset_name}:")
+                    metrics = evaluate_model(text_model, eval_data, args.metrics)
+                    save_evaluation_metrics(metrics, dataset_name, "text")
+            
+            # Train traditional code generator (only on writing_prompts)
+            if args.train_type in ["code", "both"] and dataset_name == "writing_prompts" and not args.use_deepseek:
+                model_path = os.path.join(args.model_dir, args.code_model)
+                code_model, vocab_size = train_code_generator(
+                    dataset_name=dataset_name,
+                    epochs=args.epochs,
+                    model_path=model_path if args.save_model else None
+                )
+                
+                # Evaluate code model
+                if code_model:
+                    print(f"\nEvaluating code model on {dataset_name}:")
+                    metrics = evaluate_model(code_model, eval_data, args.metrics)
+                    save_evaluation_metrics(metrics, dataset_name, "code")
 
 def interactive_generation(model: torch.nn.Module, 
                          tokenizer: Any = None,
@@ -830,6 +832,12 @@ def split_data(data: Dict[str, Any], eval_split: float = 0.2) -> Tuple[Dict[str,
 def main():
     args = parse_args()
     
+    # Set dataset to "both" to process both persona_chat and writing_prompts by default for training
+    if args.mode == "train" and args.dataset not in ["all", "both", "code"]:
+        print("Setting dataset to 'both' to train on both persona_chat and writing_prompts")
+        args.dataset = "both"
+        args.save_model = True  # Always save models
+    
     if args.mode == "preprocess":
         # Preprocess all datasets
         datasets = preprocess_datasets(args)
@@ -847,23 +855,23 @@ def main():
         datasets = preprocess_datasets(args)
         
         # Special case for deepseek code model
-        if args.use_deepseek and args.dataset == "code":
+        if args.use_deepseek:
             print("\n===== Evaluating deepseek code model =====")
             # This would typically be handled in the fine-tuning process
             print("Deepseek evaluation is performed during the fine-tuning process")
             print("To evaluate the model again, run in train mode")
-            return
         
         for dataset_name, data in datasets.items():
-            print(f"\n===== Evaluating {dataset_name} dataset =====")
-            _, eval_data = split_data(data, args.eval_split)
-            
-            # Evaluate text model
-            model_path = os.path.join(args.model_dir, f"text_gen_{dataset_name}.pt")
-            if os.path.exists(model_path):
-                model, _ = load_model(model_path)
-                metrics = evaluate_model(model, eval_data, args.metrics)
-                save_evaluation_metrics(metrics, dataset_name, "text")
+            if dataset_name in ["persona_chat", "writing_prompts"]:
+                print(f"\n===== Evaluating {dataset_name} dataset =====")
+                _, eval_data = split_data(data, args.eval_split)
+                
+                # Evaluate text model
+                model_path = os.path.join(args.model_dir, f"text_gen_{dataset_name}.pt")
+                if os.path.exists(model_path):
+                    model, _ = load_model(model_path)
+                    metrics = evaluate_model(model, eval_data, args.metrics)
+                    save_evaluation_metrics(metrics, dataset_name, "text")
     
     elif args.mode == "interactive":
         # Special case for deepseek code generation
@@ -898,6 +906,10 @@ def main():
         
         # Regular text generation
         dataset_name = args.dataset
+        if dataset_name not in ["persona_chat", "writing_prompts"]:
+            # Default to persona_chat for interactive mode
+            dataset_name = "persona_chat"
+            
         model_path = os.path.join(args.model_dir, f"text_gen_{dataset_name}.pt")
         
         # Check if model exists, if not, train it

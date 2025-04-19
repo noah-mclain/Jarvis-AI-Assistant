@@ -1,0 +1,8 @@
+{
+    "perplexity": 3.9353266638755584,
+    "accuracy": 0.5776864728192161,
+    "loss": 1.3699938933858378,
+    "num_samples": 63280.0,
+    "evaluation_time": 132.60868787765503,
+    "device_used": "mps:0"
+}

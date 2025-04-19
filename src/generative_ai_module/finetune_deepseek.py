@@ -51,15 +51,19 @@ def parse_args():
     parser.add_argument("--subset", type=str, default="python", 
                       choices=["python", "java", "go", "php", "ruby", "javascript"],
                       help="Language subset for code dataset (only used if --all-subsets=False)")
-    parser.add_argument("--all-subsets", type=lambda x: (str(x).lower() == 'true'), default=True,
+    parser.add_argument("--all-subsets", action="store_true", default=True,
                       help="Whether to use all language subsets (default: True)")
     parser.add_argument("--eval-split", type=float, default=0.1, 
                       help="Fraction of data to use for evaluation")
     parser.add_argument("--use-mini-dataset", action="store_true",
                       help="Use mini dataset for quick testing instead of code_search_net")
     
+    # Get root directory (up two levels from the script)
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    default_output_dir = os.path.join(root_dir, "models", "deepseek_finetuned")
+    
     # Output options
-    parser.add_argument("--output-dir", type=str, default="models/deepseek_finetuned", 
+    parser.add_argument("--output-dir", type=str, default=default_output_dir, 
                       help="Output directory for fine-tuned model")
     parser.add_argument("--save-steps", type=int, default=100, 
                       help="Save checkpoint every X steps")
@@ -103,6 +107,9 @@ def setup_environment(args):
         os.environ["PYTORCH_MPS_ACTIVE_MEMORY_MANAGER"] = "1"
         # Disable distributed training for MPS
         os.environ["LOCAL_RANK"] = "-1"
+        # Enable garbage collection more aggressively
+        import gc
+        gc.collect()
         
     # Configure device
     if args.cpu:
@@ -114,6 +121,18 @@ def setup_environment(args):
         if hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
             device = torch.device("mps")
             print("Using Apple Silicon GPU via MPS backend")
+            
+            # Set Apple Silicon specific optimizations
+            print("Applying Apple Silicon memory optimizations...")
+            # Force garbage collection
+            import gc
+            gc.collect()
+            # Empty MPS cache if possible
+            if hasattr(torch.mps, 'empty_cache'):
+                torch.mps.empty_cache()
+            
+            # Reduce default tensor size to save memory
+            torch.set_default_tensor_type(torch.FloatTensor)
         elif torch.cuda.is_available():
             device = torch.device("cuda")
             print(f"Using NVIDIA GPU: {torch.cuda.get_device_name(0)}")
