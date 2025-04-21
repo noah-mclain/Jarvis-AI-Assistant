@@ -1,0 +1,41 @@
+{
+    "epoch_losses": [
+        1.702822731469066,
+        1.5010251326548614,
+        1.4531189681485062
+    ],
+    "final_loss": 1.4531189681485062,
+    "training_time": 3598.414470911026,
+    "device_used": "mps",
+    "vocab_size": 104.0,
+    "num_batches": 23918.0,
+    "batch_size": 64.0,
+    "dataset": "writing_prompts",
+    "model_type": "text",
+    "timestamp": "2025-04-20T00:14:45.606333",
+    "training_progress": [
+        {
+            "epoch": 1,
+            "loss": 1.702822731469066,
+            "time_elapsed": 1055.8646998405457
+        },
+        {
+            "epoch": 2,
+            "loss": 1.5010251326548614,
+            "time_elapsed": 2333.2747688293457
+        },
+        {
+            "epoch": 3,
+            "loss": 1.4531189681485062,
+            "time_elapsed": 3598.4144430160522
+        }
+    ],
+    "learning_rates": null,
+    "model_config": {
+        "hidden_size": 256.0,
+        "num_layers": 3.0,
+        "learning_rate": 0.002,
+        "clip_value": 5.0,
+        "use_scheduler": 0.0
+    }
+}

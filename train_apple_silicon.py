@@ -53,7 +53,6 @@ def setup_apple_silicon_training():
     """Set up memory-efficient training parameters for Apple Silicon"""
     # Optimize memory first
     optimize_memory()
-    
     # Use extremely minimal settings for training
     args = [
         "--epochs", "3",                 # Just 3 epochs for Apple Silicon
