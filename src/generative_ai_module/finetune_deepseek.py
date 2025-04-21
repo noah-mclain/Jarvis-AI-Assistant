@@ -30,6 +30,9 @@ sys.path.insert(0, parent_dir)
 from src.generative_ai_module.code_generator import CodeGenerator
 from src.generative_ai_module.code_preprocessing import load_and_preprocess_dataset
 
+# Add this near the top of the file after imports
+__all__ = ['main', 'parse_args', 'create_mini_dataset', 'setup_environment']
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Fine-tune DeepSeek-Coder on code datasets")
     

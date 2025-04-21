@@ -139,29 +139,60 @@ class CodeGenerator:
         # Set quantization parameters based on user settings (for CUDA devices)
         elif self.load_in_4bit and self.device.type == "cuda":
             print("Loading model in 4-bit quantization for extreme memory saving")
-            from transformers import BitsAndBytesConfig
-            quantization_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.float16,
-                bnb_4bit_use_double_quant=True,
-                bnb_4bit_quant_type="nf4"
-            )
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_name,
-                trust_remote_code=True,
-                torch_dtype=torch.float16,
-                device_map="auto",
-                quantization_config=quantization_config
-            )
+            try:
+                from transformers import BitsAndBytesConfig
+                quantization_config = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_compute_dtype=torch.float16,
+                    bnb_4bit_use_double_quant=True,
+                    bnb_4bit_quant_type="nf4"
+                )
+                
+                # Try loading with 4-bit quantization
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_name,
+                    trust_remote_code=True,
+                    torch_dtype=torch.float16,
+                    device_map="auto",
+                    quantization_config=quantization_config
+                )
+                print("Successfully loaded model with 4-bit quantization")
+            except Exception as e:
+                print(f"Error loading with 4-bit quantization: {e}")
+                print("Falling back to 8-bit quantization...")
+                try:
+                    # Try 8-bit quantization as fallback
+                    self.load_in_8bit = True
+                    self.load_in_4bit = False
+                    return self.load_model()  # Recursively call with new settings
+                except Exception as e2:
+                    print(f"Error with 8-bit quantization: {e2}")
+                    print("Falling back to 16-bit precision...")
+                    self.model = AutoModelForCausalLM.from_pretrained(
+                        self.model_name,
+                        trust_remote_code=True,
+                        torch_dtype=torch.float16,
+                        device_map="auto",
+                    )
         elif self.load_in_8bit and self.device.type == "cuda":
             print("Loading model in 8-bit quantization")
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_name,
-                trust_remote_code=True,
-                torch_dtype=torch.float16,
-                device_map="auto",
-                load_in_8bit=True,
-            )
+            try:
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_name,
+                    trust_remote_code=True,
+                    torch_dtype=torch.float16,
+                    device_map="auto",
+                    load_in_8bit=True,
+                )
+            except Exception as e:
+                print(f"Error loading with 8-bit quantization: {e}")
+                print("Falling back to 16-bit precision...")
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    self.model_name,
+                    trust_remote_code=True,
+                    torch_dtype=torch.float16,
+                    device_map="auto",
+                )
         else:
             print("Loading model in full precision")
             self.model = AutoModelForCausalLM.from_pretrained(

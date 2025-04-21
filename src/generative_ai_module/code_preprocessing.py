@@ -28,7 +28,21 @@ def load_and_preprocess_dataset(max_samples=None, sequence_length=512, subset="p
     
     # Load dataset
     try:
-        dataset = load_dataset("code_search_net", subset, trust_remote_code=True)
+        # Try loading without trust_remote_code first
+        try:
+            dataset = load_dataset("code_search_net", subset)
+        except Exception as e:
+            print(f"Standard loading failed, trying alternate method: {e}")
+            # If that fails, try with trust_remote_code
+            try:
+                dataset = load_dataset("code_search_net", subset, trust_remote_code=True)
+            except Exception as e2:
+                print(f"Alternative loading also failed: {e2}")
+                print("Creating mini dataset as fallback")
+                # Create a minimal dataset as a fallback
+                from src.generative_ai_module.finetune_deepseek import create_mini_dataset
+                return create_mini_dataset(sequence_length)
+        
         train_data = dataset["train"]
         valid_data = dataset["validation"]
         
@@ -187,10 +201,21 @@ def load_and_preprocess_all_subsets(max_samples=None, sequence_length=512):
             }
 
     # Process each language subset
+    successful_loads = 0
     for subset in all_subsets:
         try:
             print(f"\nProcessing {subset} subset...")
-            dataset = load_dataset("code_search_net", subset, trust_remote_code=True)
+            
+            # Try loading without trust_remote_code first, then fall back to with it
+            try:
+                dataset = load_dataset("code_search_net", subset)
+            except Exception as e:
+                print(f"Standard loading failed, trying alternate method: {e}")
+                try:
+                    dataset = load_dataset("code_search_net", subset, trust_remote_code=True)
+                except Exception as e2:
+                    print(f"Error processing {subset} subset: {e2}")
+                    continue  # Skip this subset and try another
 
             train_data = dataset["train"]
             valid_data = dataset["validation"]
@@ -238,6 +263,9 @@ def load_and_preprocess_all_subsets(max_samples=None, sequence_length=512):
                         combined_valid = valid_data
                     else:
                         combined_valid = concatenate_datasets([combined_valid, valid_data])
+            
+            successful_loads += 1
+            print(f"Successfully loaded {subset} subset")
 
         except Exception as e:
             print(f"Error processing {subset} subset: {e}")
