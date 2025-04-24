@@ -12,6 +12,11 @@ Functions:
     - preprocess_for_unsloth: Preprocess code dataset for Unsloth compatibility
 """
 
+# Import Unsloth for optimized training
+from unsloth import FastLanguageModel
+from unsloth.models import FastDeepseekV2ForCausalLM  # For DeepSeek support
+from trl import SFTTrainer, SFTConfig
+
 import os
 import time
 import datetime
@@ -21,11 +26,6 @@ import numpy as np
 from datasets import Dataset
 from tqdm import tqdm
 from transformers import AutoTokenizer
-
-# Import Unsloth for optimized training
-from unsloth import FastLanguageModel
-from unsloth.models import FastDeepseekV2ForCausalLM  # For DeepSeek support
-from trl import SFTTrainer, SFTConfig
 
 def get_unsloth_model(
     model_name="deepseek-ai/deepseek-coder-6.7b-base",
@@ -80,12 +80,12 @@ def get_unsloth_model(
         if load_in_4bit:
             load_in_4bit = False
             load_in_8bit = True
-    
+
     if model_dir:
         print(f"Loading model from: {model_dir}")
     else:
         print(f"Loading model from Hugging Face: {model_name}")
-    
+
     # Load tokenizer first
     try:
         # Try loading tokenizer from model_dir if specified
@@ -93,7 +93,7 @@ def get_unsloth_model(
             tokenizer = AutoTokenizer.from_pretrained(model_dir, trust_remote_code=True, token=token)
         else:
             tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True, token=token)
-        
+
         # Ensure PAD token is set
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
@@ -106,8 +106,8 @@ def get_unsloth_model(
     # Load optimized model with Unsloth
     try:
         # Determine model path (local or HF)
-        model_path = model_dir if model_dir else model_name
-        
+        model_path = model_dir or model_name
+
         model, tokenizer = FastLanguageModel.from_pretrained(
             model_name=model_path,
             max_seq_length=max_seq_length,
@@ -117,11 +117,11 @@ def get_unsloth_model(
             full_finetuning=full_finetuning,
             token=token,
         )
-        
+
         # Target all linear layers in DeepSeek
         target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", 
                          "gate_proj", "up_proj", "down_proj"]
-        
+
         # Add fast LoRA weights
         model = FastLanguageModel.get_peft_model(
             model,
@@ -135,18 +135,18 @@ def get_unsloth_model(
             max_seq_length=max_seq_length,
             use_rslora=use_rslora,
         )
-        
-        print(f"Model loaded with Unsloth optimization:")
+
+        print("Model loaded with Unsloth optimization:")
         print(f"  - Using 4-bit quantization: {load_in_4bit}")
         print(f"  - Using 8-bit quantization: {load_in_8bit}")
         print(f"  - Sequence length: {max_seq_length}")
         print(f"  - Gradient checkpointing: {gradient_checkpointing}")
         print(f"  - LoRA rank: {r}")
-        
+
     except Exception as e:
         print(f"Error loading model with Unsloth: {e}")
-        raise ValueError(f"Failed to load model: {e}")
-    
+        raise ValueError(f"Failed to load model: {e}") from e
+
     return model, tokenizer
 
 def finetune_with_unsloth(
@@ -196,36 +196,35 @@ def finetune_with_unsloth(
         Dictionary with training metrics
     """
     start_time = time.time()
-    
+
     # Check if train_dataset is None or empty
     if not train_dataset or len(train_dataset) == 0:
         raise ValueError("Training dataset is empty or None. Cannot proceed with fine-tuning.")
-        
+
     # Verify dataset format
-    if "text" not in train_dataset.column_names:
-        if "input_ids" in train_dataset.column_names and "attention_mask" in train_dataset.column_names:
-            print("Dataset already tokenized, creating a new dataset with detokenized text")
-            # We need to create a new dataset with the text field
-            raise ValueError("Dataset already tokenized. Unsloth requires raw text dataset. Please provide untokenized dataset with 'text' field.")
-    
+    if "text" not in train_dataset.column_names and ("input_ids" in train_dataset.column_names and "attention_mask" in train_dataset.column_names):
+        print("Dataset already tokenized, creating a new dataset with detokenized text")
+        # We need to create a new dataset with the text field
+        raise ValueError("Dataset already tokenized. Unsloth requires raw text dataset. Please provide untokenized dataset with 'text' field.")
+
     # Clean dataset by filtering out empty or None examples
     def is_valid_example(example):
         return bool(example.get("text", "").strip())
-    
+
     print("Cleaning dataset...")
     original_train_size = len(train_dataset)
     train_dataset = train_dataset.filter(is_valid_example)
     new_train_size = len(train_dataset)
     if original_train_size != new_train_size:
         print(f"Removed {original_train_size - new_train_size} invalid examples from training dataset")
-    
+
     if eval_dataset:
         original_eval_size = len(eval_dataset)
         eval_dataset = eval_dataset.filter(is_valid_example)
         new_eval_size = len(eval_dataset)
         if original_eval_size != new_eval_size:
             print(f"Removed {original_eval_size - new_eval_size} invalid examples from evaluation dataset")
-    
+
     # Load model with Unsloth optimization
     model, tokenizer = get_unsloth_model(
         model_name=model_name,
@@ -235,16 +234,16 @@ def finetune_with_unsloth(
         r=r,
         token=token,
     )
-    
+
     # Create output directory
     os.makedirs(output_dir, exist_ok=True)
-    
+
     # Check for CUDA compatibility
     if torch.cuda.is_available() and eval_strategy == "epoch" and len(train_dataset) > 10000:
         print("Warning: Using 'epoch' evaluation strategy with large dataset may cause CUDA OOM errors")
         print("Switching to 'steps' evaluation strategy")
         eval_strategy = "steps"
-    
+
     # Configure SFT trainer
     trainer = SFTTrainer(
         model=model,
@@ -273,11 +272,11 @@ def finetune_with_unsloth(
         ),
         packing=False,  # Packing can make Unsloth slower
     )
-    
+
     # Fine-tune the model
     print("Starting fine-tuning with Unsloth...")
     print(f"Training on {len(train_dataset)} examples for {max_steps} steps with batch size {per_device_train_batch_size}")
-    
+
     # Gracefully handle training exceptions
     try:
         training_output = trainer.train()
@@ -286,20 +285,20 @@ def finetune_with_unsloth(
         print(f"Error during training: {e}")
         import traceback
         traceback.print_exc()
-        
+
         # Save partial results if possible
         try:
             print("Attempting to save partial model...")
             trainer.save_model(os.path.join(output_dir, "partial_model"))
             print("Partial model saved")
-        except:
+        except Exception:
             print("Failed to save partial model")
-        
+
         # Return partial metrics
         training_time = time.time() - start_time
         hours, remainder = divmod(training_time, 3600)
         minutes, seconds = divmod(remainder, 60)
-        
+
         return {
             'model_name': model_name,
             'dataset_size': len(train_dataset),
@@ -308,18 +307,18 @@ def finetune_with_unsloth(
             'error': str(e),
             'timestamp': datetime.datetime.now().isoformat(),
         }
-    
+
     # Calculate training time
     training_time = time.time() - start_time
     hours, remainder = divmod(training_time, 3600)
     minutes, seconds = divmod(remainder, 60)
-    
+
     print(f"Training completed in {int(hours)}h {int(minutes)}m {int(seconds)}s")
-    
+
     # Save the model and tokenizer
     print(f"Saving fine-tuned model to {output_dir}...")
     trainer.save_model(output_dir)
-    
+
     # Evaluate if eval dataset is provided
     eval_metrics = {}
     if eval_dataset is not None:
@@ -330,7 +329,7 @@ def finetune_with_unsloth(
             perplexity = np.exp(eval_metrics['eval_loss'])
             print(f"Perplexity: {perplexity:.4f}")
             eval_metrics['perplexity'] = perplexity
-    
+
     # Collect metrics
     training_metrics = {
         'model_name': model_name,
@@ -348,19 +347,19 @@ def finetune_with_unsloth(
         'timestamp': datetime.datetime.now().isoformat(),
         **eval_metrics
     }
-    
+
     # Save metrics
     metrics_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "metrics")
     os.makedirs(metrics_dir, exist_ok=True)
-    
+
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     metrics_path = os.path.join(metrics_dir, f"unsloth_training_{timestamp}.json")
-    
+
     with open(metrics_path, 'w') as f:
         json.dump(training_metrics, f, indent=4)
-    
+
     print(f"Training metrics saved to {metrics_path}")
-    
+
     return training_metrics
 
 def evaluate_model(
