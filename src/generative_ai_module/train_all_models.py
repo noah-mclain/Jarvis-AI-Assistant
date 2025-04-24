@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Unified Training Script for Jarvis AI Assistant
 

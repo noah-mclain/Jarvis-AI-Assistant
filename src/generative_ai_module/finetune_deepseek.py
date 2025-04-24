@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 DeepSeek-Coder Fine-tuning Script
 
