@@ -92,6 +92,10 @@ def parse_args():
     parser.add_argument("--verbose", action="store_true", 
                       help="Enable verbose logging")
     
+    # Unsloth optimization option
+    parser.add_argument("--use-unsloth", action="store_true", 
+                      help="Use Unsloth for faster training and reduced memory usage")
+    
     return parser.parse_args()
 
 def setup_environment(args):

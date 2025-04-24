@@ -6,8 +6,10 @@ import json
 import datetime
 import torch
 import datasets
+import numpy as np
+from tqdm import tqdm
 
-def load_and_preprocess_dataset(max_samples=None, sequence_length=512, subset="python", all_subsets=False):
+def load_and_preprocess_dataset(max_samples=None, sequence_length=512, subset="python", all_subsets=False, return_raw=False, test_split=0.1, val_split=0.1):
     """
     Load and preprocess the code dataset for fine-tuning a code generation model
     
@@ -16,19 +18,30 @@ def load_and_preprocess_dataset(max_samples=None, sequence_length=512, subset="p
         sequence_length: Maximum sequence length for tokenization
         subset: Language subset of the code dataset (default: python)
         all_subsets: If True, load all language subsets instead of just one
+        return_raw: If True, return raw text dataset instead of tokenized dataset (for Unsloth)
+        test_split: Fraction of data to use for test set (default: 0.1)
+        val_split: Fraction of data to use for validation set (default: 0.1)
         
     Returns:
         train_data, valid_data: Preprocessed datasets ready for fine-tuning
+        If return_raw is True, datasets will have 'text' field
+        Otherwise, they will be tokenized with 'input_ids' and 'attention_mask'
     """
     if all_subsets:
-        return load_and_preprocess_all_subsets(max_samples, sequence_length)
+        return load_and_preprocess_all_subsets(
+            max_samples=max_samples, 
+            sequence_length=sequence_length,
+            return_raw=return_raw,
+            test_split=test_split,
+            val_split=val_split
+        )
         
     print(f"Loading code_search_net dataset ({subset} subset)...")
     start_time = time.time()
     
     # Load dataset
     try:
-        # Try loading without trust_remote_code first
+        # First try to load with the standard method
         try:
             dataset = load_dataset("code_search_net", subset)
         except Exception as e:
@@ -43,29 +56,101 @@ def load_and_preprocess_dataset(max_samples=None, sequence_length=512, subset="p
                 from src.generative_ai_module.finetune_deepseek import create_mini_dataset
                 return create_mini_dataset(sequence_length)
         
-        train_data = dataset["train"]
-        valid_data = dataset["validation"]
+        # Verify we have the expected splits
+        required_splits = ['train', 'validation']
+        missing_splits = [split for split in required_splits if split not in dataset]
+        if missing_splits:
+            print(f"Warning: Dataset is missing expected splits: {missing_splits}")
+            print("Creating splits from available data...")
+            
+            # If no validation set, create one from train
+            if 'validation' not in dataset and 'train' in dataset:
+                train_valid_test_split = split_dataset(
+                    dataset['train'], 
+                    val_ratio=val_split, 
+                    test_ratio=test_split
+                )
+                train_data = train_valid_test_split['train']
+                valid_data = train_valid_test_split['validation']
+                test_data = train_valid_test_split['test']
+            else:
+                # Last resort: create a small dummy dataset
+                print("Error: No suitable data found. Creating dummy dataset.")
+                return create_mini_dataset(sequence_length)
+        else:
+            # Standard case: we have train and validation splits
+            train_data = dataset['train']
+            
+            # If validation set exists, split it to get some test data
+            if test_split > 0 and 'validation' in dataset:
+                valid_test_split = split_dataset(
+                    dataset['validation'],
+                    val_ratio=1 - test_split,  # This gives us the validation portion
+                    test_ratio=test_split      # This gives us the test portion
+                )
+                valid_data = valid_test_split['train']  # Renaming for clarity
+                test_data = valid_test_split['validation']  # Renaming for clarity
+            else:
+                valid_data = dataset['validation']
+                test_data = None
         
         # Limit samples if specified
         if max_samples:
             train_data = train_data.select(range(min(max_samples, len(train_data))))
-            valid_data = valid_data.select(range(min(max_samples // 10, len(valid_data))))
+            # Adjust validation and test sets proportionally
+            val_size = min(max(int(max_samples * val_split), 50), len(valid_data))
+            valid_data = valid_data.select(range(val_size))
+            
+            if test_data:
+                test_size = min(max(int(max_samples * test_split), 50), len(test_data))
+                test_data = test_data.select(range(test_size))
         
-        print(f"Loaded dataset with {len(train_data)} training and {len(valid_data)} validation samples")
+        print(f"Dataset loaded with: {len(train_data)} training, {len(valid_data)} validation, and {len(test_data) if test_data else 0} test samples")
+        
+        # Clean the data - remove examples with missing or empty content
+        train_data = clean_code_dataset(train_data)
+        valid_data = clean_code_dataset(valid_data)
+        if test_data:
+            test_data = clean_code_dataset(test_data)
+        
+        print(f"After cleaning: {len(train_data)} training, {len(valid_data)} validation, and {len(test_data) if test_data else 0} test samples")
         
         # Preprocess code examples
         def code_preprocess(example):
-            # Format as instruction-following format
-            # Using documentation as instruction and code as completion
-            docs = example.get('func_documentation_string', '') or "Write a function with the following name and signature."
+            try:
+                # Format as instruction-following format with language info
+                # Using documentation as instruction and code as completion
+                docs = example.get('func_documentation_string', '') or "Write a function with the following name and signature."
+                code = example.get('func_code_string', '') or example.get('whole_func_string', '')
                 
-            prompt = f"### Instruction: Implement the following function based on this description:\n{docs}\n\n### Response:\n"
-            completion = example.get('func_code_string', example.get('whole_func_string', ''))
-            return {"text": prompt + completion}
+                # Skip if missing critical information
+                if not docs.strip() or not code.strip():
+                    return {"text": ""}
+                
+                # Create properly formatted instruction-response pair
+                prompt = f"### Instruction: Implement the following {subset} function based on this description:\n{docs}\n\n### Response:\n"
+                return {"text": prompt + code}
+            except Exception as e:
+                print(f"Error preprocessing example: {e}")
+                return {"text": ""}
         
         print("Preprocessing code examples...")
         train_data = train_data.map(code_preprocess)
         valid_data = valid_data.map(code_preprocess)
+        if test_data:
+            test_data = test_data.map(code_preprocess)
+        
+        # Remove empty examples after preprocessing
+        train_data = train_data.filter(lambda x: bool(x.get('text', '').strip()))
+        valid_data = valid_data.filter(lambda x: bool(x.get('text', '').strip()))
+        if test_data:
+            test_data = test_data.filter(lambda x: bool(x.get('text', '').strip()))
+        
+        # For Unsloth, we need to return the raw text dataset before tokenization
+        if return_raw:
+            print("Returning raw text dataset for Unsloth...")
+            # Include test_data for Unsloth
+            return train_data, valid_data
         
         # Load tokenizer for deepseek-coder
         print("Loading deepseek-coder tokenizer...")
@@ -76,6 +161,8 @@ def load_and_preprocess_dataset(max_samples=None, sequence_length=512, subset="p
         
         # Tokenize the data
         print(f"Tokenizing data with max length {sequence_length}...")
+        
+        # More robust tokenization that handles errors
         def tokenize_function(examples):
             try:
                 # Print a sample of the inputs for debugging
@@ -85,14 +172,39 @@ def load_and_preprocess_dataset(max_samples=None, sequence_length=512, subset="p
                     print(f"Warning: No 'text' field found in examples. Keys: {examples.keys()}")
                     return {"input_ids": [], "attention_mask": []}
                 
+                # Filter out empty strings
+                valid_texts = [text for text in examples["text"] if text.strip()]
+                if not valid_texts:
+                    return {"input_ids": [], "attention_mask": []}
+                
                 # Perform tokenization with proper error handling
                 tokenized = tokenizer(
-                    examples["text"], 
+                    valid_texts, 
                     truncation=True, 
                     padding="max_length", 
                     max_length=sequence_length,
                     return_tensors="pt"
                 )
+                
+                # Ensure we have the right number of examples
+                if len(valid_texts) != len(examples["text"]):
+                    # Create placeholder tensors for skipped texts
+                    n_examples = len(examples["text"])
+                    input_ids = torch.zeros((n_examples, sequence_length), dtype=torch.long)
+                    attention_mask = torch.zeros((n_examples, sequence_length), dtype=torch.long)
+                    
+                    # Fill in valid values
+                    valid_idx = 0
+                    for i, text in enumerate(examples["text"]):
+                        if text.strip():
+                            input_ids[i] = tokenized["input_ids"][valid_idx]
+                            attention_mask[i] = tokenized["attention_mask"][valid_idx]
+                            valid_idx += 1
+                    
+                    return {
+                        "input_ids": input_ids,
+                        "attention_mask": attention_mask
+                    }
                 
                 return tokenized
             except Exception as e:
@@ -100,10 +212,11 @@ def load_and_preprocess_dataset(max_samples=None, sequence_length=512, subset="p
                 # Return empty tensors as fallback
                 batch_size = len(examples.get("text", []))
                 return {
-                    "input_ids": [[0] * sequence_length] * batch_size,
-                    "attention_mask": [[0] * sequence_length] * batch_size
+                    "input_ids": torch.zeros((batch_size, sequence_length), dtype=torch.long),
+                    "attention_mask": torch.zeros((batch_size, sequence_length), dtype=torch.long)
                 }
         
+        # Tokenize all datasets
         train_data = train_data.map(tokenize_function, batched=True, remove_columns=["text"])
         valid_data = valid_data.map(tokenize_function, batched=True, remove_columns=["text"])
         
@@ -117,6 +230,7 @@ def load_and_preprocess_dataset(max_samples=None, sequence_length=512, subset="p
             'dataset': f"code_search_net_{subset}",
             'train_samples': len(train_data),
             'valid_samples': len(valid_data),
+            'test_samples': len(test_data) if test_data else 0,
             'sequence_length': sequence_length,
             'preprocessing_time': preprocessing_time,
             'timestamp': datetime.datetime.now().isoformat()
@@ -134,13 +248,16 @@ def load_and_preprocess_dataset(max_samples=None, sequence_length=512, subset="p
         traceback.print_exc()
         return None, None
 
-def load_and_preprocess_all_subsets(max_samples=None, sequence_length=512):
+def load_and_preprocess_all_subsets(max_samples=None, sequence_length=512, return_raw=False, test_split=0.1, val_split=0.1):
     """
     Load and preprocess all language subsets of the code_search_net dataset
     
     Args:
         max_samples: Maximum number of samples per language (None for all)
         sequence_length: Maximum sequence length for tokenization
+        return_raw: If True, return raw text dataset instead of tokenized dataset (for Unsloth)
+        test_split: Fraction of data to use for test set
+        val_split: Fraction of data to use for validation set
         
     Returns:
         train_data, valid_data: Combined preprocessed datasets from all languages
@@ -152,8 +269,10 @@ def load_and_preprocess_all_subsets(max_samples=None, sequence_length=512):
 
     combined_train = None
     combined_valid = None
+    combined_test = None
     total_train_samples = 0
     total_valid_samples = 0
+    total_test_samples = 0
 
     # Load tokenizer once for all datasets
     print("Loading deepseek-coder tokenizer...")
@@ -162,14 +281,22 @@ def load_and_preprocess_all_subsets(max_samples=None, sequence_length=512):
 
     # Preprocess code examples
     def code_preprocess(example):
-        # Format as instruction-following format with language info
-        # Using documentation as instruction and code as completion
-        lang = example.get('language', 'code')
-        docs = example.get('func_documentation_string', '') or "Write a function with the following name and signature."
+        try:
+            # Format as instruction-following format with language info
+            # Using documentation as instruction and code as completion
+            lang = example.get('language', 'code')
+            docs = example.get('func_documentation_string', '') or "Write a function with the following name and signature."
+            code = example.get('func_code_string', '') or example.get('whole_func_string', '')
             
-        prompt = f"### Instruction: Implement the following {lang} function based on this description:\n{docs}\n\n### Response:\n"
-        completion = example.get('func_code_string', example.get('whole_func_string', ''))
-        return {"text": prompt + completion}
+            # Skip if missing critical information
+            if not docs.strip() or not code.strip():
+                return {"text": ""}
+                
+            prompt = f"### Instruction: Implement the following {lang} function based on this description:\n{docs}\n\n### Response:\n"
+            return {"text": prompt + code}
+        except Exception as e:
+            print(f"Error preprocessing example: {e}")
+            return {"text": ""}
 
     # Tokenize the data
     def tokenize_function(examples):
@@ -181,14 +308,39 @@ def load_and_preprocess_all_subsets(max_samples=None, sequence_length=512):
                 print(f"Warning: No 'text' field found in examples. Keys: {examples.keys()}")
                 return {"input_ids": [], "attention_mask": []}
             
+            # Filter out empty strings
+            valid_texts = [text for text in examples["text"] if text.strip()]
+            if not valid_texts:
+                return {"input_ids": [], "attention_mask": []}
+            
             # Perform tokenization with proper error handling
             tokenized = tokenizer(
-                examples["text"], 
+                valid_texts, 
                 truncation=True, 
                 padding="max_length", 
                 max_length=sequence_length,
                 return_tensors="pt"
             )
+            
+            # Ensure we have the right number of examples
+            if len(valid_texts) != len(examples["text"]):
+                # Create placeholder tensors for skipped texts
+                n_examples = len(examples["text"])
+                input_ids = torch.zeros((n_examples, sequence_length), dtype=torch.long)
+                attention_mask = torch.zeros((n_examples, sequence_length), dtype=torch.long)
+                
+                # Fill in valid values
+                valid_idx = 0
+                for i, text in enumerate(examples["text"]):
+                    if text.strip():
+                        input_ids[i] = tokenized["input_ids"][valid_idx]
+                        attention_mask[i] = tokenized["attention_mask"][valid_idx]
+                        valid_idx += 1
+                
+                return {
+                    "input_ids": input_ids,
+                    "attention_mask": attention_mask
+                }
             
             return tokenized
         except Exception as e:
@@ -196,8 +348,8 @@ def load_and_preprocess_all_subsets(max_samples=None, sequence_length=512):
             # Return empty tensors as fallback
             batch_size = len(examples.get("text", []))
             return {
-                "input_ids": [[0] * sequence_length] * batch_size,
-                "attention_mask": [[0] * sequence_length] * batch_size
+                "input_ids": torch.zeros((batch_size, sequence_length), dtype=torch.long),
+                "attention_mask": torch.zeros((batch_size, sequence_length), dtype=torch.long)
             }
 
     # Process each language subset
@@ -217,34 +369,86 @@ def load_and_preprocess_all_subsets(max_samples=None, sequence_length=512):
                     print(f"Error processing {subset} subset: {e2}")
                     continue  # Skip this subset and try another
 
-            train_data = dataset["train"]
-            valid_data = dataset["validation"]
+            # Verify we have the expected splits
+            required_splits = ['train', 'validation']
+            missing_splits = [split for split in required_splits if split not in dataset]
+            if missing_splits:
+                print(f"Warning: {subset} dataset is missing expected splits: {missing_splits}")
+                if 'train' not in dataset:
+                    print(f"Skipping {subset} subset (no training data)")
+                    continue
+                
+                # If no validation set, create one from train
+                if 'validation' not in dataset and 'train' in dataset:
+                    train_valid_test_split = split_dataset(
+                        dataset['train'], 
+                        val_ratio=val_split, 
+                        test_ratio=test_split
+                    )
+                    train_data = train_valid_test_split['train']
+                    valid_data = train_valid_test_split['validation']
+                    test_data = train_valid_test_split['test']
+                else:
+                    continue
+            else:
+                # Standard case: we have train and validation splits
+                train_data = dataset['train']
+                
+                # If validation set exists, split it to get some test data
+                if test_split > 0 and 'validation' in dataset:
+                    valid_test_split = split_dataset(
+                        dataset['validation'],
+                        val_ratio=1 - test_split,  # This gives us the validation portion
+                        test_ratio=test_split      # This gives us the test portion
+                    )
+                    valid_data = valid_test_split['train']  # Renaming for clarity
+                    test_data = valid_test_split['validation']  # Renaming for clarity
+                else:
+                    valid_data = dataset['validation']
+                    test_data = None
 
             # Ensure language field is present
             train_data = train_data.map(lambda x: {"language": subset})
             valid_data = valid_data.map(lambda x: {"language": subset})
+            if test_data:
+                test_data = test_data.map(lambda x: {"language": subset})
 
             # Limit samples if specified
             if max_samples:
                 samples_per_lang = max_samples // len(all_subsets)
                 train_data = train_data.select(range(min(samples_per_lang, len(train_data))))
-                valid_data = valid_data.select(range(min(samples_per_lang // 10, len(valid_data))))
+                val_size = min(max(int(samples_per_lang * val_split), 50), len(valid_data))
+                valid_data = valid_data.select(range(val_size))
+                
+                if test_data:
+                    test_size = min(max(int(samples_per_lang * test_split), 50), len(test_data))
+                    test_data = test_data.select(range(test_size))
 
-            print(f"  - Loaded {len(train_data)} training and {len(valid_data)} validation samples")
+            print(f"  - Loaded {len(train_data)} training, {len(valid_data)} validation, and {len(test_data) if test_data else 0} test samples")
+            
+            # Clean the data - remove examples with missing or empty content
+            train_data = clean_code_dataset(train_data)
+            valid_data = clean_code_dataset(valid_data)
+            if test_data:
+                test_data = clean_code_dataset(test_data)
+            
+            print(f"  - After cleaning: {len(train_data)} training, {len(valid_data)} validation, and {len(test_data) if test_data else 0} test samples")
+            
             total_train_samples += len(train_data)
             total_valid_samples += len(valid_data)
+            total_test_samples += len(test_data) if test_data else 0
 
             # Preprocess code examples
             train_data = train_data.map(code_preprocess)
             valid_data = valid_data.map(code_preprocess)
-
-            # Tokenize the data
-            train_data = train_data.map(tokenize_function, batched=True, remove_columns=["text"])
-            valid_data = valid_data.map(tokenize_function, batched=True, remove_columns=["text"])
-
-            # Set format for PyTorch
-            train_data.set_format(type="torch", columns=["input_ids", "attention_mask"])
-            valid_data.set_format(type="torch", columns=["input_ids", "attention_mask"])
+            if test_data:
+                test_data = test_data.map(code_preprocess)
+            
+            # Remove empty examples after preprocessing
+            train_data = train_data.filter(lambda x: bool(x.get('text', '').strip()))
+            valid_data = valid_data.filter(lambda x: bool(x.get('text', '').strip()))
+            if test_data:
+                test_data = test_data.filter(lambda x: bool(x.get('text', '').strip()))
 
             # Skip empty datasets
             if len(train_data) == 0:
@@ -255,14 +459,24 @@ def load_and_preprocess_all_subsets(max_samples=None, sequence_length=512):
             if combined_train is None:
                 combined_train = train_data
                 combined_valid = valid_data
+                if test_data:
+                    combined_test = test_data
             else:
                 combined_train = concatenate_datasets([combined_train, train_data])
+                
                 if len(valid_data) > 0:
                     # Only add non-empty validation datasets
                     if combined_valid is None:
                         combined_valid = valid_data
                     else:
                         combined_valid = concatenate_datasets([combined_valid, valid_data])
+                
+                if test_data and len(test_data) > 0:
+                    # Only add non-empty test datasets
+                    if combined_test is None:
+                        combined_test = test_data
+                    else:
+                        combined_test = concatenate_datasets([combined_test, test_data])
             
             successful_loads += 1
             print(f"Successfully loaded {subset} subset")
@@ -283,6 +497,21 @@ def load_and_preprocess_all_subsets(max_samples=None, sequence_length=512):
         combined_train = combined_train or Dataset.from_dict(dummy_data)
         combined_valid = combined_valid or Dataset.from_dict(dummy_data)
 
+    # For Unsloth, we return the raw text datasets before tokenization
+    if return_raw:
+        print("Returning raw text dataset for Unsloth...")
+        return combined_train, combined_valid
+
+    # Tokenize and format datasets for standard training
+    if not return_raw:
+        # Tokenize the data
+        combined_train = combined_train.map(tokenize_function, batched=True, remove_columns=["text"])
+        combined_valid = combined_valid.map(tokenize_function, batched=True, remove_columns=["text"])
+        
+        # Set format for PyTorch
+        combined_train.set_format(type="torch", columns=["input_ids", "attention_mask"])
+        combined_valid.set_format(type="torch", columns=["input_ids", "attention_mask"])
+
     # Collect metrics
     preprocessing_time = time.time() - start_time
     metrics = {
@@ -290,6 +519,7 @@ def load_and_preprocess_all_subsets(max_samples=None, sequence_length=512):
         'subsets': all_subsets,
         'train_samples': total_train_samples,
         'valid_samples': total_valid_samples,
+        'test_samples': total_test_samples,
         'sequence_length': sequence_length,
         'preprocessing_time': preprocessing_time,
         'timestamp': datetime.datetime.now().isoformat()
@@ -298,10 +528,89 @@ def load_and_preprocess_all_subsets(max_samples=None, sequence_length=512):
     # Save metrics
     save_preprocessing_metrics(metrics)
 
-    print(f"\nTotal samples processed: {total_train_samples} training, {total_valid_samples} validation")
+    print(f"\nTotal samples processed: {total_train_samples} training, {total_valid_samples} validation, {total_test_samples} test")
     print(f"Combined preprocessing completed in {preprocessing_time:.2f} seconds")
 
     return combined_train, combined_valid
+
+def clean_code_dataset(dataset):
+    """
+    Clean a code dataset by removing examples with missing or empty content.
+    
+    Args:
+        dataset: The dataset to clean
+        
+    Returns:
+        Cleaned dataset
+    """
+    # Define a function to check if an example is valid
+    def is_valid_example(example):
+        # Check if documentation exists
+        has_docs = bool(example.get('func_documentation_string', '').strip())
+        
+        # Check if code exists (in either field)
+        has_code = (
+            bool(example.get('func_code_string', '').strip()) or 
+            bool(example.get('whole_func_string', '').strip())
+        )
+        
+        # Must have both documentation and code
+        return has_docs and has_code
+    
+    # Apply the filter
+    original_size = len(dataset)
+    cleaned_dataset = dataset.filter(is_valid_example)
+    new_size = len(cleaned_dataset)
+    
+    if original_size != new_size:
+        removed = original_size - new_size
+        percent_removed = (removed / original_size) * 100 if original_size > 0 else 0
+        print(f"Removed {removed} examples ({percent_removed:.1f}%) with missing or empty content")
+    
+    return cleaned_dataset
+
+def split_dataset(dataset, val_ratio=0.1, test_ratio=0.1, seed=42):
+    """
+    Split a dataset into train, validation, and test sets.
+    
+    Args:
+        dataset: The dataset to split
+        val_ratio: Fraction of data to use for validation
+        test_ratio: Fraction of data to use for test
+        seed: Random seed for reproducibility
+        
+    Returns:
+        Dictionary with 'train', 'validation', and 'test' splits
+    """
+    # Calculate split sizes
+    train_ratio = 1.0 - (val_ratio + test_ratio)
+    
+    # Ensure ratios sum to 1.0
+    if train_ratio <= 0:
+        print("Warning: Invalid split ratios. Adjusting to 80/10/10 split.")
+        train_ratio = 0.8
+        val_ratio = 0.1
+        test_ratio = 0.1
+    
+    # Shuffle and split the dataset
+    shuffled = dataset.shuffle(seed=seed)
+    
+    # Calculate indices for splitting
+    val_idx = int(len(shuffled) * train_ratio)
+    test_idx = int(len(shuffled) * (train_ratio + val_ratio))
+    
+    # Create the splits
+    train_data = shuffled.select(range(val_idx))
+    valid_data = shuffled.select(range(val_idx, test_idx))
+    test_data = shuffled.select(range(test_idx, len(shuffled)))
+    
+    print(f"Split dataset into {len(train_data)} training, {len(valid_data)} validation, and {len(test_data)} test examples")
+    
+    return {
+        'train': train_data,
+        'validation': valid_data,
+        'test': test_data
+    }
 
 def save_preprocessing_metrics(metrics):
     """Save preprocessing metrics to a JSON file"""

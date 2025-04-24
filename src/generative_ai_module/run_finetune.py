@@ -14,6 +14,7 @@ Additional options:
     --load-in-4bit          # Use 4-bit quantization for extreme memory saving
     --subset=python         # Just use one language if memory is limited
     --all-subsets           # Only use specific subset if memory is limited
+    --sequence-length=2048  # Maximum sequence length for training
 """
 
 import sys
@@ -21,10 +22,13 @@ import os
 import torch
 
 # Import the fine-tuning functionality
-from src.generative_ai_module.finetune_deepseek import main, parse_args
+from src.generative_ai_module.finetune_deepseek import parse_args
+# Import Unsloth fine-tuning (now the main implementation)
+from src.generative_ai_module.unsloth_deepseek import finetune_with_unsloth, create_text_dataset_from_tokenized
+from src.generative_ai_module.code_preprocessing import load_and_preprocess_dataset
 
 def apply_memory_efficient_defaults():
-    """Apply memory-efficient defaults for running on GPU"""
+    """Apply memory-efficient defaults for running on GPU with Unsloth"""
     # Detect if we're on Apple Silicon
     on_apple_silicon = hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
     
@@ -34,17 +38,20 @@ def apply_memory_efficient_defaults():
         batch_size = "2"
         max_samples = "100"  # Limit samples for Apple Silicon
         epochs = "3"         # Fewer epochs for quicker training
+        seq_length = "1024"  # Shorter sequence length for Apple Silicon
     else:
-        # Larger batch size for NVIDIA GPUs
-        batch_size = "8"
-        max_samples = "5000" # More samples for NVIDIA GPUs
-        epochs = "50"        # More epochs for better training
+        # With Unsloth, we can use larger batch sizes or more samples on NVIDIA GPUs
+        batch_size = "8" 
+        max_samples = "10000"  # More samples with Unsloth
+        epochs = "50"
+        seq_length = "2048"    # Longer sequences with Unsloth
     
     print(f"Applying memory-efficient defaults for {'Apple Silicon' if on_apple_silicon else 'NVIDIA GPU'}")
-    print(f"Batch size: {batch_size}, Max samples: {max_samples}, Epochs: {epochs}")
+    print(f"Using Unsloth optimization (always enabled)")
+    print(f"Batch size: {batch_size}, Max samples: {max_samples}, Epochs: {epochs}, Sequence length: {seq_length}")
     
-    # Set output directory to models/deepseek_finetuned in the root directory
-    output_dir = os.path.join(os.path.dirname(__file__), "models", "deepseek_finetuned")
+    # Set output directory to models/deepseek_unsloth in the root directory
+    output_dir = os.path.join(os.path.dirname(__file__), "models", "deepseek_unsloth")
     
     # Set appropriate command-line arguments based on the device
     args = [
@@ -52,6 +59,7 @@ def apply_memory_efficient_defaults():
         "--batch-size", batch_size,      # Batch size
         "--max-samples", max_samples,    # Number of samples for training
         "--output-dir", output_dir,      # Output directory in the root/models folder
+        "--sequence-length", seq_length, # Sequence length for training
     ]
     
     # Add boolean flags as standalone arguments
@@ -81,7 +89,7 @@ def train_deepseek_and_text_models():
     # First run the DeepSeek fine-tuning
     apply_memory_efficient_defaults()
     args = parse_args()
-    main(args)
+    train_with_unsloth(args)
     
     # Then run the unified pipeline to train both text models
     pipeline_script = os.path.join(os.path.dirname(__file__), 
@@ -126,6 +134,98 @@ def train_deepseek_and_text_models():
     else:
         print(f"Error: Could not find unified pipeline script at {pipeline_script}")
 
+def train_with_unsloth(args):
+    """Use Unsloth for optimized training (now the default and only training method)"""
+    print("\n=== Training with Unsloth optimization ===")
+    
+    # Detect if we're on Apple Silicon
+    on_apple_silicon = hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available()
+    
+    # Load dataset
+    if args.use_mini_dataset:
+        from src.generative_ai_module.finetune_deepseek import create_mini_dataset
+        train_dataset, eval_dataset = create_mini_dataset(args.sequence_length)
+        # We need to convert tokenized dataset to text format for Unsloth
+        from transformers import AutoTokenizer
+        tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/deepseek-coder-6.7b-base", trust_remote_code=True)
+        train_dataset = create_text_dataset_from_tokenized(train_dataset, tokenizer)
+        eval_dataset = create_text_dataset_from_tokenized(eval_dataset, tokenizer)
+    else:
+        # For Unsloth, we need untokenized datasets with the 'text' field
+        train_dataset, valid_dataset = load_and_preprocess_dataset(
+            max_samples=args.max_samples,
+            sequence_length=args.sequence_length,
+            subset=args.subset,
+            all_subsets=args.all_subsets,
+            return_raw=True  # Get raw text instead of tokenized
+        )
+        
+        # Set aside some validation data for testing
+        if valid_dataset and len(valid_dataset) > 0:
+            # Split validation into validation and test sets (80/20 split)
+            val_size = int(0.8 * len(valid_dataset))
+            test_size = len(valid_dataset) - val_size
+            
+            # Only split if we have enough data
+            if val_size > 0 and test_size > 0:
+                eval_dataset = valid_dataset.select(range(val_size))
+                test_dataset = valid_dataset.select(range(val_size, len(valid_dataset)))
+                print(f"Split validation data into {len(eval_dataset)} validation and {len(test_dataset)} test samples")
+            else:
+                eval_dataset = valid_dataset
+                test_dataset = None
+        else:
+            eval_dataset = None
+            test_dataset = None
+    
+    # Configure Unsloth parameters based on dataset size
+    if train_dataset and len(train_dataset) > 0:
+        steps_per_epoch = max(1, len(train_dataset) // args.batch_size)
+        max_steps = args.epochs * steps_per_epoch
+        warmup_steps = min(100, int(max_steps * 0.1))  # 10% of total steps, capped at 100
+    else:
+        print("Warning: No training data found. Using default training parameters.")
+        max_steps = 100  # Fallback to default
+        warmup_steps = 10
+    
+    # Run finetuning with Unsloth
+    training_metrics = finetune_with_unsloth(
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        model_name="deepseek-ai/deepseek-coder-6.7b-base",
+        output_dir=args.output_dir,
+        max_seq_length=args.sequence_length,
+        per_device_train_batch_size=args.batch_size,
+        gradient_accumulation_steps=4,
+        warmup_steps=warmup_steps,
+        max_steps=max_steps,
+        learning_rate=args.learning_rate,
+        load_in_4bit=args.load_in_4bit,
+        load_in_8bit=args.load_in_8bit,
+        r=16,  # LoRA rank
+    )
+    
+    # Run evaluation on test set if available
+    if test_dataset and len(test_dataset) > 0:
+        print("\n=== Evaluating model on test set ===")
+        from src.generative_ai_module.unsloth_deepseek import evaluate_model
+        
+        test_metrics = evaluate_model(
+            model_dir=args.output_dir,
+            test_dataset=test_dataset
+        )
+        
+        # Merge metrics
+        training_metrics.update({
+            'test_loss': test_metrics.get('eval_loss'),
+            'test_perplexity': test_metrics.get('perplexity'),
+        })
+        
+        print(f"Test loss: {test_metrics.get('eval_loss', 'N/A')}")
+        print(f"Test perplexity: {test_metrics.get('perplexity', 'N/A')}")
+    
+    print("\n=== Unsloth training completed successfully ===")
+
 if __name__ == "__main__":
     if len(sys.argv) == 1:
         # No arguments provided, use memory-efficient defaults
@@ -145,11 +245,11 @@ if __name__ == "__main__":
             print("NVIDIA GPU detected")
             print("Epochs: 50")
             print("Batch size: 8")
-            print("Max samples: 5000")
-            if not on_apple_silicon:
-                print("Using 4-bit quantization: Yes (NVIDIA GPU only)")
+            print("Max samples: 10000")
+            print("Using 4-bit quantization: Yes (NVIDIA GPU only)")
                 
         print("Training on python subset")
+        print("Using Unsloth optimization (always enabled)")
         print("=== To see all options, run with --help ===\n")
         
         # Check if the user wants to train all models
@@ -158,11 +258,11 @@ if __name__ == "__main__":
         if train_all == 'y':
             train_deepseek_and_text_models()
         else:
-            # Just train DeepSeek
+            # Just train DeepSeek with Unsloth
             apply_memory_efficient_defaults()
             args = parse_args()
-            main(args)
+            train_with_unsloth(args)
     else:
-        # Parse command line arguments and run just DeepSeek fine-tuning
+        # Parse command line arguments and run DeepSeek fine-tuning with Unsloth
         args = parse_args()
-        main(args)
+        train_with_unsloth(args)
