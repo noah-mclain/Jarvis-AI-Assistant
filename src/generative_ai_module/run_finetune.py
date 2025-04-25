@@ -17,11 +17,18 @@ Additional options:
     --sequence-length=2048  # Maximum sequence length for training
 """
 
+# Import unsloth first to ensure optimizations are applied
+import unsloth
+
+# Standard library imports
 import sys
 import os
+import subprocess
+
+# Import torch after unsloth
 import torch
 
-# Import Unsloth fine-tuning (now the main implementation)
+# Import Unsloth fine-tuning (main implementation)
 from src.generative_ai_module.unsloth_deepseek import finetune_with_unsloth, create_text_dataset_from_tokenized
 from src.generative_ai_module.code_preprocessing import load_and_preprocess_dataset
 

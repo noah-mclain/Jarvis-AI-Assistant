@@ -14,6 +14,15 @@ Usage:
     python finetune_deepseek_examples.py --example [example_name]
 """
 
+# Always import unsloth first before other dependencies
+import unsloth
+
+# Import standard libraries
+import argparse
+import os
+import torch
+from datasets import load_dataset
+
 # Import Unsloth fine-tuning functionality
 from unsloth_deepseek import (
     get_unsloth_model, 
@@ -21,11 +30,6 @@ from unsloth_deepseek import (
     evaluate_model,
     preprocess_for_unsloth
 )
-
-import argparse
-import os
-import torch
-from datasets import load_dataset
 
 from code_preprocessing import load_and_preprocess_dataset, split_dataset
 

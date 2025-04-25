@@ -11,5 +11,6 @@
     "spacy",
     "tqdm",
     "venv"
-  ]
+  ],
+  "workbench.colorTheme": "Bearded Theme Aquarelle Lilac"
 }

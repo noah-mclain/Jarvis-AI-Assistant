@@ -19,3 +19,4 @@ huggingface_hub
 peft
 bitsandbytes
 unsloth           # LLM fine-tuning optimization library
+unsloth_zoo       # Required companion package for unsloth
