@@ -1,165 +1,220 @@
-# Generative AI Module
+# Jarvis AI Assistant - Unified Module
 
-This module contains components for text and code generation using preprocessed tokenized data.
+This module provides a comprehensive, unified interface to all Jarvis AI capabilities including dataset processing, model training, context-aware text generation, and interactive sessions.
 
-## Components
+## Features
 
-- `text_generator.py`: Implements the `TextGenerator` and `CombinedModel` classes for text generation.
-- `code_generator.py`: Implements the `CodeGenerator` class for code generation.
-- `dataset_processor.py`: Handles loading, cleaning, and batching of text data.
-- `improved_preprocessing.py`: Advanced preprocessing with tokenization and analysis tools.
-- `prompt_enhancer.py`: Enhances prompts for better generation results.
-- `unified_generation_pipeline.py`: **Main script** for training, generation, and preprocessing.
-- `test_tools.py`: Testing utilities and data inspection tools.
-- `examples/quick_start.py`: Simple demonstration script for training and generation.
+- **Unified Dataset Processing**: Load and preprocess data from The Pile, OpenAssistant, and GPTeacher datasets
+- **Integrated Model Training**: Train models with automatic train/validation/test splits and early stopping
+- **Context-Aware Generation**: Generate responses with conversation memory for consistent interactions
+- **Smart Model Selection**: Automatically choose the most appropriate model based on prompt content
+- **Visualization Tools**: Generate training and validation metrics visualizations
+- **Interactive CLI**: Command-line interface for training, generation, and interactive sessions
+
+## Installation
+
+Ensure you have all required dependencies:
+
+```bash
+pip install torch tqdm matplotlib datasets nltk transformers
+```
+
+## Recent Code Optimizations
+
+The codebase has recently undergone a comprehensive cleanup and optimization:
+
+1. **Dataset Handling Consolidation**:
+
+   - Enhanced `UnifiedDatasetHandler` with conversation context management
+   - Merged functionality from `use_new_datasets.py` into core handlers
+   - Improved dataset preprocessing and validation
+
+2. **Training Pipeline Improvements**:
+
+   - Added visualization capabilities to `unified_generation_pipeline.py`
+   - Enhanced metric calculation and tracking during training
+   - Added validation split support for more accurate model evaluation
+
+3. **Code Structure Cleanup**:
+
+   - Removed redundant files like `use_new_datasets.py`
+   - Consolidated duplicated functionality
+   - Updated centralized imports in `__init__.py`
+
+4. **Performance Optimizations**:
+   - Streamlined dataset loading process
+   - Improved conversation context management
+   - Enhanced memory usage through better data handling
 
 ## Quick Start
 
-The fastest way to get started is to run the quick_start.py example:
+### Training Models
+
+Train models on all supported datasets:
 
 ```bash
-# Navigate to the project root directory first
-cd /path/to/Jarvis-AI-Assistant
-
-# Run the quick start script
-python3 src/generative_ai_module/examples/quick_start.py
+python src/generative_ai_module/jarvis_unified.py --action train
 ```
 
-This will:
-
-1. Train a small model on the persona_chat dataset (just 3 epochs)
-2. Generate sample text from several prompts
-3. Show you how to use the unified pipeline for more options
-
-## Unified Pipeline Usage
-
-The unified pipeline script provides a command-line interface for training, generation, and preprocessing:
+Train on specific datasets:
 
 ```bash
-# Navigate to the project root directory first
-cd /path/to/Jarvis-AI-Assistant
-
-# Training: Train both text and code models (save to disk)
-python3 src/generative_ai_module/unified_generation_pipeline.py --mode train --save-model
-
-# Training: Train only text model with persona_chat dataset (5 epochs)
-python3 src/generative_ai_module/unified_generation_pipeline.py --mode train --train-type text --dataset persona_chat --epochs 5
-
-# Generation: Generate text using trained model
-python3 src/generative_ai_module/unified_generation_pipeline.py --mode generate --gen-type text --prompt "Hello, how are you?"
-
-# Generation: Generate code using trained model
-python3 src/generative_ai_module/unified_generation_pipeline.py --mode generate --gen-type code --prompt "def fibonacci(n):"
-
-# Generation: Use tokenizer for generation (instead of character-level)
-python3 src/generative_ai_module/unified_generation_pipeline.py --mode generate --use-tokenizer --prompt "Hello"
-
-# Preprocessing: Preprocess and save dataset
-python3 src/generative_ai_module/unified_generation_pipeline.py --mode preprocess --dataset persona_chat --max-samples 200 --analyze
+python src/generative_ai_module/jarvis_unified.py --action train --datasets pile openassistant
 ```
 
-### Command Line Options
+### Interactive Mode
+
+Start an interactive chat session:
 
 ```bash
---mode {train,generate,preprocess}  Mode of operation: train models, generate text/code, or preprocess data
---train-type {text,code,both}       Which generator to train (text, code, or both)
---epochs EPOCHS                     Number of training epochs (default: 5)
---save-model                        Save the trained models
---dataset {persona_chat,writing_prompts} Which dataset to use for text training
---gen-type {text,code}              Type of content to generate
---prompt PROMPT                     Text prompt to start generation
---length LENGTH                     Number of tokens/characters to generate (default: 100)
---temperature TEMPERATURE           Sampling temperature - higher values give more random results (default: 0.7)
---use-tokenizer                     Use tokenizer for generation instead of character-level
---preprocess-output DIR             Directory to save preprocessed data
---analyze                           Analyze token distribution when preprocessing
---max-samples MAX_SAMPLES           Maximum number of samples to process (for preprocessing)
---model-dir MODEL_DIR               Directory for model files (default: "models")
---text-model TEXT_MODEL             Filename for text generator model
---code-model CODE_MODEL             Filename for code generator model
+python src/generative_ai_module/jarvis_unified.py --action interactive
 ```
 
-## Model Architecture
+With persistent memory:
 
-Both text and code generator models use the `CombinedModel` class, which is an RNN-based model with:
+```bash
+python src/generative_ai_module/jarvis_unified.py --action interactive --memory-file conversation.json
+```
 
-- Embedding layer
-- LSTM layers (configurable number of layers)
-- Linear output layer
+### Generate Single Response
 
-Default settings:
+Generate a response to a specific prompt:
 
-- Hidden size: 128
-- Number of layers: 2
-- Vocabulary size: Determined by the dataset (typically around 100-150 tokens)
+```bash
+python src/generative_ai_module/jarvis_unified.py --action generate --prompt "Explain how neural networks work"
+```
 
-## Preprocessed Data
+## Command Line Options
 
-The module uses preprocessed datasets located in `examples/preprocessed_data/`:
+### General Options
 
-- `persona_chat_preprocessed.pt`: Chat dialogue dataset
-- `writing_prompts_preprocessed.pt`: Creative writing dataset
+- `--action`: Action to perform (train, interactive, generate)
+- `--models-dir`: Directory to load/save models (default: models)
+- `--use-best-models`: Use best models instead of final models
+- `--no-force-gpu`: Do not force GPU usage
 
-## Python API
+### Training Options
 
-If you want to use the individual components in your code:
+- `--datasets`: Datasets to train on (all, pile, openassistant, gpteacher)
+- `--max-samples`: Maximum number of samples per dataset (default: 500)
+- `--epochs`: Number of training epochs (default: 10)
+- `--batch-size`: Batch size for training (default: 32)
+- `--early-stopping`: Stop if validation loss doesn't improve (default: 3)
+- `--visualization-dir`: Directory to save visualizations (default: visualizations)
+
+### Generation Options
+
+- `--prompt`: Prompt for text generation
+- `--temperature`: Temperature for text generation (default: 0.7)
+- `--max-history`: Maximum conversation exchanges to remember (default: 5)
+- `--memory-file`: File to save/load conversation memory
+
+## Using as a Library
+
+You can import the module in your Python code:
 
 ```python
-# Import the necessary modules
-from generative_ai_module.text_generator import TextGenerator
-from generative_ai_module.code_generator import CodeGenerator
-from generative_ai_module.dataset_processor import DatasetProcessor
+from src.generative_ai_module.jarvis_unified import JarvisAI
 
-# Create generators
-text_gen = TextGenerator()
-code_gen = CodeGenerator()
+# Initialize
+jarvis = JarvisAI(models_dir="my_models", use_best_models=True)
 
-# Load preprocessed data
-processor = DatasetProcessor()
-data = processor.load_preprocessed_data("persona_chat")
+# Generate a response
+response = jarvis.generate_response("Tell me about artificial intelligence")
+print(response)
 
-# Train model
-text_gen.train(data['batches'], epochs=5)
-
-# Generate text
-generated_text = text_gen.generate(initial_str="Hello", pred_len=100)
+# Train models
+jarvis.train_models(datasets=["pile", "openassistant"], epochs=5)
 ```
 
-## Note on Python Imports
+## Conversation Memory
 
-When importing modules in your own scripts, ensure that the correct path is in your Python path:
+The system maintains conversation history to provide context-aware responses:
 
 ```python
-import os
-import sys
+# Initialize with persistent memory
+jarvis = JarvisAI(memory_file="conversation.json")
 
-# Add the src directory to the Python path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-module_dir = os.path.abspath(os.path.join(current_dir, 'path/to/src'))
-sys.path.insert(0, module_dir)
-
-# Now you can import the modules
-from generative_ai_module.text_generator import TextGenerator
+# Generate responses that are aware of conversation history
+response1 = jarvis.generate_response("Who was Alan Turing?")
+response2 = jarvis.generate_response("What was his most famous contribution?")
 ```
 
-## Testing and Debugging
+## Dataset-Specific Features
 
-For testing and debugging the module, use the test_tools.py script:
+The system intelligently routes prompts to the most appropriate model:
+
+- **The Pile**: Best for factual, knowledge-based queries
+- **OpenAssistant**: Ideal for conversational or assistant-like interactions
+- **GPTeacher**: Specialized for instructional or how-to content
+- **Writing Prompts**: Optimized for creative writing and story generation
+- **Persona Chat**: Enhanced for dialogue-based interactions with consistent persona
+
+When training with the unified pipeline, you can specify which datasets to use:
 
 ```bash
-# Test module imports and structure
-python3 src/generative_ai_module/test_tools.py --test-imports
+# Train on all datasets
+python src/generative_ai_module/train_unified_models.py
 
-# Test data loading and preprocessing
-python3 src/generative_ai_module/test_tools.py --test-data
+# Train on specific datasets
+python src/generative_ai_module/train_unified_models.py --datasets writing_prompts persona_chat
 
-# Test the entire pipeline
-python3 src/generative_ai_module/test_tools.py --test-all
+# Train with custom settings
+python src/generative_ai_module/train_unified_models.py --datasets pile --max-samples 1000 --epochs 20
 ```
 
-## Limitations
+For interactive generation, the system will automatically select the most appropriate model based on your prompt content.
 
-- Models are small and trained for only a few epochs
-- Limited vocabulary size (104 tokens)
-- Might not generate coherent text due to limited training
-- Character-level tokenization can be inefficient
+## Visualizations
+
+During training, the system generates visualizations for:
+
+- Loss curves (training and validation)
+- Accuracy metrics
+- Perplexity over time
+- Cross-dataset comparisons
+
+## Advanced Usage
+
+### Custom Training Loop
+
+```python
+from src.generative_ai_module.jarvis_unified import JarvisAI
+
+jarvis = JarvisAI()
+metrics = jarvis.train_models(
+    datasets=["pile"],
+    max_samples=1000,
+    epochs=20,
+    batch_size=64,
+    validation_split=0.15,
+    test_split=0.1,
+    early_stopping=5
+)
+
+# Access training metrics
+print(f"Final loss: {metrics['pile']['loss'][-1]}")
+print(f"Best validation loss: {min(metrics['pile']['val_loss'])}")
+```
+
+### Extending the System
+
+The modular design allows for extending the system with new datasets or models:
+
+1. Update the `DatasetProcessor` class to handle the new dataset
+2. Add the dataset name to the available choices in the argument parser
+3. Update the `determine_best_dataset` method to include heuristics for the new dataset
+
+## Troubleshooting
+
+- **GPU Memory Issues**: Reduce batch size or max_samples
+- **Model Not Found**: Ensure models are trained before using interactive or generate modes
+- **Poor Generation Quality**: Try adjusting the temperature (higher for more creativity, lower for more focused responses)
+
+## More Information
+
+See additional documentation in the docs directory:
+
+- `README_DATASETS.md` - Detailed information about available datasets
+- `README_MODULE_INSTS.md` - Installation and usage instructions
+- `UNSLOTH_GUIDE.md` - Guide for using Unsloth for efficient fine-tuning

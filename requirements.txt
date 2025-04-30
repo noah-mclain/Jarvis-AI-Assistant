@@ -1,22 +1,16 @@
-torch==2.2.0           # Core deep learning framework
-numpy==1.26.4           # Numerical computation
-tokenizers==0.21.0      # Hugging Face tokenizer library
-requests==2.32.3        # HTTP requests
-tqdm==4.67.1             # Progress bars
-transformers==4.48.3   # Hugging Face Transformers (utilities, architectures)
-spacy==3.8.4             # NLP library (preprocessing)
-regex==2024.11.6         # Improves text parsing/handling
-python-dateutil==2.9.0.post0 # Needed for smooth implementation
-PyYAML==6.0.2           # config files/ data persistence
-filelock==3.17.0            # multiple process handling
-cloudpathlib==0.20.0            # Cloud implementation access
-fsspec==2025.2.0 # Access to structured datasets
-Pillow
-datasets
-matplotlib
-accelerate
-huggingface_hub
-peft
-bitsandbytes
-unsloth           # LLM fine-tuning optimization library
-unsloth_zoo       # Required companion package for unsloth
+torch>=1.9.0
+tqdm>=4.62.0
+numpy>=1.20.0
+matplotlib>=3.4.0
+transformers>=4.25.0
+datasets>=2.10.0
+spacy>=3.2.0
+nltk>=3.6.0
+bert-score>=0.3.12
+rouge-score>=0.1.2
+scikit-learn>=1.0.0
+tensorboard>=2.7.0
+pandas>=1.3.0
+jupyterlab>=3.2.0  # Optional for notebook exploration
+en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.2.0/en_core_web_sm-3.2.0.tar.gz
+Pillow>=8.3.0  # For image processing in prompt_enhancer

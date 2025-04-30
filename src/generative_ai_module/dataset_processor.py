@@ -660,3 +660,255 @@ ASSISTANT: I'm a software engineer during the week. But on weekends, I play guit
         # Set up token adaptation
         self.text_generator.adapt_to_tokenizer(tokenizer)
         print("TextGenerator initialized with tokenizer")
+
+    def load_pile_dataset(self, subset=None, split='train', max_samples=None, cache_dir=None):
+        """
+        Load and preprocess data from The Pile dataset
+        
+        Args:
+            subset: Specific subset of The Pile (None for the default mix)
+            split: Dataset split ('train', 'test', or 'validation')
+            max_samples: Maximum number of samples to load (None for all)
+            cache_dir: Optional directory to cache the downloaded dataset
+            
+        Returns:
+            Preprocessed text ready for sequence creation
+        """
+        try:
+            # Load the dataset with the specified subset
+            if subset:
+                dataset = load_dataset("EleutherAI/pile", subset, split=split, cache_dir=cache_dir)
+            else:
+                dataset = load_dataset("EleutherAI/pile", split=split, cache_dir=cache_dir)
+            
+            if max_samples:
+                dataset = dataset.select(range(min(max_samples, len(dataset))))
+            
+            # Process the samples
+            compiled_text = ""
+            for item in tqdm(dataset, desc=f"Processing Pile{' ('+subset+')' if subset else ''}"):
+                text = item['text']
+                meta = item.get('meta', {})
+                
+                # Add source information as metadata comment
+                source_info = meta.get('pile_set_name', 'Unknown')
+                compiled_text += f"<SOURCE>\n{source_info}\n<TEXT>\n{text}\n<END>\n\n"
+            
+            return compiled_text
+                
+        except Exception as e:
+            print(f"Error loading The Pile dataset: {e}")
+            return self._generate_sample_pile_data()
+    
+    def _generate_sample_pile_data(self):
+        """Generate a small sample of Pile-like data"""
+        return """<SOURCE>
+Pile-CC
+<TEXT>
+The concept of artificial intelligence has fascinated humanity for decades. From the early works of science fiction to the development of machine learning algorithms, we have sought to create machines that can think and learn like humans.
+<END>
+
+<SOURCE>
+PubMed Central
+<TEXT>
+Abstract
+The human microbiome plays a crucial role in health and disease. Recent studies have shown that the gut microbiota affects numerous physiological processes, including digestion, immune function, and even neurological development.
+<END>
+
+<SOURCE>
+GitHub
+<TEXT>
+def preprocess_text(text):
+    '''
+    Clean and normalize text data
+    
+    Args:
+        text: Raw text data
+        
+    Returns:
+        Cleaned text data
+    '''
+    return text.lower().strip()
+<END>
+"""
+    
+    def load_openassistant_dataset(self, split='train', max_samples=None, cache_dir=None):
+        """
+        Load and preprocess data from the OpenAssistant dataset
+        
+        Args:
+            split: Dataset split ('train', 'test', or 'validation')
+            max_samples: Maximum number of samples to load (None for all)
+            cache_dir: Optional directory to cache the downloaded dataset
+            
+        Returns:
+            Preprocessed text ready for sequence creation
+        """
+        try:
+            dataset = load_dataset("agie-ai/OpenAssistant-oasst1", split=split, cache_dir=cache_dir)
+            
+            if max_samples:
+                dataset = dataset.select(range(min(max_samples, len(dataset))))
+            
+            # Process the samples
+            compiled_text = ""
+            for item in tqdm(dataset, desc="Processing OpenAssistant"):
+                if 'text' in item and 'role' in item:
+                    # Simple format with just text and role
+                    role = item['role'].upper()
+                    text = item['text']
+                    
+                    compiled_text += f"<{role}>\n{text}\n"
+                elif 'messages' in item:
+                    # Format with conversation messages
+                    compiled_text += "<CONVERSATION>\n"
+                    
+                    for msg in item['messages']:
+                        role = msg.get('role', 'unknown').upper()
+                        content = msg.get('content', '')
+                        compiled_text += f"{role}: {content}\n"
+                    
+                    compiled_text += "<END>\n\n"
+                else:
+                    # Try to handle format with message pairs
+                    instruction = item.get('instruction', item.get('prompt', ''))
+                    response = item.get('response', item.get('completion', ''))
+                    
+                    if instruction and response:
+                        compiled_text += f"USER: {instruction}\nASSISTANT: {response}\n<END>\n\n"
+            
+            return compiled_text
+            
+        except Exception as e:
+            print(f"Error loading OpenAssistant dataset: {e}")
+            return self._generate_sample_assistant_data()
+    
+    def _generate_sample_assistant_data(self):
+        """Generate a small sample of assistant data"""
+        return """<CONVERSATION>
+USER: How does photosynthesis work?
+ASSISTANT: Photosynthesis is the process by which plants, algae, and some bacteria convert sunlight, water, and carbon dioxide into glucose (sugar) and oxygen. The process occurs in the chloroplasts of plant cells, specifically using the green pigment chlorophyll to capture light energy. This energy is used to split water molecules, releasing oxygen as a byproduct. The hydrogen from water and carbon dioxide are then used to create glucose, which serves as food for the plant.
+<END>
+
+<CONVERSATION>
+USER: What are some effective ways to manage time?
+ASSISTANT: Effective time management strategies include:
+1. Prioritizing tasks using methods like the Eisenhower Matrix (urgent/important)
+2. Setting SMART goals (Specific, Measurable, Achievable, Relevant, Time-bound)
+3. Using the Pomodoro Technique (25-minute focused work sessions with short breaks)
+4. Batching similar tasks together
+5. Planning your day the night before
+6. Using digital tools like calendar apps and task managers
+7. Learning to delegate and say no when appropriate
+8. Identifying and eliminating time-wasting activities
+
+The key is finding what works for your specific situation and consistently applying those methods.
+<END>
+"""
+    
+    def load_gpteacher_dataset(self, split='train', max_samples=None, cache_dir=None):
+        """
+        Load and preprocess data from the GPTeacher dataset
+        
+        Args:
+            split: Dataset split ('train', 'test', or 'validation')
+            max_samples: Maximum number of samples to load (None for all)
+            cache_dir: Optional directory to cache the downloaded dataset
+            
+        Returns:
+            Preprocessed text ready for sequence creation
+        """
+        try:
+            dataset = load_dataset("teknium/GPTeacher-General-Instruct", split=split, cache_dir=cache_dir)
+            
+            if max_samples:
+                dataset = dataset.select(range(min(max_samples, len(dataset))))
+            
+            # Process the samples
+            compiled_text = ""
+            for item in tqdm(dataset, desc="Processing GPTeacher"):
+                # Extract instruction and response
+                instruction = item.get('instruction', '')
+                response = item.get('response', '')
+                context = item.get('context', '')
+                
+                if context:
+                    compiled_text += f"<CONTEXT>\n{context}\n"
+                
+                compiled_text += f"<INSTRUCTION>\n{instruction}\n<RESPONSE>\n{response}\n<END>\n\n"
+            
+            return compiled_text
+            
+        except Exception as e:
+            print(f"Error loading GPTeacher dataset: {e}")
+            return self._generate_sample_instruction_data()
+    
+    def _generate_sample_instruction_data(self):
+        """Generate a small sample of instruction data"""
+        return """<INSTRUCTION>
+Write a short poem about autumn leaves.
+<RESPONSE>
+Crimson and gold, they dance and sway,
+Autumn leaves on a crisp, cool day.
+Floating gently to the ground below,
+Nature's confetti in the wind's gentle blow.
+Crunching softly beneath passing feet,
+Earth's carpet, vibrant and sweet.
+<END>
+
+<CONTEXT>
+The user is trying to understand how to approach a math problem.
+<INSTRUCTION>
+I'm struggling with calculus derivatives. Can you explain the chain rule?
+<RESPONSE>
+The chain rule is a formula for computing the derivative of a composite function. If you have a function f(g(x)), the chain rule states that:
+
+d/dx[f(g(x))] = f'(g(x)) · g'(x)
+
+In words: the derivative of the composite function equals the derivative of the outer function evaluated at the inner function, multiplied by the derivative of the inner function.
+
+Example:
+Let's find the derivative of h(x) = sin(x²)
+- Here f(x) = sin(x) and g(x) = x²
+- We know that f'(x) = cos(x) and g'(x) = 2x
+- Using the chain rule: h'(x) = cos(x²) · 2x = 2x·cos(x²)
+
+The chain rule is powerful because it allows you to break down complex derivatives into smaller, manageable steps.
+<END>
+"""
+    
+    def prepare_dataset(self, source='persona_chat', split='train', 
+                       sequence_length=100, batch_size=64, max_samples=None, 
+                       cache_dir=None, subset=None):
+        """
+        Unified method to prepare any supported dataset for training
+        
+        Args:
+            source: Source dataset name or path
+            split: Dataset split ('train', 'test', or 'validation')
+            sequence_length: Length of sequences
+            batch_size: Batch size
+            max_samples: Maximum number of samples to load (None for all)
+            cache_dir: Optional directory to cache the downloaded dataset
+            subset: Specific subset for datasets that support it (like The Pile)
+            
+        Returns:
+            Batched dataset ready for training
+        """
+        # Load and preprocess text data based on dataset source
+        if source == 'persona_chat':
+            raw_text = self.load_persona_chat(split, max_samples, cache_dir)
+        elif source == 'writing_prompts':
+            raw_text = self.load_writing_prompts(split, max_samples, cache_dir)
+        elif source == 'pile':
+            raw_text = self.load_pile_dataset(subset, split, max_samples, cache_dir)
+        elif source == 'openassistant':
+            raw_text = self.load_openassistant_dataset(split, max_samples, cache_dir)
+        elif source == 'gpteacher':
+            raw_text = self.load_gpteacher_dataset(split, max_samples, cache_dir)
+        else:
+            # Treat as path to local file or directory
+            raw_text = self.load_data(source)
+        
+        # Create batches
+        return self.prepare_text_batches(raw_text, sequence_length, batch_size)

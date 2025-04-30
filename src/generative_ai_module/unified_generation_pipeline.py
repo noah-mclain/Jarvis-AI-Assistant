@@ -24,6 +24,10 @@ from typing import List, Tuple, Dict, Any
 import random
 import json
 import datetime
+import matplotlib.pyplot as plt
+
+from generative_ai_module.prompt_enhancer import analyze_prompt
+from generative_ai_module.unsloth_deepseek import evaluate_model
 
 # Add the parent directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -40,23 +44,168 @@ except ImportError:
     print("Warning: BasicTokenizer not found. Character-level generation will be used.")
     BasicTokenizer = None
 
+class TrainingVisualizer:
+    """Class to handle visualization of training metrics"""
+    
+    def __init__(self, output_dir="visualizations"):
+        """Initialize the visualizer with an output directory"""
+        self.output_dir = output_dir
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Set up plot styling
+        plt.style.use('ggplot')
+        
+    def visualize_training(self, dataset_name: str, metrics: Dict[str, List[float]]):
+        """Create visualizations for training metrics"""
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Loss curve
+        if 'loss' in metrics and len(metrics['loss']) > 0:
+            plt.figure(figsize=(10, 6))
+            plt.plot(metrics['loss'], 'b-', label='Training Loss')
+            
+            if 'val_loss' in metrics and len(metrics['val_loss']) > 0:
+                plt.plot(metrics['val_loss'], 'r-', label='Validation Loss')
+                
+            plt.title(f'Training and Validation Loss - {dataset_name}')
+            plt.xlabel('Epoch')
+            plt.ylabel('Loss')
+            plt.legend()
+            plt.grid(True)
+            
+            # Save the figure
+            loss_path = os.path.join(self.output_dir, f"{dataset_name}_loss_{timestamp}.png")
+            plt.savefig(loss_path, dpi=300)
+            plt.close()
+            print(f"Loss visualization saved to {loss_path}")
+            
+        # Accuracy if available
+        if 'accuracy' in metrics and len(metrics['accuracy']) > 0:
+            plt.figure(figsize=(10, 6))
+            plt.plot(metrics['accuracy'], 'g-', label='Training Accuracy')
+            
+            if 'val_accuracy' in metrics and len(metrics['val_accuracy']) > 0:
+                plt.plot(metrics['val_accuracy'], 'm-', label='Validation Accuracy')
+                
+            plt.title(f'Training and Validation Accuracy - {dataset_name}')
+            plt.xlabel('Epoch')
+            plt.ylabel('Accuracy')
+            plt.legend()
+            plt.grid(True)
+            
+            # Save the figure
+            acc_path = os.path.join(self.output_dir, f"{dataset_name}_accuracy_{timestamp}.png")
+            plt.savefig(acc_path, dpi=300)
+            plt.close()
+            print(f"Accuracy visualization saved to {acc_path}")
+            
+        # Perplexity if available
+        if 'perplexity' in metrics and len(metrics['perplexity']) > 0:
+            plt.figure(figsize=(10, 6))
+            plt.plot(metrics['perplexity'], 'c-', label='Training Perplexity')
+            
+            if 'val_perplexity' in metrics and len(metrics['val_perplexity']) > 0:
+                plt.plot(metrics['val_perplexity'], 'y-', label='Validation Perplexity')
+                
+            plt.title(f'Training and Validation Perplexity - {dataset_name}')
+            plt.xlabel('Epoch')
+            plt.ylabel('Perplexity')
+            plt.legend()
+            plt.grid(True)
+            
+            # Save the figure
+            perp_path = os.path.join(self.output_dir, f"{dataset_name}_perplexity_{timestamp}.png")
+            plt.savefig(perp_path, dpi=300)
+            plt.close()
+            print(f"Perplexity visualization saved to {perp_path}")
+            
+    def create_comparison_plot(self, metrics_by_dataset: Dict[str, Dict[str, List[float]]], metric_name: str):
+        """Create a comparison plot for a specific metric across datasets"""
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        plt.figure(figsize=(12, 8))
+        
+        for dataset_name, metrics in metrics_by_dataset.items():
+            if metric_name in metrics and len(metrics[metric_name]) > 0:
+                plt.plot(metrics[metric_name], label=dataset_name)
+                
+        plt.title(f'Comparison of {metric_name.capitalize()} Across Datasets')
+        plt.xlabel('Epoch')
+        plt.ylabel(metric_name.capitalize())
+        plt.legend()
+        plt.grid(True)
+        
+        # Save the figure
+        comparison_path = os.path.join(self.output_dir, f"comparison_{metric_name}_{timestamp}.png")
+        plt.savefig(comparison_path, dpi=300)
+        plt.close()
+        print(f"Comparison visualization saved to {comparison_path}")
+
+def calculate_metrics(model, data_batches, device):
+    """Calculate evaluation metrics for a model on the given data"""
+    model.eval()
+    criterion = torch.nn.CrossEntropyLoss()
+    
+    total_loss = 0
+    total_correct = 0
+    total_predictions = 0
+    
+    with torch.no_grad():
+        for inputs, targets in data_batches:
+            # Move to device
+            inputs = inputs.to(device)
+            targets = targets.to(device)
+            
+            # Get predictions
+            outputs, _ = model(inputs)
+            loss = criterion(outputs.view(-1, outputs.size(-1)), targets.view(-1))
+            
+            # Track loss
+            total_loss += loss.item() * inputs.size(0)
+            
+            # Track accuracy (top-1)
+            predictions = outputs.view(-1, outputs.size(-1)).argmax(dim=1)
+            target_indices = targets.view(-1)
+            correct_predictions = (predictions == target_indices).sum().item()
+            
+            total_correct += correct_predictions
+            total_predictions += target_indices.size(0)
+    
+    # Calculate metrics
+    avg_loss = total_loss / total_predictions if total_predictions > 0 else 0
+    accuracy = total_correct / total_predictions if total_predictions > 0 else 0
+    perplexity = torch.exp(torch.tensor(avg_loss)).item()
+    
+    return {
+        'loss': avg_loss,
+        'accuracy': accuracy,
+        'perplexity': perplexity
+    }
+
 def parse_args():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(description="Unified Generation Pipeline")
     
-    # Main mode selection
-    parser.add_argument("--mode", choices=["train", "generate", "preprocess", "evaluate", "interactive"], 
-                      default="train", help="Mode of operation")
+    # Mode selection
+    parser.add_argument('--mode', type=str, default='generate', choices=['train', 'generate', 'evaluate', 'interactive'],
+                        help='Mode to run the model in')
     
-    # Training options
-    parser.add_argument("--train-type", choices=["text", "code", "both"], default="both",
-                      help="Which generator to train (text, code, or both)")
+    # Dataset selection
+    parser.add_argument('--dataset', type=str, default='writing_prompts',
+                        choices=['writing_prompts', 'persona_chat', 'both', 'pile', 'openassistant', 'gpteacher'],
+                        help='Dataset to use')
+    
+    # For The Pile dataset
+    parser.add_argument('--pile-subset', type=str, default=None,
+                       help='Specific subset of The Pile (e.g., "pubmed", "github", "europarl")')
+                       
+    # Training settings
+    parser.add_argument('--train-type', type=str, default='text', choices=['text', 'code', 'both'],
+                        help='Type of model to train (text, code, or both)')
     parser.add_argument("--epochs", type=int, default=50, 
                       help="Number of training epochs")
     parser.add_argument("--save-model", action="store_true",
                       help="Save the trained models")
-    parser.add_argument("--dataset", choices=["persona_chat", "writing_prompts", "code", "all", "both"], 
-                      default="both", help="Which dataset to use for training")
     
     # Generation options
     parser.add_argument("--gen-type", choices=["text", "code"], default="text",
@@ -118,8 +267,9 @@ def parse_args():
 
 def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = None,
                         learning_rate: float = 0.002, clip_value: float = 5.0,
-                        use_scheduler: bool = False, force_gpu: bool = True) -> Tuple[torch.nn.Module, int]:
-    """Train the text generator model with enhanced configuration"""
+                        use_scheduler: bool = False, force_gpu: bool = True,
+                        validation_split: float = 0.2, create_visualizations: bool = True) -> Tuple[torch.nn.Module, Dict[str, List[float]]]:
+    """Train the text generator model with enhanced configuration and evaluation"""
     print(f"\nTraining text generator on {dataset_name} dataset...")
 
     # Initialize dataset processor
@@ -187,14 +337,25 @@ def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = 
         print(f"Using device: {device}")
         model = model.to(device)
 
-        # Get batches
+        # Get batches and split into train/validation
         batches = data.get('batches', [])
         if not batches:
             print("Error: No batches found in data")
             return None, None
+            
+        # Split data for validation
+        if validation_split > 0:
+            val_size = max(1, int(len(batches) * validation_split))
+            train_batches = batches[:-val_size]
+            val_batches = batches[-val_size:]
+            print(f"Split data: {len(train_batches)} training batches, {len(val_batches)} validation batches")
+        else:
+            train_batches = batches
+            val_batches = []
+            print(f"Using all {len(train_batches)} batches for training (no validation)")
 
         # Training loop
-        print(f"Training on {len(batches)} batches for {epochs} epochs")
+        print(f"Training on {len(train_batches)} batches for {epochs} epochs")
         model.train()
         criterion = torch.nn.CrossEntropyLoss()
 
@@ -218,7 +379,13 @@ def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = 
                 'learning_rate': learning_rate,
                 'clip_value': clip_value,
                 'use_scheduler': use_scheduler
-            }
+            },
+            'loss': [],  # For visualization
+            'val_loss': [],  # For visualization
+            'accuracy': [],  # For visualization
+            'val_accuracy': [],  # For visualization
+            'perplexity': [],  # For visualization
+            'val_perplexity': []  # For visualization
         }
 
         import time
@@ -228,66 +395,101 @@ def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = 
             epoch_loss = 0
             batch_count = 0
 
-            for input_batch, target_batch in tqdm(batches, desc=f"Epoch {epoch+1}/{epochs}"):
+            for input_batch, target_batch in tqdm(train_batches, desc=f"Epoch {epoch+1}/{epochs}"):
                 # Move data to device
                 input_batch = input_batch.to(device)
                 target_batch = target_batch.to(device)
 
+                # Zero gradients
                 optimizer.zero_grad()
+
+                # Forward pass
                 output, _ = model(input_batch)
+
+                # Calculate loss
                 loss = criterion(output.view(-1, output.size(-1)), target_batch.view(-1))
+
+                # Backward pass and optimize
                 loss.backward()
 
-                # Apply gradient clipping
-                torch.nn.utils.clip_grad_norm_(model.parameters(), clip_value)
+                # Clip gradients
+                if clip_value > 0:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), clip_value)
 
                 optimizer.step()
 
+                # Track metrics
                 epoch_loss += loss.item()
                 batch_count += 1
 
-            if batch_count > 0:
-                avg_loss = epoch_loss / batch_count
-                metrics['epoch_losses'].append(avg_loss)
+            # Calculate epoch statistics
+            avg_epoch_loss = epoch_loss / batch_count if batch_count > 0 else 0
+            metrics['epoch_losses'].append(avg_epoch_loss)
+            
+            # Calculate training metrics
+            train_metrics = calculate_metrics(model, train_batches[:min(10, len(train_batches))], device)
+            metrics['loss'].append(train_metrics['loss'])
+            metrics['accuracy'].append(train_metrics['accuracy'])
+            metrics['perplexity'].append(train_metrics['perplexity'])
+            
+            # Calculate validation metrics if available
+            if val_batches:
+                val_metrics = calculate_metrics(model, val_batches, device)
+                metrics['val_loss'].append(val_metrics['loss'])
+                metrics['val_accuracy'].append(val_metrics['accuracy'])
+                metrics['val_perplexity'].append(val_metrics['perplexity'])
+                
+                print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_epoch_loss:.4f}, "
+                      f"Val Loss: {val_metrics['loss']:.4f}, "
+                      f"Val Accuracy: {val_metrics['accuracy']:.4f}, "
+                      f"Val Perplexity: {val_metrics['perplexity']:.4f}")
+            else:
+                print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_epoch_loss:.4f}")
 
-                # Update learning rate if using scheduler
-                if use_scheduler:
-                    scheduler.step(avg_loss)
-                    metrics['learning_rates'].append(optimizer.param_groups[0]['lr'])
+            metrics['training_progress'].append({
+                'epoch': epoch + 1,
+                'loss': avg_epoch_loss,
+                'timestamp': datetime.datetime.now().isoformat()
+            })
 
-                metrics['training_progress'].append({
-                    'epoch': epoch + 1,
-                    'loss': avg_loss,
-                    'time_elapsed': time.time() - start_time
-                })
-                print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}")
+            # Update learning rate if using scheduler
+            if use_scheduler:
+                val_loss = val_metrics['loss'] if val_batches else avg_epoch_loss
+                scheduler.step(val_loss)
+                metrics['learning_rates'].append(optimizer.param_groups[0]['lr'])
 
-        # Calculate final metrics
-        metrics['final_loss'] = metrics['epoch_losses'][-1]
+        # Final metrics
+        metrics['final_loss'] = metrics['epoch_losses'][-1] if metrics['epoch_losses'] else None
         metrics['training_time'] = time.time() - start_time
 
-        # Save model and metrics
+        # Create visualizations if requested
+        if create_visualizations:
+            visualizer = TrainingVisualizer(output_dir="visualizations")
+            visualizer.visualize_training(dataset_name, metrics)
+
+        # Save model if requested
         if model_path:
-            # Ensure the models directory exists
-            models_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models")
-            os.makedirs(models_dir, exist_ok=True)
-
-            # Save the model
-            model_path = os.path.join(models_dir, os.path.basename(model_path))
-            torch.save({
-                'model_state_dict': model.state_dict(),
-                'vocab_size': vocab_size,
-                'metrics': metrics
-            }, model_path)
+            os.makedirs(os.path.dirname(model_path), exist_ok=True)
+            torch.save(model.state_dict(), model_path)
             print(f"Model saved to {model_path}")
+            
+            # Save metrics
+            metrics_path = os.path.join(os.path.dirname(model_path), f"{dataset_name}_metrics.json")
+            with open(metrics_path, 'w') as f:
+                # Filter out tensors and other non-serializable objects
+                serializable_metrics = {}
+                for k, v in metrics.items():
+                    if isinstance(v, (list, dict, str, int, float, bool)) or v is None:
+                        serializable_metrics[k] = v
+                    elif isinstance(v, torch.Tensor):
+                        serializable_metrics[k] = v.item() if v.numel() == 1 else v.tolist()
+                json.dump(serializable_metrics, f, indent=2)
+            print(f"Training metrics saved to {metrics_path}")
 
-            # Save metrics to a separate file
-            save_evaluation_metrics(metrics, dataset_name, "text")
-
-        return model, vocab_size
+        return model, metrics
 
     except Exception as e:
-        print(f"Error training text generator: {e}")
+        print(f"Error during training: {e}")
         import traceback
         traceback.print_exc()
         return None, None
@@ -407,240 +609,184 @@ def generate_with_char_model(model, prompt, vocab_size, max_length=50, temperatu
         initial_str=prompt, pred_len=max_length, temperature=temperature
     )
 
-def preprocess_data(args: argparse.Namespace) -> Dict[str, Any]:
-    """Enhanced preprocessing pipeline"""
-    print("Starting data preprocessing...")
+def save_evaluation_metrics(metrics: Dict[str, Any], dataset_name: str, model_type: str = "text") -> None:
+    """
+    Save evaluation metrics to a JSON file with timestamp.
     
-    # Handle code dataset separately for deepseek model
-    if args.dataset == "code" and args.use_deepseek:
-        from generative_ai_module.code_preprocessing import load_and_preprocess_dataset
-        train_data, valid_data = load_and_preprocess_dataset(
-            max_samples=args.max_samples,
-            sequence_length=args.sequence_length,
-            subset=args.code_subset,
-            all_subsets=args.all_code_subsets
-        )
-        # Return dummy data structure to match expected format
-        return {
-            'train_dataset': train_data,
-            'valid_dataset': valid_data,
-            'vocab_size': None,  # Not used for deepseek
-            'batches': [],  # Not used for deepseek
-            'preprocessing_time': 0
-        }
-    
-    # Initialize preprocessor
-    preprocessor = ImprovedPreprocessor(
-        min_length=args.min_length,
-        max_length=args.max_length,
-        analyze=args.analyze
-    )
-    
-    # Process the dataset
-    processed_data = preprocessor.process_dataset(
-        dataset_name=args.dataset,
-        max_samples=args.max_samples
-    )
-    
-    # Save preprocessed data in the correct location
-    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    # Join with 'preprocessed_data'
-    output_dir = os.path.join(root_dir, "preprocessed_data")
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # Save tokenized data
-    preprocessor.save_tokenized_data(
-        processed_data,
-        output_dir=output_dir,
-        dataset_name=args.dataset
-    )
-    
-    if args.analyze:
-        # Save analysis results
-        analysis_results = preprocessor.analyze_token_distribution(processed_data)
-        preprocessor.save_analysis_results(
-            analysis_results,
-            output_dir=output_dir,
-            dataset_name=args.dataset
-        )
-    
-    print(f"Preprocessing complete. Data saved to {output_dir}")
-    return processed_data
-
-def evaluate_model(model: torch.nn.Module, test_data: Dict[str, Any], metrics: List[str] = None) -> Dict[str, float]:
-    """Evaluate model performance on test data"""
-    if metrics is None:
-        metrics = ["perplexity", "accuracy"]
-    print("Starting model evaluation...")
-
-    results = {
-        'perplexity': None,
-        'accuracy': None,
-        'loss': None,
-        'num_samples': 0,
-        'evaluation_time': None,
-        'device_used': str(next(model.parameters()).device)
-    }
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = model.to(device)
-    model.eval()
-
-    criterion = torch.nn.CrossEntropyLoss()
-    total_loss = 0
-    total_tokens = 0
-    correct_predictions = 0
-
-    import time
-    start_time = time.time()
-
-    with torch.no_grad():
-        for input_batch, target_batch in tqdm(test_data.get('batches', []), desc="Evaluating"):
-            input_batch = input_batch.to(device)
-            target_batch = target_batch.to(device)
-
-            # Forward pass
-            output, _ = model(input_batch)
-
-            # Calculate loss
-            loss = criterion(output.view(-1, output.size(-1)), target_batch.view(-1))
-            total_loss += loss.item() * input_batch.size(0)
-            total_tokens += input_batch.size(0)
-
-            # Calculate accuracy
-            if "accuracy" in metrics:
-                predictions = output.argmax(dim=-1)
-                correct_predictions += (predictions == target_batch).sum().item()
-
-    # Calculate metrics
-    if "perplexity" in metrics:
-        results["perplexity"] = np.exp(total_loss / total_tokens)
-    if "accuracy" in metrics:
-        results["accuracy"] = correct_predictions / total_tokens
-    results["loss"] = total_loss / total_tokens
-    results["num_samples"] = total_tokens
-    results["evaluation_time"] = time.time() - start_time
-
-    print("\nEvaluation complete:")
-    for metric, value in results.items():
-        if value is not None:
-            if isinstance(value, (int, float)):
-                print(f"{metric}: {value:.4f}")
-            else:
-                print(f"{metric}: {value}")
-
-    return results
-
-def save_evaluation_metrics(metrics: Dict[str, Any], dataset_name: str, model_type: str):
-    """Save evaluation metrics to a JSON file"""
-    metrics_dir = "metrics"
+    Args:
+        metrics: Dictionary of evaluation metrics
+        dataset_name: Name of the dataset the model was evaluated on
+        model_type: Type of model (text or code)
+    """
+    # Create metrics directory if it doesn't exist
+    metrics_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "metrics")
     os.makedirs(metrics_dir, exist_ok=True)
-    
+
+    # Format timestamp
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    metrics_path = os.path.join(metrics_dir, f"{model_type}_{dataset_name}_{timestamp}.json")
-    
-    # Ensure all numeric values are converted to float for JSON serialization
+
+    # Create metrics file path
+    metrics_file = os.path.join(metrics_dir, f"{model_type}_{dataset_name}_{timestamp}.json")
+
+    # Prepare serializable metrics
     serializable_metrics = {}
     for key, value in metrics.items():
-        if isinstance(value, (int, float)):
+        if isinstance(value, (int, float, str, bool)):
+            serializable_metrics[key] = value
+        elif isinstance(value, (np.float32, np.float64, np.int32, np.int64)):
             serializable_metrics[key] = float(value)
-        elif isinstance(value, list) and all(isinstance(x, (int, float)) for x in value):
-            serializable_metrics[key] = [float(x) for x in value]
+        elif isinstance(value, list):
+            serializable_metrics[key] = [float(v) if isinstance(v, (np.float32, np.float64, np.int32, np.int64)) else v for v in value]
         elif isinstance(value, dict):
             serializable_metrics[key] = {
-                k: float(v) if isinstance(v, (int, float)) else v
+                k: float(v) if isinstance(v, (np.float32, np.float64, np.int32, np.int64)) else v
                 for k, v in value.items()
             }
         else:
-            serializable_metrics[key] = value
+            serializable_metrics[key] = str(value)
+
+    # Add metadata
+    serializable_metrics |= {
+        "dataset": dataset_name,
+        "model_type": model_type,
+        "timestamp": datetime.datetime.now().isoformat(),
+    }
+
+    # Save to file
+    with open(metrics_file, 'w') as f:
+        json.dump(serializable_metrics, f, indent=2)
+
+    print(f"Evaluation metrics saved to {metrics_file}")
+
+def preprocess_data(args: argparse.Namespace) -> Dict[str, Any]:
+    """Preprocess data based on arguments"""
+    from .dataset_processor import DatasetProcessor
+    from .improved_preprocessing import ImprovedPreprocessor
+
+    print("Preprocessing data...")
     
-    with open(metrics_path, 'w') as f:
-        json.dump(serializable_metrics, f, indent=4)
+    # Create processors
+    dataset_processor = DatasetProcessor()
+    improved_processor = ImprovedPreprocessor()
     
-    print(f"Evaluation metrics saved to {metrics_path}")
-    return metrics_path
-
-def analyze_prompt(prompt: str) -> str:
-    """Analyze the prompt to determine which dataset to use"""
-    prompt = prompt.lower()
-
-    # Keywords for writing prompts (story generation)
-    story_keywords = ['story', 'write', 'narrative', 'tale', 'plot', 'character', 'scene', 'setting', 'beginning', 'end']
-
-    # Keywords for persona chat (dialogue)
-    chat_keywords = ['chat', 'talk', 'conversation', 'discuss', 'ask', 'answer', 'question', 'respond', 'reply']
-
-    story_count = sum(word in prompt for word in story_keywords)
-    chat_count = sum(word in prompt for word in chat_keywords)
-
-    return "writing_prompts" if story_count > chat_count else "persona_chat"
-
-def preprocess_datasets(args: argparse.Namespace) -> Dict[str, Dict[str, Any]]:
-    """Preprocess multiple datasets simultaneously"""
-    print("Starting preprocessing for all datasets...")
-    datasets = {}
-    
-    # Handle 'code' dataset for deepseek separately
-    if args.use_deepseek or args.dataset == "code":
-        print("\n===== Processing code dataset for deepseek =====")
-        from generative_ai_module.code_preprocessing import load_and_preprocess_dataset
-        
-        train_dataset, valid_dataset = load_and_preprocess_dataset(
+    # Prepare based on dataset choice
+    if args.dataset == 'writing_prompts':
+        print("Loading Writing Prompts dataset")
+        data = improved_processor.process_dataset(
+            'writing_prompts',
+            max_samples=args.max_samples
+        )
+    elif args.dataset == 'persona_chat':
+        print("Loading Persona Chat dataset")
+        data = improved_processor.process_dataset(
+            'persona_chat',
+            max_samples=args.max_samples
+        )
+    elif args.dataset == 'pile':
+        print(f"Loading Pile dataset{f' (subset: {args.pile_subset})' if args.pile_subset else ''}")
+        data = dataset_processor.prepare_dataset(
+            'pile',
+            split='train',
             max_samples=args.max_samples,
-            sequence_length=args.sequence_length,
-            subset=args.code_subset,
-            all_subsets=args.all_code_subsets
+            subset=args.pile_subset,
+            batch_size=32
+        )
+    elif args.dataset == 'openassistant':
+        print("Loading OpenAssistant dataset")
+        data = dataset_processor.prepare_dataset(
+            'openassistant',
+            split='train',
+            max_samples=args.max_samples,
+            batch_size=32
+        )
+    elif args.dataset == 'gpteacher':
+        print("Loading GPTeacher dataset")
+        data = dataset_processor.prepare_dataset(
+            'gpteacher',
+            split='train',
+            max_samples=args.max_samples,
+            batch_size=32
+        )
+    elif args.dataset == 'both':
+        print("Loading both Writing Prompts and Persona Chat datasets")
+        writing_data = improved_processor.process_dataset(
+            'writing_prompts',
+            max_samples=args.max_samples // 2
+        )
+        persona_data = improved_processor.process_dataset(
+            'persona_chat',
+            max_samples=args.max_samples // 2
         )
         
-        datasets["code"] = {
-            'train_dataset': train_dataset,
-            'valid_dataset': valid_dataset
+        # Combine datasets (simple approach - just append)
+        combined_batches = writing_data.get('batches', []) + persona_data.get('batches', [])
+        data = {
+            'dataset_name': 'combined',
+            'batches': combined_batches
         }
+    else:
+        print(f"Using dataset from path: {args.dataset}")
+        data = dataset_processor.prepare_local_dataset(
+            args.dataset,
+            sequence_length=100,
+            batch_size=32
+        )
     
-    # Always process both text datasets when using 'all' or 'both'
-    dataset_list = ["persona_chat", "writing_prompts"]
-    if args.dataset not in ["all", "both", "code"] and args.dataset in ["persona_chat", "writing_prompts"]:
-        dataset_list = [args.dataset]
+    # Ensure batches are available
+    if 'batches' not in data or not data['batches']:
+        print("Warning: No batches found in preprocessed data.")
+        return {}
         
-    for dataset_name in dataset_list:
-        print(f"\n===== Processing {dataset_name} dataset =====")
-        # Save original dataset setting
-        original_dataset = args.dataset
-        args.dataset = dataset_name
-        processed_data = preprocess_data(args)
-        datasets[dataset_name] = processed_data
-        # Restore original dataset setting
-        args.dataset = original_dataset
-        
-        # Save preprocessing metrics
-        metrics = {
-            'dataset': dataset_name,
-            'vocab_size': processed_data.get('vocab_size', 0),
-            'num_samples': len(processed_data.get('batches', [])),
-            'preprocessing_time': processed_data.get('preprocessing_time', 0),
-            'timestamp': datetime.datetime.now().isoformat()
-        }
-        save_evaluation_metrics(metrics, dataset_name, "preprocessing")
+    # Return processed data
+    return data
     
+def preprocess_datasets(args: argparse.Namespace) -> Dict[str, Dict[str, Any]]:
+    """Preprocess multiple datasets if needed"""
+    datasets = {}
+
+    if args.dataset in ['writing_prompts', 'both']:
+        print("\nPreprocessing Writing Prompts dataset...")
+        dataset_args = argparse.Namespace(**vars(args))
+        dataset_args.dataset = 'writing_prompts'
+        datasets['writing_prompts'] = preprocess_data(dataset_args)
+
+    if args.dataset in ['persona_chat', 'both']:
+        print("\nPreprocessing Persona Chat dataset...")
+        dataset_args = argparse.Namespace(**vars(args))
+        dataset_args.dataset = 'persona_chat'
+        datasets['persona_chat'] = preprocess_data(dataset_args)
+
+    if args.dataset == 'pile':
+        print("\nPreprocessing Pile dataset...")
+        datasets['pile'] = preprocess_data(args)
+
+    if args.dataset == 'openassistant':
+        print("\nPreprocessing OpenAssistant dataset...")
+        datasets['openassistant'] = preprocess_data(args)
+
+    if args.dataset == 'gpteacher':
+        print("\nPreprocessing GPTeacher dataset...")
+        datasets['gpteacher'] = preprocess_data(args)
+
     return datasets
 
 def train_on_datasets(args: argparse.Namespace, datasets: Dict[str, Dict[str, Any]]):
     """Train models on multiple datasets simultaneously"""
     print("Starting training for all datasets...")
-    
+
     # Create model directory if it doesn't exist
     os.makedirs(args.model_dir, exist_ok=True)
-    
+
     # Handle code dataset with deepseek if deepseek is enabled
     if args.use_deepseek and args.train_type in ["code", "both"]:
         from generative_ai_module.code_generator import CodeGenerator
-        
+
         print("\n===== Training deepseek-coder model on code dataset =====")
         # Get the code dataset
         code_data = datasets.get("code", {})
         train_dataset = code_data.get("train_dataset")
         eval_dataset = code_data.get("valid_dataset")
-        
+
         if train_dataset is None or eval_dataset is None:
             print("Error: Missing code datasets for deepseek. Attempting to load directly.")
             from generative_ai_module.code_preprocessing import load_and_preprocess_dataset
@@ -650,16 +796,16 @@ def train_on_datasets(args: argparse.Namespace, datasets: Dict[str, Dict[str, An
                 subset=args.code_subset,
                 all_subsets=args.all_code_subsets
             )
-        
+
         if train_dataset is None or eval_dataset is None:
             print("Error: Failed to load code datasets for deepseek training.")
         else:
             # Initialize CodeGenerator with deepseek
             code_gen = CodeGenerator(use_deepseek=True)
-            
+
             # Set output directory
             output_dir = os.path.join(args.model_dir, "deepseek_finetuned")
-            
+
             # Fine-tune the model
             training_metrics = code_gen.fine_tune_deepseek(
                 train_dataset=train_dataset,
@@ -673,22 +819,22 @@ def train_on_datasets(args: argparse.Namespace, datasets: Dict[str, Dict[str, An
                 subset=args.code_subset,
                 all_subsets=args.all_code_subsets
             )
-            
+
             print(f"Deepseek training completed with metrics: {training_metrics}")
-    
+
     # Train text generator on both datasets
     # Always train on persona_chat and writing_prompts datasets
     for dataset_name, data in datasets.items():
-        if dataset_name in ["persona_chat", "writing_prompts"]:
+        if dataset_name == "persona_chat" or dataset_name == "writing_prompts":
             print(f"\n===== Training on {dataset_name} dataset =====")
-            
+
             # Split data for evaluation
             train_data, eval_data = split_data(data, args.eval_split)
-            
+
             # Train text generator
             if args.train_type in ["text", "both"]:
                 model_path = os.path.join(args.model_dir, f"text_gen_{dataset_name}.pt")
-                
+
                 # Enhanced training configuration for writing prompts
                 if dataset_name == "writing_prompts":
                     # Increase epochs for better training
@@ -704,7 +850,7 @@ def train_on_datasets(args: argparse.Namespace, datasets: Dict[str, Dict[str, An
                     learning_rate = 0.002
                     clip_value = 5.0
                     use_scheduler = False
-                
+
                 text_model, vocab_size = train_text_generator(
                     dataset_name=dataset_name,
                     epochs=epochs,
@@ -714,27 +860,27 @@ def train_on_datasets(args: argparse.Namespace, datasets: Dict[str, Dict[str, An
                     use_scheduler=use_scheduler,
                     force_gpu=args.force_gpu
                 )
-                
+
                 # Evaluate text model
                 if text_model:
                     print(f"\nEvaluating text model on {dataset_name}:")
                     metrics = evaluate_model(text_model, eval_data, args.metrics)
                     save_evaluation_metrics(metrics, dataset_name, "text")
-            
-            # Train traditional code generator (only on writing_prompts)
-            if args.train_type in ["code", "both"] and dataset_name == "writing_prompts" and not args.use_deepseek:
-                model_path = os.path.join(args.model_dir, args.code_model)
-                code_model, vocab_size = train_code_generator(
-                    dataset_name=dataset_name,
-                    epochs=args.epochs,
-                    model_path=model_path if args.save_model else None
-                )
-                
-                # Evaluate code model
-                if code_model:
-                    print(f"\nEvaluating code model on {dataset_name}:")
-                    metrics = evaluate_model(code_model, eval_data, args.metrics)
-                    save_evaluation_metrics(metrics, dataset_name, "code")
+
+        # Train traditional code generator (only on writing_prompts)
+        if args.train_type in ["code", "both"] and dataset_name == "writing_prompts" and not args.use_deepseek:
+            model_path = os.path.join(args.model_dir, args.code_model)
+            code_model, vocab_size = train_code_generator(
+                dataset_name=dataset_name,
+                epochs=args.epochs,
+                model_path=model_path if args.save_model else None
+            )
+
+            # Evaluate code model
+            if code_model:
+                print(f"\nEvaluating code model on {dataset_name}:")
+                metrics = evaluate_model(code_model, eval_data, args.metrics)
+                save_evaluation_metrics(metrics, dataset_name, "code")
 
 def interactive_generation(model: torch.nn.Module, 
                          tokenizer: Any = None,

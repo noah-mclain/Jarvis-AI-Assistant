@@ -1,5 +1,30 @@
 # Fixed Issues & Integration Guide
 
+## Latest Code Cleanup (April 2023)
+
+1. **Dataset Handler Consolidation**
+
+   - Enhanced `UnifiedDatasetHandler` with conversation context management
+   - Merged functionality from `use_new_datasets.py` into `unified_dataset_handler.py`
+   - Added support for context-aware conversations in dataset handling
+
+2. **Training Pipeline Improvements**
+
+   - Added visualization capabilities to `unified_generation_pipeline.py`
+   - Enhanced metric calculation and tracking during training
+   - Added validation split support for more accurate model evaluation
+
+3. **Code Structure Cleanup**
+
+   - Removed redundant files: `use_new_datasets.py`, `explore_dataset.py`
+   - Fixed import issues between modules
+   - Updated `__init__.py` to expose all consolidated functionality
+
+4. **Testing Improvements**
+   - Enhanced `test_import.py` to verify code integrity
+   - Added example usage in the README.md
+   - Improved error handling throughout the codebase
+
 ## Issues Fixed
 
 1. **Import Path Problems**

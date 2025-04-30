@@ -117,51 +117,104 @@ class PromptEnhancer:
 def analyze_prompt(prompt: str) -> str:
     """
     Analyze the prompt to determine which model is most appropriate.
-    Returns either 'persona_chat' or 'writing_prompts'.
+    Returns the most suitable dataset name based on content analysis.
     """
     # Convert to lowercase for analysis
     prompt_lower = prompt.lower()
 
-    # Keywords that suggest dialogue/conversation
+    # Keywords that suggest dialogue/conversation (persona_chat)
     dialogue_keywords = [
         'hello', 'hi', 'hey', 'how are you', 'what do you', 'can you',
         'would you', 'tell me', 'explain', 'help me', 'i need', 'i want',
         'question', 'ask', 'answer', 'chat', 'talk', 'conversation',
-        'discuss', 'advice', 'suggest', 'recommend'
+        'discuss', 'advice', 'suggest', 'recommend', 'opinion', 'think about',
+        'personal', 'feeling', 'experience', 'dialogue', 'interview', 'response',
+        'assistant', 'help'
     ]
 
-    # Keywords that suggest story generation
+    # Keywords that suggest story generation (writing_prompts)
     story_keywords = [
         'story', 'write', 'create', 'imagine', 'world where', 'what if',
         'once upon', 'beginning', 'end', 'plot', 'character', 'setting',
         'scene', 'describe', 'narrative', 'tale', 'fable', 'myth',
-        'adventure', 'journey', 'quest', 'tale', 'legend'
+        'adventure', 'journey', 'quest', 'tale', 'legend', 'fiction',
+        'fantasy', 'sci-fi', 'creative', 'novel', 'chapter', 'book',
+        'story about', 'screenplay', 'drama', 'comedy'
+    ]
+    
+    # Keywords that suggest factual knowledge (pile)
+    knowledge_keywords = [
+        'what is', 'how does', 'explain', 'definition', 'define',
+        'research', 'science', 'history', 'fact', 'information',
+        'data', 'study', 'analysis', 'report', 'paper', 'article',
+        'statistics', 'evidence', 'prove', 'demonstration', 'example',
+        'reference', 'citation', 'source', 'documented'
+    ]
+    
+    # Keywords that suggest instruction following (gpteacher)
+    instruction_keywords = [
+        'how to', 'steps to', 'guide', 'tutorial', 'walkthrough',
+        'instructions', 'procedure', 'method', 'technique', 'approach',
+        'implement', 'build', 'create', 'design', 'develop', 'setup',
+        'configure', 'install', 'debugging', 'solve', 'fix', 'repair'
+    ]
+    
+    # Keywords that suggest assistant-like responses (openassistant)
+    assistant_keywords = [
+        'assistant', 'help me with', 'support', 'solve', 'give me',
+        'provide', 'generate', 'analyze', 'summarize', 'compare',
+        'evaluate', 'optimize', 'improve', 'enhance', 'correct'
     ]
 
     # Count matches for each type
-    dialogue_matches = sum(
-        keyword in prompt_lower for keyword in dialogue_keywords
-    )
+    dialogue_matches = sum(keyword in prompt_lower for keyword in dialogue_keywords)
     story_matches = sum(keyword in prompt_lower for keyword in story_keywords)
+    knowledge_matches = sum(keyword in prompt_lower for keyword in knowledge_keywords)
+    instruction_matches = sum(keyword in prompt_lower for keyword in instruction_keywords)
+    assistant_matches = sum(keyword in prompt_lower for keyword in assistant_keywords)
 
-    # Check for question marks (more likely to be dialogue)
+    # Check for question marks (more likely to be dialogue or knowledge)
     question_mark_count = prompt_lower.count('?')
 
-    # Check for story-like formatting
+    # Check for specific formats
     story_format = any([
         prompt_lower.startswith(('write', 'create', 'imagine')),
         'story about' in prompt_lower,
-        'tale of' in prompt_lower
+        'tale of' in prompt_lower,
+        'write a' in prompt_lower and any(word in prompt_lower for word in ['story', 'novel', 'narrative'])
+    ])
+    
+    knowledge_format = any([
+        prompt_lower.startswith(('what is', 'how does', 'why is', 'when did')),
+        'definition of' in prompt_lower,
+        'meaning of' in prompt_lower
+    ])
+    
+    instruction_format = any([
+        prompt_lower.startswith(('how to', 'steps to', 'guide to')),
+        'instructions for' in prompt_lower,
+        'show me how to' in prompt_lower
     ])
 
-    # Decision logic
-    if story_format or story_matches > dialogue_matches + 2:
-        return 'writing_prompts'
-    elif question_mark_count > 0 or dialogue_matches > story_matches + 2:
-        return 'persona_chat'
-    else:
+    # Decision logic with weighted scoring
+    scores = {
+        'persona_chat': dialogue_matches * 1.2 + (question_mark_count * 0.8),
+        'writing_prompts': story_matches * 1.5 + (1.5 if story_format else 0),
+        'pile': knowledge_matches * 1.2 + (1.2 if knowledge_format else 0),
+        'gpteacher': instruction_matches * 1.3 + (1.5 if instruction_format else 0),
+        'openassistant': assistant_matches * 1.1
+    }
+    
+    # Get the dataset with the highest score
+    best_dataset = max(scores, key=scores.get)
+    
+    # If the best score is too low, default to a reasonable choice
+    if scores[best_dataset] < 1.0:
         # Default to writing_prompts for creative/ambiguous prompts
-        return 'writing_prompts'
+        # or persona_chat for question-like prompts
+        return 'persona_chat' if question_mark_count > 0 else 'writing_prompts'
+    
+    return best_dataset
 
 # Example usage
 if __name__ == "__main__":

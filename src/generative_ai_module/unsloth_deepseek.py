@@ -14,6 +14,8 @@ Functions:
 
 # Import unsloth first, before transformers and other libraries
 # This ensures all optimizations are properly applied
+
+from typing import Optional
 import unsloth
 from unsloth import FastLanguageModel
 from unsloth.models import FastDeepseekV2ForCausalLM  # For DeepSeek support
@@ -39,10 +41,10 @@ def get_unsloth_model(
     load_in_8bit: bool = False,
     use_peft: bool = True,
     r: int = 16,
-    target_modules: List[str] = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+    target_modules: list[str] = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
     alpha: int = 16,
     dropout: float = 0.1
-) -> Tuple:
+) -> tuple:
     """
     Load a DeepSeek-Coder model with Unsloth optimization.
     
@@ -113,7 +115,7 @@ def finetune_with_unsloth(
     load_in_4bit: bool = True,
     load_in_8bit: bool = False,
     r: int = 16,
-    target_modules: List[str] = None,
+    target_modules: list[str] = None,
     save_total_limit: int = 3,
 ):
     """
@@ -230,7 +232,7 @@ def evaluate_model(
     batch_size: int = 4,
     load_in_4bit: bool = True,
     load_in_8bit: bool = False,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Evaluate a fine-tuned model on test data.
     
@@ -247,16 +249,16 @@ def evaluate_model(
     """
     # Load the model and tokenizer
     base_model_name = "deepseek-ai/deepseek-coder-6.7b-base"  # Default base model
-    
+
     # Try to load the model config to get the actual base model name
     try:
         with open(os.path.join(model_dir, "adapter_config.json"), 'r') as f:
             config = json.load(f)
             if "base_model_name_or_path" in config:
                 base_model_name = config["base_model_name_or_path"]
-    except:
+    except Exception:
         print(f"Could not load adapter_config.json, using default base model: {base_model_name}")
-    
+
     # Load the fine-tuned model
     model, tokenizer = get_unsloth_model(
         model_name=base_model_name,
@@ -265,19 +267,19 @@ def evaluate_model(
         load_in_4bit=load_in_4bit,
         load_in_8bit=load_in_8bit
     )
-    
+
     # Put model in evaluation mode
     model.eval()
-    
+
     # Initialize metrics
     total_loss = 0.0
     num_samples = 0
-    
+
     # Process dataset in batches
     for i in range(0, len(test_dataset), batch_size):
         batch = test_dataset[i:i+batch_size]
         batch_texts = batch["text"] if "text" in batch else batch
-        
+
         # Tokenize inputs
         inputs = tokenizer(
             batch_texts, 
@@ -286,39 +288,39 @@ def evaluate_model(
             truncation=True,
             max_length=max_seq_length
         ).to(model.device)
-        
+
         # Calculate loss
         with torch.no_grad():
             outputs = model(**inputs, labels=inputs["input_ids"])
             loss = outputs.loss
-        
+
         # Update metrics
         total_loss += loss.item() * len(batch)
         num_samples += len(batch)
-        
+
         if i % 10 == 0:
             print(f"Processed {num_samples} samples, current avg loss: {total_loss / num_samples:.4f}")
-    
+
     # Calculate final metrics
     avg_loss = total_loss / num_samples
     perplexity = torch.exp(torch.tensor(avg_loss)).item()
-    
+
     metrics = {
         "loss": avg_loss,
         "perplexity": perplexity,
         "num_samples": num_samples
     }
-    
+
     # Save metrics
     metrics_path = os.path.join(model_dir, "evaluation_metrics.json")
     with open(metrics_path, 'w') as f:
         json.dump(metrics, f, indent=2)
-    
+
     return metrics
 
 def create_text_dataset_from_tokenized(
-    dataset: Dict, 
-    tokenizer: Any
+    dataset: dict, 
+    tokenizer: any
 ) -> Dataset:
     """
     Convert a tokenized dataset to text format for Unsloth.
@@ -337,10 +339,10 @@ def create_text_dataset_from_tokenized(
     return Dataset.from_dict({"text": texts})
 
 def preprocess_for_unsloth(
-    examples: Dict, 
-    tokenizer: Any, 
+    examples: dict, 
+    tokenizer: any, 
     max_seq_length: int = 2048
-) -> Dict:
+) -> dict:
     """
     Preprocess dataset examples for Unsloth training.
     
@@ -355,17 +357,16 @@ def preprocess_for_unsloth(
     # If we already have text data, just return it
     if "text" in examples:
         return examples
-    
+
     # Convert input_ids back to text if needed
     if "input_ids" in examples:
-        if isinstance(examples["input_ids"], list):
-            # Handle batch of examples
-            texts = [tokenizer.decode(ids) for ids in examples["input_ids"]]
-            return {"text": texts}
-        else:
+        if not isinstance(examples["input_ids"], list):
             # Handle single example
             return {"text": tokenizer.decode(examples["input_ids"])}
-    
+
+        # Handle batch of examples
+        texts = [tokenizer.decode(ids) for ids in examples["input_ids"]]
+        return {"text": texts}
     # If we have prompt and completion fields (instruction format)
     if all(key in examples for key in ["instruction", "response"]):
         texts = []
@@ -373,24 +374,20 @@ def preprocess_for_unsloth(
             # Format as instruction-response pair
             prompt = examples["instruction"][i]
             response = examples["response"][i]
-            
+
             # Create the formatted text
             if "### Instruction:" not in prompt:
                 text = f"### Instruction: {prompt}\n\n### Response: {response}"
             else:
                 # Already formatted, just combine
                 text = f"{prompt}\n\n### Response: {response}"
-            
+
             texts.append(text)
-        
+
         return {"text": texts}
-    
+
     # If we have raw code samples
-    if "code" in examples:
-        return {"text": examples["code"]}
-    
-    # Default case: just return the examples as is
-    return examples
+    return {"text": examples["code"]} if "code" in examples else examples
 
 if __name__ == "__main__":
     # Simple test with mini dataset

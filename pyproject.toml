@@ -1,0 +1,33 @@
+[tool.poetry]
+name = "jarvis-ai-assistant"
+version = "0.1.0"
+description = "Jarvis AI assistant implementing NLP, speech-to-text, generative text and code, and generative image."
+authors = ["noah-mclain <nadam.30032415@gmail.com>"]
+license = "GPL"
+readme = "README.md"
+packages = [
+    { include = "src" }
+]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.13"
+torch = ">=1.9.0"
+tqdm = ">=4.62.0"
+numpy = ">=1.20.0"
+matplotlib = ">=3.4.0"
+transformers = ">=4.25.0"
+datasets = ">=2.10.0"
+spacy = ">=3.2.0"
+nltk = ">=3.6.0"
+bert-score = ">=0.3.12"
+rouge-score = ">=0.1.2"
+scikit-learn = ">=1.0.0"
+tensorboard = ">=2.7.0"
+pandas = ">=1.3.0"
+jupyterlab = ">=3.2.0"
+"en-core-web-sm" = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.2.0/en_core_web_sm-3.2.0.tar.gz" }
+pillow = ">=8.3.0"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

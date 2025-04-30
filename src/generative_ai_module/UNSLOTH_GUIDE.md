@@ -47,7 +47,7 @@ python src/generative_ai_module/run_finetune.py
 
 You'll be prompted about whether to train both DeepSeek and text models:
 
-```
+```bash
 Do you want to train both DeepSeek code model and text models? (y/n):
 ```
 
@@ -136,7 +136,7 @@ The implementation includes robust dataset handling:
 
 If you see errors about missing libraries:
 
-```
+```bash
 ImportError: Unsloth: Please install unsloth_zoo via `pip install unsloth_zoo`
 ```
 
@@ -150,7 +150,7 @@ bash setup_unsloth.sh
 
 On some environments (particularly Kaggle), you might see:
 
-```
+```bash
 Unsloth: CUDA is not linked properly.
 ```
 
