@@ -16,27 +16,49 @@ else
     echo "Standard environment detected"
 fi
 
+# Check for NVIDIA GPU
+if command -v nvidia-smi &> /dev/null; then
+    echo "NVIDIA GPU detected"
+    nvidia-smi
+    CUDA_AVAILABLE=true
+else
+    echo "No NVIDIA GPU detected"
+    CUDA_AVAILABLE=false
+fi
+
 # Install base requirements
 echo "Installing base requirements..."
 
-# Install unsloth for efficient fine-tuning
-pip install unsloth
+# Install dependencies based on environment
+if [ "$CUDA_AVAILABLE" = true ]; then
+    echo "Installing CUDA-optimized packages..."
+    pip install -q torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2
+    pip install -q bitsandbytes==0.43.0 flash-attn==2.5.6 triton==2.1.0
+    pip install -q accelerate==0.30.1
+fi
+
+# Install unsloth for efficient fine-tuning (without MPS extras for CUDA systems)
+pip install -q unsloth
 
 # Install additional packages for storage optimization
 echo "Installing storage optimization requirements..."
-pip install -q boto3 gdown
+pip install -q boto3==1.34.86 gdown==5.1.0 psutil==5.9.8 platformdirs==4.2.0
+pip install -q huggingface-hub==0.23.0 safetensors==0.4.2
 
 # Setup environment-specific optimizations
 if [ "$ENVIRONMENT" = "gradient" ]; then
     echo "Setting up Gradient-specific optimizations..."
     
-    # Set environment variables for better memory management
+    # Set environment variables for better CUDA memory management
     export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
     
     # Create persistent storage directories
     mkdir -p /storage/models
     mkdir -p /storage/datasets
     mkdir -p /storage/checkpoints
+    
+    # Add environment variables to ~/.bashrc for persistence
+    echo 'export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128' >> ~/.bashrc
     
     echo "Created persistent storage directories in /storage/"
     
@@ -54,17 +76,32 @@ elif [ "$ENVIRONMENT" = "colab" ]; then
 fi
 
 # Clone the repository if not already present
-if [ ! -d "Jarvis-AI-Assistant" ]; then
+if [ ! -d "Jarvis-AI-Assistant" ] && [ "$PWD" != *"Jarvis-AI-Assistant"* ]; then
     echo "Cloning repository..."
     git clone https://github.com/your-username/Jarvis-AI-Assistant.git
     cd Jarvis-AI-Assistant
 else
-    echo "Repository already exists"
-    cd Jarvis-AI-Assistant
+    if [ "$PWD" != *"Jarvis-AI-Assistant"* ]; then
+        echo "Repository already exists, changing to directory"
+        cd Jarvis-AI-Assistant
+    else
+        echo "Already in repository directory"
+    fi
 fi
 
 # Install project requirements
-pip install -e .
+if [ -f "pyproject.toml" ]; then
+    echo "Installing project with poetry (if available)..."
+    if command -v poetry &> /dev/null; then
+        poetry install
+    else
+        echo "Poetry not found, installing with pip..."
+        pip install -e .
+    fi
+else
+    echo "Installing project with pip..."
+    pip install -e .
+fi
 
 echo "Storage optimization setup complete!"
 
@@ -75,14 +112,16 @@ echo "================================================"
 echo ""
 
 if [ "$ENVIRONMENT" = "gradient" ]; then
-    echo "# On Gradient:"
+    echo "# On Gradient with RTX 5000:"
     echo "python src/generative_ai_module/optimize_deepseek_storage.py \\"
     echo "    --storage-type local \\"
     echo "    --output-dir /storage/models/deepseek_optimized \\"
     echo "    --quantize 4 \\"
-    echo "    --max-steps 200 \\"
-    echo "    --batch-size 2 \\"
-    echo "    --use-mini-dataset"
+    echo "    --max-steps 500 \\"
+    echo "    --batch-size 4 \\"
+    echo "    --sequence-length 1024 \\"
+    echo "    --checkpoint-strategy improvement \\"
+    echo "    --max-checkpoints 2"
 elif [ "$ENVIRONMENT" = "colab" ]; then
     echo "# On Google Colab:"
     echo "python src/generative_ai_module/optimize_deepseek_storage.py \\"
@@ -109,7 +148,8 @@ echo "    --storage-type s3 \\"
 echo "    --s3-bucket your-bucket-name \\"
 echo "    --aws-access-key-id YOUR_ACCESS_KEY \\"
 echo "    --aws-secret-access-key YOUR_SECRET_KEY \\"
-echo "    --quantize 4"
+echo "    --quantize 4 \\"
+echo "    --output-dir /storage/models/deepseek_optimized"
 
 echo ""
 echo "For more options, run:"
