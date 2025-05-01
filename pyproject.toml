@@ -1,33 +1,56 @@
 [tool.poetry]
 name = "jarvis-ai-assistant"
 version = "0.1.0"
-description = "Jarvis AI assistant implementing NLP, speech-to-text, generative text and code, and generative image."
+description = "Jarvis AI assistant"
 authors = ["noah-mclain <nadam.30032415@gmail.com>"]
 license = "GPL"
 readme = "README.md"
-packages = [
-    { include = "src" }
-]
+packages = [{include = "src", from = "."}]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.13"
-torch = ">=1.9.0"
-tqdm = ">=4.62.0"
-numpy = ">=1.20.0"
-matplotlib = ">=3.4.0"
-transformers = ">=4.25.0"
-datasets = ">=2.10.0"
-spacy = ">=3.2.0"
-nltk = ">=3.6.0"
-bert-score = ">=0.3.12"
-rouge-score = ">=0.1.2"
-scikit-learn = ">=1.0.0"
-tensorboard = ">=2.7.0"
-pandas = ">=1.3.0"
-jupyterlab = ">=3.2.0"
-"en-core-web-sm" = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.2.0/en_core_web_sm-3.2.0.tar.gz" }
-pillow = ">=8.3.0"
+
+# Apple Silicon-optimized PyTorch
+torch = "2.1.2"
+torchvision = "0.16.2"
+torchaudio = "2.1.2"
+
+# Core dependencies
+numpy = "1.26.4"
+transformers = "4.40.2"
+datasets = "2.19.0"
+spacy = "3.7.4"
+pydantic = "1.10.13"
+nltk = "3.8.1"
+tqdm = "4.66.2"
+peft = "0.10.0"
+accelerate = "0.30.1"
+pillow = "10.3.0"
+bert-score = "0.3.12"
+rouge-score = "0.1.2"
+pandas = "2.2.2"
+scikit-learn = "1.4.2"
+jupyterlab = "4.4.1"
+tensorboard = "2.16.2"
+
+# Apple Silicon-specific optimizations
+unsloth = {git = "https://github.com/unslothai/unsloth.git"}
+bitsandbytes = { version = "0.43.0", markers = "sys_platform == 'darwin' and platform_machine == 'arm64'", python = ">=3.10" }
+psutil = "5.9.8"  # For memory management
+platformdirs = "4.2.0"  # Better path handling
+
+# Removed CUDA-specific configurations
+# typing-extensions version relaxed for Apple Silicon compatibility
+typing-extensions = ">=4.5.0"
+
+[[tool.poetry.source]]
+name = "mac-metal"
+url = "https://pip-index.lilac.ai/"
+priority = "supplemental"
+
+[tool.poetry.dependencies."en-core-web-sm"]
+url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0.tar.gz"
 
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
+requires = ["poetry-core>=2.0.0,<3.0.0,", "setuptools", "cmake", "rust"]
 build-backend = "poetry.core.masonry.api"

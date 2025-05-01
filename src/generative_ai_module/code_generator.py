@@ -336,7 +336,7 @@ class CodeGenerator:
         print(f"Total parameters: {total_params:,}")
 
     def fine_tune_deepseek(self, train_dataset=None, eval_dataset=None, output_dir="deepseek_fine-tuned", 
-                          epochs=50, batch_size=64, sequence_length=512, learning_rate=2e-5,
+                          epochs=50, batch_size=2, sequence_length=2048, learning_rate=2e-5,
                           warmup_steps=100, max_samples=None, subset="all", all_subsets=True):
         """
         Fine-tune the deepseek-coder model on code snippets
@@ -360,19 +360,40 @@ class CodeGenerator:
         if not self.use_deepseek:
             raise ValueError("This method requires use_deepseek=True. Please initialize CodeGenerator with use_deepseek=True")
 
+        # Set up checkpointing directories
+        checkpoint_dir = os.path.join(output_dir, "checkpoints")
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        
+        # Create a checkpoint log file
+        checkpoint_log = os.path.join(output_dir, "checkpoint_log.txt")
+        with open(checkpoint_log, 'w') as f:
+            f.write(f"Fine-tuning started at: {datetime.datetime.now().isoformat()}\n")
+            f.write(f"Batch size: {batch_size}, Sequence length: {sequence_length}, Learning rate: {learning_rate}\n")
+            f.write(f"Gradient accumulation steps: 8\n\n")
+
+        # Checkpoint function to log progress
+        def log_checkpoint(message):
+            with open(checkpoint_log, 'a') as f:
+                timestamp = datetime.datetime.now().isoformat()
+                f.write(f"[{timestamp}] {message}\n")
+            print(f"CHECKPOINT: {message}")
+
         start_time = time.time()
+        log_checkpoint("Starting fine-tuning process")
 
         # Load dataset if not provided
         if train_dataset is None or eval_dataset is None:
-            print("Loading and preprocessing code dataset...")
+            log_checkpoint("Loading and preprocessing code dataset...")
             train_dataset, eval_dataset = load_and_preprocess_dataset(
                 max_samples=max_samples,
                 sequence_length=sequence_length,
                 subset=subset,
                 all_subsets=all_subsets
             )
+            log_checkpoint(f"Dataset loaded - Train: {len(train_dataset)} samples, Eval: {len(eval_dataset)} samples")
 
         if train_dataset is None or eval_dataset is None:
+            log_checkpoint("FAILED: Could not load datasets for fine-tuning")
             raise ValueError("Failed to load datasets for fine-tuning")
 
         # Create the output directory
@@ -380,29 +401,29 @@ class CodeGenerator:
         
         # For Apple Silicon (MPS), use a simplified training approach without PEFT
         if self.device.type == "mps":
-            print("\nUsing simplified training for Apple Silicon...")
+            log_checkpoint("Using simplified training for Apple Silicon...")
             return self._fine_tune_mps(
                 train_dataset, eval_dataset, output_dir, 
                 epochs, batch_size, learning_rate, warmup_steps
             )
         
         # Freeze lower layers for more efficient training
-        print("Freezing lower layers for more efficient training...")
+        log_checkpoint("Freezing lower layers for more efficient training...")
         self.freeze_model_layers(freeze_proportion=0.7)  # Freeze 70% of the layers
         
         # Prepare training arguments
-        print("Configuring training arguments...")
+        log_checkpoint("Configuring training arguments...")
         # Check if we're on MPS (Apple Silicon) - fp16 is not compatible with MPS
         use_fp16 = self.device.type != "mps"
         if not use_fp16:
-            print("Disabling mixed precision training (fp16) as it's not supported on MPS devices")
+            log_checkpoint("Disabling mixed precision training (fp16) as it's not supported on MPS devices")
         
         # On MPS, use even smaller batch size and disable gradient checkpointing
         if self.device.type == "mps":
-            batch_size = min(8, batch_size)  # Reduce batch size more aggressively for MPS
+            batch_size = min(2, batch_size)  # Respect 2 as the specified batch size
             use_gradient_checkpointing = False
-            print(f"Using reduced batch size of {batch_size} for MPS device")
-            print("Disabling gradient checkpointing for MPS device")
+            log_checkpoint(f"Using batch size of {batch_size} for MPS device")
+            log_checkpoint("Disabling gradient checkpointing for MPS device")
         else:
             use_gradient_checkpointing = True
         
@@ -414,9 +435,11 @@ class CodeGenerator:
             learning_rate=learning_rate,
             logging_dir=f"{output_dir}/logs",
             logging_steps=10,
-            eval_strategy="epoch",            # Updated from evaluation_strategy
-            save_strategy="epoch",
-            save_total_limit=3,               # Keep only the 3 best models
+            eval_strategy="steps",            # Changed from "epoch" to more frequent "steps"
+            eval_steps=100,                   # Evaluate every 100 steps
+            save_strategy="steps",            # Changed from "epoch" to more frequent "steps"
+            save_steps=100,                   # Save every 100 steps
+            save_total_limit=5,               # Keep up to 5 checkpoints (increased from 3)
             load_best_model_at_end=True,
             metric_for_best_model="eval_loss",
             greater_is_better=False,
@@ -424,47 +447,82 @@ class CodeGenerator:
             weight_decay=0.01,
             fp16=use_fp16,                    # Only use fp16 when not on MPS
             report_to="none",                 # Disable TensorBoard reporting
-            gradient_accumulation_steps=4,    # To handle larger effective batch sizes
+            gradient_accumulation_steps=8,    # Updated to 8 as requested
             gradient_checkpointing=use_gradient_checkpointing,  # Only enable for non-MPS devices
             # Disable distributed training on MPS 
             local_rank=-1 if self.device.type == "mps" else training_args.local_rank if hasattr(training_args, 'local_rank') else -1,
             # Use correct param for CPU/GPU
             use_cpu=self.device.type == "cpu",  # Use use_cpu instead of no_cuda
+            # Additional checkpointing
+            save_safetensors=True,            # Save in safetensors format
+            dataloader_num_workers=4,         # Use multiple workers for data loading
+            group_by_length=True,             # Group similar length sequences for efficiency
+            logging_first_step=True,          # Log the first step
+            logging_nan_inf_filter=True,      # Filter NaN/Inf values from logs
         )
 
         # Initialize trainer
-        print("Initializing Trainer...")
+        log_checkpoint("Initializing Trainer...")
         
         # Special handling for MPS device
         if self.device.type == "mps":
-            print("Using Apple Silicon GPU. Ensuring model is properly configured...")
+            log_checkpoint("Using Apple Silicon GPU. Ensuring model is properly configured...")
             # Ensure the model is on the MPS device
             if not next(self.model.parameters()).is_meta:
-                print("Moving model to MPS before training...")
+                log_checkpoint("Moving model to MPS before training...")
                 self.model = self.model.to("mps")
                 
             # Use smaller batch size for MPS if needed
             if batch_size > 32:
-                print(f"Reducing batch size from {batch_size} to 32 for MPS device")
+                log_checkpoint(f"Reducing batch size from {batch_size} to 32 for MPS device")
                 training_args.per_device_train_batch_size = 32
                 training_args.per_device_eval_batch_size = 32
         
         # Initialize the trainer with our model and datasets
         try:
+            # Define a custom callback for additional checkpointing
+            class CheckpointCallback(TrainerCallback):
+                def __init__(self, log_func):
+                    self.log_func = log_func
+                
+                def on_step_end(self, args, state, control, **kwargs):
+                    if state.global_step % 50 == 0:  # Log every 50 steps
+                        self.log_func(f"Completed step {state.global_step}, Loss: {state.log_history[-1]['loss'] if state.log_history else 'N/A'}")
+                
+                def on_evaluate(self, args, state, control, metrics=None, **kwargs):
+                    if metrics:
+                        self.log_func(f"Evaluation - Step: {state.global_step}, Loss: {metrics.get('eval_loss', 'N/A')}")
+                
+                def on_save(self, args, state, control, **kwargs):
+                    self.log_func(f"Saved checkpoint at step {state.global_step}")
+                    
+                def on_epoch_end(self, args, state, control, **kwargs):
+                    self.log_func(f"Completed epoch {state.epoch}")
+                    
+                def on_train_begin(self, args, state, control, **kwargs):
+                    self.log_func("Training started")
+                    
+                def on_train_end(self, args, state, control, **kwargs):
+                    self.log_func(f"Training completed after {state.global_step} steps")
+            
+            checkpoint_callback = CheckpointCallback(log_checkpoint)
+                        
             trainer = Trainer(
                 model=self.model,
                 args=training_args,
                 train_dataset=train_dataset,
                 eval_dataset=eval_dataset,
+                callbacks=[checkpoint_callback],
             )
         
             # Fine-tune the model and track metrics
-            print(f"Starting fine-tuning for {epochs} epochs...")
+            log_checkpoint(f"Starting fine-tuning for {epochs} epochs...")
             training_metrics = {}
             training_output = trainer.train()
 
             # Calculate training time
             training_time = time.time() - start_time
+            log_checkpoint(f"Training completed in {training_time:.2f} seconds")
 
             # Collect metrics
             dataset_name = "code_search_net_all_languages" if all_subsets else f"code_search_net_{subset}"
@@ -478,10 +536,14 @@ class CodeGenerator:
                 'eval_samples': len(eval_dataset),
                 'epochs': epochs,
                 'batch_size': batch_size,
+                'sequence_length': sequence_length,
+                'gradient_accumulation_steps': 8,
+                'effective_batch_size': batch_size * 8,  # batch_size * gradient_accumulation_steps
                 'training_time': training_time,
                 'learning_rate': learning_rate,
                 'final_loss': training_output.training_loss,
                 'timestamp': datetime.datetime.now().isoformat(),
+                'checkpoints': trainer.state.log_history,
                 'lora_config': {
                     'r': self.model.peft_config.r,
                     'lora_alpha': self.model.peft_config.lora_alpha,
@@ -489,24 +551,23 @@ class CodeGenerator:
                 }
             }
 
-            print(f"Training completed in {training_time:.2f} seconds")
-            print(f"Final loss: {training_output.training_loss:.4f}")
+            log_checkpoint(f"Final loss: {training_output.training_loss:.4f}")
 
             # Evaluate the model
-            print("Evaluating fine-tuned model...")
+            log_checkpoint("Evaluating fine-tuned model...")
             eval_metrics = trainer.evaluate()
             training_metrics['eval_loss'] = eval_metrics.get('eval_loss')
             training_metrics['perplexity'] = np.exp(eval_metrics.get('eval_loss', 0))
 
-            print(f"Evaluation loss: {eval_metrics.get('eval_loss', 'N/A')}")
-            print(f"Perplexity: {training_metrics['perplexity']:.4f}")
+            log_checkpoint(f"Evaluation loss: {eval_metrics.get('eval_loss', 'N/A')}")
+            log_checkpoint(f"Perplexity: {training_metrics['perplexity']:.4f}")
 
             # Save the fine-tuned model
-            print(f"Saving fine-tuned model to {output_dir}...")
+            log_checkpoint(f"Saving fine-tuned model to {output_dir}...")
             
             # Move model to CPU for saving if it's on MPS
             if self.device.type == "mps":
-                print("Moving model to CPU for saving...")
+                log_checkpoint("Moving model to CPU for saving...")
                 model_to_save = self.model.to("cpu")
                 model_to_save.save_pretrained(output_dir)
                 self.model = self.model.to("mps")  # Move back to MPS
@@ -516,22 +577,34 @@ class CodeGenerator:
             self.tokenizer.save_pretrained(output_dir)
 
             # Save training metrics
-            self._save_training_metrics(training_metrics, "deepseek")
+            metrics_file = self._save_training_metrics(training_metrics, "deepseek")
+            log_checkpoint(f"Training metrics saved to {metrics_file}")
+            
+            # Create a completion marker file to indicate successful training
+            with open(os.path.join(output_dir, "TRAINING_COMPLETE"), 'w') as f:
+                f.write(f"Training completed successfully at {datetime.datetime.now().isoformat()}\n")
+                f.write(f"Final loss: {training_output.training_loss:.4f}\n")
+                f.write(f"Evaluation loss: {eval_metrics.get('eval_loss', 'N/A')}\n")
+                f.write(f"Perplexity: {training_metrics['perplexity']:.4f}\n")
             
             return training_metrics
             
         except Exception as e:
-            print(f"Error during fine-tuning: {e}")
+            error_msg = f"Error during fine-tuning: {e}"
+            log_checkpoint(error_msg)
             import traceback
-            traceback.print_exc()
+            traceback_str = traceback.format_exc()
+            log_checkpoint(f"Traceback: {traceback_str}")
 
             # Still try to save partial metrics
             training_metrics = {
                 'model_name': self.model_name,
                 'error': str(e),
+                'traceback': traceback_str,
                 'timestamp': datetime.datetime.now().isoformat()
             }
-            self._save_training_metrics(training_metrics, "deepseek_error")
+            metrics_file = self._save_training_metrics(training_metrics, "deepseek_error")
+            log_checkpoint(f"Error metrics saved to {metrics_file}")
             
             return training_metrics
     

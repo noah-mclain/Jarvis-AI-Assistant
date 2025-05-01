@@ -25,21 +25,22 @@ import random
 import json
 import datetime
 import matplotlib.pyplot as plt
+import time
 
-from generative_ai_module.prompt_enhancer import analyze_prompt
-from generative_ai_module.unsloth_deepseek import evaluate_model
+from .prompt_enhancer import analyze_prompt
+from .unsloth_deepseek import evaluate_model
 
 # Add the parent directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from generative_ai_module.text_generator import TextGenerator, CombinedModel
-from generative_ai_module.code_generator import CodeGenerator
-from generative_ai_module.dataset_processor import DatasetProcessor
-from generative_ai_module.improved_preprocessing import ImprovedPreprocessor
+from .text_generator import TextGenerator, CombinedModel
+from .code_generator import CodeGenerator
+from .dataset_processor import DatasetProcessor
+from .improved_preprocessing import ImprovedPreprocessor
 
 # Try to import tokenizer from examples directory
 try:
-    from generative_ai_module.basic_tokenizer import BasicTokenizer
+    from .basic_tokenizer import BasicTokenizer
 except ImportError:
     print("Warning: BasicTokenizer not found. Character-level generation will be used.")
     BasicTokenizer = None
@@ -52,94 +53,547 @@ class TrainingVisualizer:
         self.output_dir = output_dir
         os.makedirs(output_dir, exist_ok=True)
         
+        # Create subdirectories for different visualizations
+        self.plots_dir = os.path.join(output_dir, "plots")
+        self.comparisons_dir = os.path.join(output_dir, "comparisons")
+        self.checkpoints_dir = os.path.join(output_dir, "checkpoints")
+        
+        os.makedirs(self.plots_dir, exist_ok=True)
+        os.makedirs(self.comparisons_dir, exist_ok=True)
+        os.makedirs(self.checkpoints_dir, exist_ok=True)
+        
         # Set up plot styling
         plt.style.use('ggplot')
+        
+        # Set higher DPI for better quality images
+        self.dpi = 300
+        
+        # Define color palette
+        self.colors = {
+            'train': '#1f77b4',  # Blue
+            'validation': '#d62728',  # Red
+            'accuracy': '#2ca02c',  # Green
+            'perplexity': '#ff7f0e',  # Orange
+            'learning_rate': '#9467bd',  # Purple
+            'checkpoint': '#8c564b'  # Brown
+        }
         
     def visualize_training(self, dataset_name: str, metrics: Dict[str, List[float]]):
         """Create visualizations for training metrics"""
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         
+        # Create a visualization directory for this run
+        dataset_vis_dir = os.path.join(self.plots_dir, f"{dataset_name}_{timestamp}")
+        os.makedirs(dataset_vis_dir, exist_ok=True)
+        
+        # Create an index file for the visualizations
+        index_file = os.path.join(dataset_vis_dir, "index.html")
+        with open(index_file, 'w') as f:
+            f.write(f"<html><head><title>Training Visualizations for {dataset_name}</title>\n")
+            f.write("<style>body{font-family:Arial,sans-serif; margin:20px;} img{max-width:800px; margin:10px;}</style>\n")
+            f.write("</head><body>\n")
+            f.write(f"<h1>Training Visualizations for {dataset_name}</h1>\n")
+            f.write(f"<p>Generated on: {timestamp}</p>\n")
+            f.write("<hr/>\n")
+        
         # Loss curve
         if 'loss' in metrics and len(metrics['loss']) > 0:
-            plt.figure(figsize=(10, 6))
-            plt.plot(metrics['loss'], 'b-', label='Training Loss')
-            
-            if 'val_loss' in metrics and len(metrics['val_loss']) > 0:
-                plt.plot(metrics['val_loss'], 'r-', label='Validation Loss')
-                
-            plt.title(f'Training and Validation Loss - {dataset_name}')
-            plt.xlabel('Epoch')
-            plt.ylabel('Loss')
-            plt.legend()
-            plt.grid(True)
-            
-            # Save the figure
-            loss_path = os.path.join(self.output_dir, f"{dataset_name}_loss_{timestamp}.png")
-            plt.savefig(loss_path, dpi=300)
-            plt.close()
-            print(f"Loss visualization saved to {loss_path}")
+            loss_path = self._plot_loss_curves(metrics, dataset_name, dataset_vis_dir, timestamp)
+            with open(index_file, 'a') as f:
+                f.write("<h2>Loss Curves</h2>\n")
+                f.write(f"<img src='{os.path.basename(loss_path)}' alt='Loss Curves'/>\n")
+                f.write("<hr/>\n")
             
         # Accuracy if available
         if 'accuracy' in metrics and len(metrics['accuracy']) > 0:
-            plt.figure(figsize=(10, 6))
-            plt.plot(metrics['accuracy'], 'g-', label='Training Accuracy')
-            
-            if 'val_accuracy' in metrics and len(metrics['val_accuracy']) > 0:
-                plt.plot(metrics['val_accuracy'], 'm-', label='Validation Accuracy')
-                
-            plt.title(f'Training and Validation Accuracy - {dataset_name}')
-            plt.xlabel('Epoch')
-            plt.ylabel('Accuracy')
-            plt.legend()
-            plt.grid(True)
-            
-            # Save the figure
-            acc_path = os.path.join(self.output_dir, f"{dataset_name}_accuracy_{timestamp}.png")
-            plt.savefig(acc_path, dpi=300)
-            plt.close()
-            print(f"Accuracy visualization saved to {acc_path}")
+            acc_path = self._plot_accuracy_curves(metrics, dataset_name, dataset_vis_dir, timestamp)
+            with open(index_file, 'a') as f:
+                f.write("<h2>Accuracy Curves</h2>\n")
+                f.write(f"<img src='{os.path.basename(acc_path)}' alt='Accuracy Curves'/>\n")
+                f.write("<hr/>\n")
             
         # Perplexity if available
         if 'perplexity' in metrics and len(metrics['perplexity']) > 0:
-            plt.figure(figsize=(10, 6))
-            plt.plot(metrics['perplexity'], 'c-', label='Training Perplexity')
-            
-            if 'val_perplexity' in metrics and len(metrics['val_perplexity']) > 0:
-                plt.plot(metrics['val_perplexity'], 'y-', label='Validation Perplexity')
+            perp_path = self._plot_perplexity_curves(metrics, dataset_name, dataset_vis_dir, timestamp)
+            with open(index_file, 'a') as f:
+                f.write("<h2>Perplexity Curves</h2>\n")
+                f.write(f"<img src='{os.path.basename(perp_path)}' alt='Perplexity Curves'/>\n")
+                f.write("<hr/>\n")
                 
-            plt.title(f'Training and Validation Perplexity - {dataset_name}')
-            plt.xlabel('Epoch')
-            plt.ylabel('Perplexity')
-            plt.legend()
-            plt.grid(True)
+        # Learning rate if available
+        if 'learning_rates' in metrics and metrics['learning_rates'] and len(metrics['learning_rates']) > 0:
+            lr_path = self._plot_learning_rate_curve(metrics, dataset_name, dataset_vis_dir, timestamp)
+            with open(index_file, 'a') as f:
+                f.write("<h2>Learning Rate</h2>\n")
+                f.write(f"<img src='{os.path.basename(lr_path)}' alt='Learning Rate'/>\n")
+                f.write("<hr/>\n")
+            
+        # Combined metrics
+        combined_path = self._plot_combined_metrics(metrics, dataset_name, dataset_vis_dir, timestamp)
+        with open(index_file, 'a') as f:
+            f.write("<h2>Combined Metrics</h2>\n")
+            f.write(f"<img src='{os.path.basename(combined_path)}' alt='Combined Metrics'/>\n")
+            f.write("<hr/>\n")
+            
+        # Checkpoint visualization if available
+        if 'checkpoints' in metrics and metrics['checkpoints']:
+            checkpoint_path = self._plot_checkpoint_progress(metrics, dataset_name, dataset_vis_dir, timestamp)
+            with open(index_file, 'a') as f:
+                f.write("<h2>Checkpoint Progress</h2>\n")
+                f.write(f"<img src='{os.path.basename(checkpoint_path)}' alt='Checkpoint Progress'/>\n")
+                f.write("<hr/>\n")
+                
+        # Training summary
+        summary_path = os.path.join(dataset_vis_dir, f"{dataset_name}_summary_{timestamp}.json")
+        with open(summary_path, 'w') as f:
+            summary = {
+                'dataset': dataset_name,
+                'timestamp': timestamp,
+                'epochs': len(metrics.get('loss', [])),
+                'final_loss': metrics.get('loss', [])[-1] if metrics.get('loss', []) else None,
+                'best_val_loss': min(metrics.get('val_loss', [infinity])) if metrics.get('val_loss', []) else None,
+                'final_accuracy': metrics.get('accuracy', [])[-1] if metrics.get('accuracy', []) else None,
+                'final_perplexity': metrics.get('perplexity', [])[-1] if metrics.get('perplexity', []) else None,
+                'training_time': metrics.get('training_time', None),
+                'batch_size': metrics.get('batch_size', None),
+                'sequence_length': metrics.get('sequence_length', None),
+                'gradient_accumulation_steps': metrics.get('gradient_accumulation_steps', None),
+                'effective_batch_size': metrics.get('effective_batch_size', None)
+            }
+            json.dump(summary, f, indent=2)
+            
+        with open(index_file, 'a') as f:
+            f.write("<h2>Training Summary</h2>\n")
+            f.write("<pre>\n")
+            for k, v in summary.items():
+                if v is not None:
+                    if isinstance(v, float):
+                        f.write(f"{k}: {v:.4f}\n")
+                    else:
+                        f.write(f"{k}: {v}\n")
+            f.write("</pre>\n")
+            f.write("</body></html>\n")
+        
+        print(f"All visualizations saved to {dataset_vis_dir}")
+        print(f"View summary at {index_file}")
+        
+    def _plot_loss_curves(self, metrics, dataset_name, output_dir, timestamp):
+        """Create and save loss curve visualization"""
+        plt.figure(figsize=(12, 8))
+        
+        epochs = range(1, len(metrics['loss']) + 1)
+        plt.plot(epochs, metrics['loss'], 'b-', linewidth=2, label='Training Loss', color=self.colors['train'])
+            
+        if 'val_loss' in metrics and len(metrics['val_loss']) > 0:
+            val_epochs = range(1, len(metrics['val_loss']) + 1)
+            plt.plot(val_epochs, metrics['val_loss'], 'r-', linewidth=2, label='Validation Loss', color=self.colors['validation'])
+                
+        plt.title(f'Training and Validation Loss - {dataset_name}', fontsize=16)
+        plt.xlabel('Epoch', fontsize=14)
+        plt.ylabel('Loss', fontsize=14)
+        plt.xticks(fontsize=12)
+        plt.yticks(fontsize=12)
+        plt.legend(fontsize=12)
+        plt.grid(True, alpha=0.3)
+        
+        # Add annotations for best validation loss
+        if 'val_loss' in metrics and metrics['val_loss']:
+            best_epoch = np.argmin(metrics['val_loss']) + 1
+            best_loss = min(metrics['val_loss'])
+            plt.annotate(f'Best: {best_loss:.4f}',
+                xy=(best_epoch, best_loss), 
+                xytext=(best_epoch + 0.5, best_loss * 1.1),
+                arrowprops=dict(facecolor='black', shrink=0.05, width=1.5, headwidth=8),
+                fontsize=12,
+                bbox=dict(boxstyle="round,pad=0.3", fc="yellow", alpha=0.3))
+        
+        # Add text with final losses
+        final_train_loss = metrics['loss'][-1] if metrics['loss'] else "N/A"
+        final_val_loss = metrics['val_loss'][-1] if 'val_loss' in metrics and metrics['val_loss'] else "N/A"
+        
+        plt.figtext(0.15, 0.02, f"Final train loss: {final_train_loss:.4f}", fontsize=12)
+        if final_val_loss != "N/A":
+            plt.figtext(0.55, 0.02, f"Final validation loss: {final_val_loss:.4f}", fontsize=12)
+            
+        # Save the figure
+        loss_path = os.path.join(output_dir, f"{dataset_name}_loss_{timestamp}.png")
+        plt.tight_layout()
+        plt.savefig(loss_path, dpi=self.dpi)
+        plt.close()
+        
+        return loss_path
+    
+    def _plot_accuracy_curves(self, metrics, dataset_name, output_dir, timestamp):
+        """Create and save accuracy curve visualization"""
+        plt.figure(figsize=(12, 8))
+        
+        epochs = range(1, len(metrics['accuracy']) + 1)
+        plt.plot(epochs, metrics['accuracy'], 'g-', linewidth=2, label='Training Accuracy', color=self.colors['accuracy'])
+        
+        if 'val_accuracy' in metrics and len(metrics['val_accuracy']) > 0:
+            val_epochs = range(1, len(metrics['val_accuracy']) + 1)
+            plt.plot(val_epochs, metrics['val_accuracy'], 'm-', linewidth=2, label='Validation Accuracy', color=self.colors['validation'])
+                
+        plt.title(f'Training and Validation Accuracy - {dataset_name}', fontsize=16)
+        plt.xlabel('Epoch', fontsize=14)
+        plt.ylabel('Accuracy', fontsize=14)
+        plt.xticks(fontsize=12)
+        plt.yticks(fontsize=12)
+        plt.legend(fontsize=12)
+        plt.grid(True, alpha=0.3)
+        
+        # Add annotations for best validation accuracy
+        if 'val_accuracy' in metrics and metrics['val_accuracy']:
+            best_epoch = np.argmax(metrics['val_accuracy']) + 1
+            best_acc = max(metrics['val_accuracy'])
+            plt.annotate(f'Best: {best_acc:.4f}',
+                xy=(best_epoch, best_acc), 
+                xytext=(best_epoch + 0.5, best_acc * 0.95),
+                arrowprops=dict(facecolor='black', shrink=0.05, width=1.5, headwidth=8),
+                fontsize=12,
+                bbox=dict(boxstyle="round,pad=0.3", fc="yellow", alpha=0.3))
+        
+        # Save the figure
+        acc_path = os.path.join(output_dir, f"{dataset_name}_accuracy_{timestamp}.png")
+        plt.tight_layout()
+        plt.savefig(acc_path, dpi=self.dpi)
+        plt.close()
+        
+        return acc_path
+    
+    def _plot_perplexity_curves(self, metrics, dataset_name, output_dir, timestamp):
+        """Create and save perplexity curve visualization"""
+        plt.figure(figsize=(12, 8))
+        
+        epochs = range(1, len(metrics['perplexity']) + 1)
+        plt.plot(epochs, metrics['perplexity'], 'c-', linewidth=2, label='Training Perplexity', color=self.colors['perplexity'])
+        
+        if 'val_perplexity' in metrics and len(metrics['val_perplexity']) > 0:
+            val_epochs = range(1, len(metrics['val_perplexity']) + 1)
+            plt.plot(val_epochs, metrics['val_perplexity'], 'y-', linewidth=2, label='Validation Perplexity', color=self.colors['validation'])
+                
+        plt.title(f'Training and Validation Perplexity - {dataset_name}', fontsize=16)
+        plt.xlabel('Epoch', fontsize=14)
+        plt.ylabel('Perplexity', fontsize=14)
+        plt.xticks(fontsize=12)
+        plt.yticks(fontsize=12)
+        plt.legend(fontsize=12)
+        plt.grid(True, alpha=0.3)
+        
+        # Add annotations for best validation perplexity
+        if 'val_perplexity' in metrics and metrics['val_perplexity']:
+            best_epoch = np.argmin(metrics['val_perplexity']) + 1
+            best_perp = min(metrics['val_perplexity'])
+            plt.annotate(f'Best: {best_perp:.4f}',
+                xy=(best_epoch, best_perp), 
+                xytext=(best_epoch + 0.5, best_perp * 1.1),
+                arrowprops=dict(facecolor='black', shrink=0.05, width=1.5, headwidth=8),
+                fontsize=12,
+                bbox=dict(boxstyle="round,pad=0.3", fc="yellow", alpha=0.3))
+        
+        # Save the figure
+        perp_path = os.path.join(output_dir, f"{dataset_name}_perplexity_{timestamp}.png")
+        plt.tight_layout()
+        plt.savefig(perp_path, dpi=self.dpi)
+        plt.close()
+        
+        return perp_path
+    
+    def _plot_learning_rate_curve(self, metrics, dataset_name, output_dir, timestamp):
+        """Create and save learning rate curve visualization"""
+        plt.figure(figsize=(12, 8))
+        
+        if 'learning_rates' in metrics and metrics['learning_rates']:
+            epochs = range(1, len(metrics['learning_rates']) + 1)
+            plt.plot(epochs, metrics['learning_rates'], '-', linewidth=2, color=self.colors['learning_rate'])
+                
+            plt.title(f'Learning Rate Schedule - {dataset_name}', fontsize=16)
+            plt.xlabel('Epoch', fontsize=14)
+            plt.ylabel('Learning Rate', fontsize=14)
+            plt.xticks(fontsize=12)
+            plt.yticks(fontsize=12)
+            plt.grid(True, alpha=0.3)
+            
+            # Use logarithmic scale for better visualization
+            plt.yscale('log')
             
             # Save the figure
-            perp_path = os.path.join(self.output_dir, f"{dataset_name}_perplexity_{timestamp}.png")
-            plt.savefig(perp_path, dpi=300)
+            lr_path = os.path.join(output_dir, f"{dataset_name}_learning_rate_{timestamp}.png")
+            plt.tight_layout()
+            plt.savefig(lr_path, dpi=self.dpi)
             plt.close()
-            print(f"Perplexity visualization saved to {perp_path}")
             
+            return lr_path
+        
+        return None
+    
+    def _plot_combined_metrics(self, metrics, dataset_name, output_dir, timestamp):
+        """Create a combined visualization of all metrics"""
+        plt.figure(figsize=(14, 10))
+        
+        # Create a 2x2 subplot grid
+        fig, axs = plt.subplots(2, 2, figsize=(20, 16))
+        fig.suptitle(f'Training Metrics Overview - {dataset_name}', fontsize=20)
+        
+        # Plot 1: Loss
+        ax1 = axs[0, 0]
+        epochs = range(1, len(metrics['loss']) + 1)
+        ax1.plot(epochs, metrics['loss'], 'b-', linewidth=2, label='Training Loss', color=self.colors['train'])
+            
+        if 'val_loss' in metrics and len(metrics['val_loss']) > 0:
+            val_epochs = range(1, len(metrics['val_loss']) + 1)
+            ax1.plot(val_epochs, metrics['val_loss'], 'r-', linewidth=2, label='Validation Loss', color=self.colors['validation'])
+        
+        ax1.set_title('Loss Curves', fontsize=16)
+        ax1.set_xlabel('Epoch', fontsize=14)
+        ax1.set_ylabel('Loss', fontsize=14)
+        ax1.tick_params(axis='both', which='major', labelsize=12)
+        ax1.legend(fontsize=12)
+        ax1.grid(True, alpha=0.3)
+        
+        # Plot 2: Accuracy
+        ax2 = axs[0, 1]
+        if 'accuracy' in metrics and len(metrics['accuracy']) > 0:
+            epochs = range(1, len(metrics['accuracy']) + 1)
+            ax2.plot(epochs, metrics['accuracy'], 'g-', linewidth=2, label='Training Accuracy', color=self.colors['accuracy'])
+            
+            if 'val_accuracy' in metrics and len(metrics['val_accuracy']) > 0:
+                val_epochs = range(1, len(metrics['val_accuracy']) + 1)
+                ax2.plot(val_epochs, metrics['val_accuracy'], 'm-', linewidth=2, label='Validation Accuracy', color=self.colors['validation'])
+        
+        ax2.set_title('Accuracy Curves', fontsize=16)
+        ax2.set_xlabel('Epoch', fontsize=14)
+        ax2.set_ylabel('Accuracy', fontsize=14)
+        ax2.tick_params(axis='both', which='major', labelsize=12)
+        ax2.legend(fontsize=12)
+        ax2.grid(True, alpha=0.3)
+        
+        # Plot 3: Perplexity
+        ax3 = axs[1, 0]
+        if 'perplexity' in metrics and len(metrics['perplexity']) > 0:
+            epochs = range(1, len(metrics['perplexity']) + 1)
+            ax3.plot(epochs, metrics['perplexity'], 'c-', linewidth=2, label='Training Perplexity', color=self.colors['perplexity'])
+            
+            if 'val_perplexity' in metrics and len(metrics['val_perplexity']) > 0:
+                val_epochs = range(1, len(metrics['val_perplexity']) + 1)
+                ax3.plot(val_epochs, metrics['val_perplexity'], 'y-', linewidth=2, label='Validation Perplexity', color=self.colors['validation'])
+        
+        ax3.set_title('Perplexity Curves', fontsize=16)
+        ax3.set_xlabel('Epoch', fontsize=14)
+        ax3.set_ylabel('Perplexity', fontsize=14)
+        ax3.tick_params(axis='both', which='major', labelsize=12)
+        ax3.legend(fontsize=12)
+        ax3.grid(True, alpha=0.3)
+        
+        # Plot 4: Learning Rate or Checkpoint Loss
+        ax4 = axs[1, 1]
+        if 'learning_rates' in metrics and metrics['learning_rates'] and len(metrics['learning_rates']) > 0:
+            epochs = range(1, len(metrics['learning_rates']) + 1)
+            ax4.plot(epochs, metrics['learning_rates'], '-', linewidth=2, color=self.colors['learning_rate'])
+            ax4.set_title('Learning Rate Schedule', fontsize=16)
+            ax4.set_xlabel('Epoch', fontsize=14)
+            ax4.set_ylabel('Learning Rate', fontsize=14)
+            ax4.set_yscale('log')
+        elif 'checkpoints' in metrics and metrics['checkpoints']:
+            steps = [ckpt['step'] for ckpt in metrics['checkpoints']]
+            losses = [ckpt['loss'] for ckpt in metrics['checkpoints']]
+            ax4.plot(steps, losses, '-', linewidth=2, color=self.colors['checkpoint'])
+            ax4.set_title('Checkpoint Losses', fontsize=16)
+            ax4.set_xlabel('Step', fontsize=14)
+            ax4.set_ylabel('Loss', fontsize=14)
+        else:
+            ax4.set_title('No Learning Rate or Checkpoint Data Available', fontsize=16)
+            
+        ax4.tick_params(axis='both', which='major', labelsize=12)
+        ax4.grid(True, alpha=0.3)
+        
+        # Add metadata as text
+        metadata_text = [
+            f"Dataset: {dataset_name}",
+            f"Epochs: {len(metrics.get('loss', []))}",
+            f"Batch Size: {metrics.get('batch_size', 'N/A')}",
+            f"Gradient Accumulation: {metrics.get('gradient_accumulation_steps', 'N/A')}",
+            f"Sequence Length: {metrics.get('sequence_length', 'N/A')}",
+            f"Training Time: {metrics.get('training_time', 'N/A'):.2f} seconds" if metrics.get('training_time') else "Training Time: N/A"
+        ]
+        
+        fig.text(0.5, 0.01, "\n".join(metadata_text), ha='center', fontsize=14, 
+                 bbox=dict(facecolor='white', alpha=0.8, edgecolor='gray', boxstyle='round,pad=1'))
+        
+        # Adjust layout and save figure
+        plt.tight_layout(rect=[0, 0.04, 1, 0.96])
+        combined_path = os.path.join(output_dir, f"{dataset_name}_combined_{timestamp}.png")
+        plt.savefig(combined_path, dpi=self.dpi)
+        plt.close()
+        
+        return combined_path
+    
+    def _plot_checkpoint_progress(self, metrics, dataset_name, output_dir, timestamp):
+        """Create visualization of checkpoint progress"""
+        if not metrics.get('checkpoints'):
+            return None
+            
+        plt.figure(figsize=(14, 8))
+        
+        steps = [ckpt['step'] for ckpt in metrics['checkpoints']]
+        losses = [ckpt['loss'] for ckpt in metrics['checkpoints']]
+        
+        plt.plot(steps, losses, '-o', linewidth=2, markersize=8, color=self.colors['checkpoint'])
+        
+        plt.title(f'Training Progress by Checkpoint - {dataset_name}', fontsize=16)
+        plt.xlabel('Training Step', fontsize=14)
+        plt.ylabel('Loss', fontsize=14)
+        plt.xticks(fontsize=12)
+        plt.yticks(fontsize=12)
+        plt.grid(True, alpha=0.3)
+        
+        # Add annotations for best checkpoint
+        if losses:
+            best_idx = np.argmin(losses)
+            best_step = steps[best_idx]
+            best_loss = losses[best_idx]
+            plt.annotate(f'Best: {best_loss:.4f} (Step {best_step})',
+                xy=(best_step, best_loss), 
+                xytext=(best_step, best_loss * 1.1),
+                arrowprops=dict(facecolor='black', shrink=0.05, width=1.5, headwidth=8),
+                fontsize=12,
+                bbox=dict(boxstyle="round,pad=0.3", fc="yellow", alpha=0.3))
+        
+        # Save the figure
+        checkpoint_path = os.path.join(output_dir, f"{dataset_name}_checkpoints_{timestamp}.png")
+        plt.tight_layout()
+        plt.savefig(checkpoint_path, dpi=self.dpi)
+        plt.close()
+        
+        return checkpoint_path
+        
     def create_comparison_plot(self, metrics_by_dataset: Dict[str, Dict[str, List[float]]], metric_name: str):
         """Create a comparison plot for a specific metric across datasets"""
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         
-        plt.figure(figsize=(12, 8))
+        plt.figure(figsize=(14, 10))
         
         for dataset_name, metrics in metrics_by_dataset.items():
             if metric_name in metrics and len(metrics[metric_name]) > 0:
-                plt.plot(metrics[metric_name], label=dataset_name)
+                epochs = range(1, len(metrics[metric_name]) + 1)
+                plt.plot(epochs, metrics[metric_name], '-', linewidth=2, label=dataset_name)
                 
-        plt.title(f'Comparison of {metric_name.capitalize()} Across Datasets')
-        plt.xlabel('Epoch')
-        plt.ylabel(metric_name.capitalize())
-        plt.legend()
-        plt.grid(True)
+        plt.title(f'Comparison of {metric_name.capitalize()} Across Datasets', fontsize=18)
+        plt.xlabel('Epoch', fontsize=16)
+        plt.ylabel(metric_name.capitalize(), fontsize=16)
+        plt.legend(fontsize=14)
+        plt.grid(True, alpha=0.3)
+        plt.xticks(fontsize=14)
+        plt.yticks(fontsize=14)
         
-        # Save the figure
-        comparison_path = os.path.join(self.output_dir, f"comparison_{metric_name}_{timestamp}.png")
-        plt.savefig(comparison_path, dpi=300)
+        # Add a table with final values
+        table_data = []
+        for dataset_name, metrics in metrics_by_dataset.items():
+            if metric_name in metrics and len(metrics[metric_name]) > 0:
+                final_value = metrics[metric_name][-1]
+                best_value = min(metrics[metric_name]) if metric_name in ['loss', 'perplexity'] else max(metrics[metric_name])
+                table_data.append([dataset_name, f"{final_value:.4f}", f"{best_value:.4f}"])
+        
+        if table_data:
+            # Add table as a text box
+            header = ["Dataset", f"Final {metric_name}", f"Best {metric_name}"]
+            table_text = []
+            
+            # Format header
+            header_line = " | ".join(header)
+            table_text.append(header_line)
+            table_text.append("-" * len(header_line))
+            
+            # Format data rows
+            for row in table_data:
+                table_text.append(" | ".join(row))
+            
+            full_text = "\n".join(table_text)
+            plt.figtext(0.5, 0.01, full_text, fontsize=14, ha='center', va='bottom',
+                       bbox=dict(facecolor='white', alpha=0.8, edgecolor='gray', boxstyle='round,pad=1'))
+        
+        # Save the figure with higher resolution
+        comparison_path = os.path.join(self.comparisons_dir, f"comparison_{metric_name}_{timestamp}.png")
+        plt.tight_layout(rect=[0, 0.1, 1, 0.98])
+        plt.savefig(comparison_path, dpi=self.dpi)
         plt.close()
+        
         print(f"Comparison visualization saved to {comparison_path}")
+        return comparison_path
+        
+    def create_final_report(self, metrics_by_dataset: Dict[str, Dict[str, Any]]):
+        """Create a final HTML report comparing all datasets"""
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        report_path = os.path.join(self.output_dir, f"training_report_{timestamp}.html")
+        
+        with open(report_path, 'w') as f:
+            f.write("<html><head><title>Training Report</title>\n")
+            f.write("<style>body{font-family:Arial,sans-serif; margin:20px;} table{border-collapse:collapse; width:100%;} ")
+            f.write("th,td{text-align:left; padding:8px; border:1px solid #ddd;} ")
+            f.write("th{background-color:#f2f2f2;} tr:nth-child(even){background-color:#f9f9f9;} ")
+            f.write("img{max-width:900px; margin:10px;}</style>\n")
+            f.write("</head><body>\n")
+            f.write("<h1>Training Report</h1>\n")
+            f.write(f"<p>Generated on: {timestamp}</p>\n")
+            
+            # Add comparison metrics table
+            f.write("<h2>Metrics Comparison</h2>\n")
+            f.write("<table>\n")
+            f.write("<tr><th>Dataset</th><th>Final Loss</th><th>Best Val Loss</th>")
+            f.write("<th>Final Accuracy</th><th>Final Perplexity</th>")
+            f.write("<th>Batch Size</th><th>Sequence Length</th><th>Training Time</th></tr>\n")
+            
+            for dataset_name, metrics in metrics_by_dataset.items():
+                final_loss = metrics.get('loss', [])[-1] if metrics.get('loss', []) else "N/A"
+                best_val_loss = min(metrics.get('val_loss', [float('inf')])) if metrics.get('val_loss', []) else "N/A"
+                final_acc = metrics.get('accuracy', [])[-1] if metrics.get('accuracy', []) else "N/A"
+                final_perp = metrics.get('perplexity', [])[-1] if metrics.get('perplexity', []) else "N/A"
+                batch_size = metrics.get('batch_size', "N/A")
+                seq_len = metrics.get('sequence_length', "N/A")
+                train_time = metrics.get('training_time', "N/A")
+                
+                f.write("<tr>")
+                f.write(f"<td>{dataset_name}</td>")
+                f.write(f"<td>{final_loss:.4f}</td>" if isinstance(final_loss, (int, float)) else f"<td>{final_loss}</td>")
+                f.write(f"<td>{best_val_loss:.4f}</td>" if isinstance(best_val_loss, (int, float)) else f"<td>{best_val_loss}</td>")
+                f.write(f"<td>{final_acc:.4f}</td>" if isinstance(final_acc, (int, float)) else f"<td>{final_acc}</td>")
+                f.write(f"<td>{final_perp:.4f}</td>" if isinstance(final_perp, (int, float)) else f"<td>{final_perp}</td>")
+                f.write(f"<td>{batch_size}</td>")
+                f.write(f"<td>{seq_len}</td>")
+                f.write(f"<td>{train_time:.2f}s</td>" if isinstance(train_time, (int, float)) else f"<td>{train_time}</td>")
+                f.write("</tr>\n")
+                
+            f.write("</table>\n")
+            
+            # Create comparison plots
+            metrics_list = ['loss', 'accuracy', 'perplexity']
+            for metric in metrics_list:
+                valid_datasets = {k: v for k, v in metrics_by_dataset.items() if metric in v and v[metric]}
+                if valid_datasets:
+                    comparison_path = self.create_comparison_plot(valid_datasets, metric)
+                    if comparison_path:
+                        f.write(f"<h2>{metric.capitalize()} Comparison</h2>\n")
+                        rel_path = os.path.relpath(comparison_path, self.output_dir)
+                        f.write(f"<img src='{rel_path}' alt='{metric.capitalize()} Comparison'/>\n")
+            
+            # Add links to individual dataset reports
+            f.write("<h2>Individual Dataset Reports</h2>\n")
+            f.write("<ul>\n")
+            for dataset_name in metrics_by_dataset.keys():
+                # Find the latest visualization directory for this dataset
+                vis_dirs = [d for d in os.listdir(self.plots_dir) if d.startswith(f"{dataset_name}_")]
+                if vis_dirs:
+                    latest_dir = sorted(vis_dirs)[-1]
+                    index_path = os.path.join(self.plots_dir, latest_dir, "index.html")
+                    if os.path.exists(index_path):
+                        rel_path = os.path.relpath(index_path, self.output_dir)
+                        f.write(f"<li><a href='{rel_path}'>{dataset_name}</a></li>\n")
+            
+            f.write("</ul>\n")
+            f.write("</body></html>\n")
+            
+        print(f"Final training report saved to {report_path}")
+        return report_path
 
 def calculate_metrics(model, data_batches, device):
     """Calculate evaluation metrics for a model on the given data"""
@@ -268,25 +722,48 @@ def parse_args():
 def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = None,
                         learning_rate: float = 0.002, clip_value: float = 5.0,
                         use_scheduler: bool = False, force_gpu: bool = True,
-                        validation_split: float = 0.2, create_visualizations: bool = True) -> Tuple[torch.nn.Module, Dict[str, List[float]]]:
+                        validation_split: float = 0.2, create_visualizations: bool = True,
+                        batch_size: int = 16, sequence_length: int = 2048, 
+                        gradient_accumulation_steps: int = 4) -> Tuple[torch.nn.Module, Dict[str, List[float]]]:
     """Train the text generator model with enhanced configuration and evaluation"""
     print(f"\nTraining text generator on {dataset_name} dataset...")
+    
+    # Set up checkpoint directory and log
+    checkpoint_dir = os.path.join(os.path.dirname(model_path) if model_path else "checkpoints", f"{dataset_name}_checkpoints")
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    
+    checkpoint_log = os.path.join(checkpoint_dir, f"{dataset_name}_training_log.txt")
+    with open(checkpoint_log, 'w') as f:
+        f.write(f"Training started at: {datetime.datetime.now().isoformat()}\n")
+        f.write(f"Dataset: {dataset_name}, Batch size: {batch_size}, Sequence length: {sequence_length}\n")
+        f.write(f"Gradient accumulation steps: {gradient_accumulation_steps}, Learning rate: {learning_rate}\n\n")
+    
+    def log_checkpoint(message):
+        with open(checkpoint_log, 'a') as f:
+            timestamp = datetime.datetime.now().isoformat()
+            f.write(f"[{timestamp}] {message}\n")
+        print(f"CHECKPOINT: {message}")
+    
+    log_checkpoint(f"Initializing training for {dataset_name} dataset")
 
     # Initialize dataset processor
     dataset_processor = DatasetProcessor()
 
     try:
         # Load preprocessed data
+        log_checkpoint("Loading preprocessed data")
         data = dataset_processor.load_preprocessed_data(dataset_name)
         if not data:
-            print(f"Error: No data loaded for {dataset_name}")
+            log_checkpoint(f"Error: No data loaded for {dataset_name}")
             return None, None
 
         # Get vocabulary size
         vocab_size = data.get('vocab_size', 0)
         if vocab_size == 0:
-            print("Error: Invalid vocabulary size")
+            log_checkpoint("Error: Invalid vocabulary size")
             return None, None
+        
+        log_checkpoint(f"Vocabulary size: {vocab_size}")
 
         # Create model with enhanced configuration for writing prompts
         if dataset_name == "writing_prompts":
@@ -296,6 +773,7 @@ def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = 
             hidden_size = 128
             num_layers = 2
 
+        log_checkpoint(f"Creating model with hidden_size={hidden_size}, num_layers={num_layers}")
         model = CombinedModel(
             input_size=vocab_size,
             hidden_size=hidden_size,
@@ -308,6 +786,7 @@ def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = 
 
         # Add learning rate scheduler if requested
         if use_scheduler:
+            log_checkpoint("Using learning rate scheduler with patience=2")
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
                 optimizer, mode='min', factor=0.5, patience=2, verbose=True
             )
@@ -317,30 +796,30 @@ def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = 
         if force_gpu:
             # Try to use MPS (Metal Performance Shaders) for Apple Silicon
             if hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-                print("Using MPS (Apple Silicon GPU)")
+                log_checkpoint("Using MPS (Apple Silicon GPU)")
                 device = torch.device("mps")
             # Fall back to CUDA if available
             elif torch.cuda.is_available():
-                print(f"Using CUDA GPU: {torch.cuda.get_device_name(0)}")
+                log_checkpoint(f"Using CUDA GPU: {torch.cuda.get_device_name(0)}")
                 device = torch.device("cuda")
             else:
-                print("Warning: GPU requested but neither MPS nor CUDA is available. Falling back to CPU.")
+                log_checkpoint("Warning: GPU requested but neither MPS nor CUDA is available. Falling back to CPU.")
         elif hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-            print("Using MPS (Apple Silicon GPU)")
+            log_checkpoint("Using MPS (Apple Silicon GPU)")
             device = torch.device("mps")
         elif torch.cuda.is_available():
-            print(f"Using CUDA GPU: {torch.cuda.get_device_name(0)}")
+            log_checkpoint(f"Using CUDA GPU: {torch.cuda.get_device_name(0)}")
             device = torch.device("cuda")
         else:
-            print("Using CPU (no GPU available)")
+            log_checkpoint("Using CPU (no GPU available)")
 
-        print(f"Using device: {device}")
+        log_checkpoint(f"Moving model to device: {device}")
         model = model.to(device)
 
         # Get batches and split into train/validation
         batches = data.get('batches', [])
         if not batches:
-            print("Error: No batches found in data")
+            log_checkpoint("Error: No batches found in data")
             return None, None
             
         # Split data for validation
@@ -348,14 +827,26 @@ def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = 
             val_size = max(1, int(len(batches) * validation_split))
             train_batches = batches[:-val_size]
             val_batches = batches[-val_size:]
-            print(f"Split data: {len(train_batches)} training batches, {len(val_batches)} validation batches")
+            log_checkpoint(f"Split data: {len(train_batches)} training batches, {len(val_batches)} validation batches")
         else:
             train_batches = batches
             val_batches = []
-            print(f"Using all {len(train_batches)} batches for training (no validation)")
+            log_checkpoint(f"Using all {len(train_batches)} batches for training (no validation)")
+
+        # Determine steps for gradient accumulation
+        total_steps = epochs * len(train_batches)
+        steps_per_epoch = len(train_batches)
+        effective_batch_size = batch_size * gradient_accumulation_steps
+        log_checkpoint(f"Using gradient accumulation: {gradient_accumulation_steps} steps")
+        log_checkpoint(f"Effective batch size: {effective_batch_size}")
+        log_checkpoint(f"Total training steps: {total_steps}")
+        
+        # Create checkpoint savings schedule
+        checkpoint_frequency = max(1, steps_per_epoch // 5)  # Save 5 checkpoints per epoch
+        log_checkpoint(f"Will save checkpoints every {checkpoint_frequency} steps")
 
         # Training loop
-        print(f"Training on {len(train_batches)} batches for {epochs} epochs")
+        log_checkpoint(f"Starting training on {len(train_batches)} batches for {epochs} epochs")
         model.train()
         criterion = torch.nn.CrossEntropyLoss()
 
@@ -367,7 +858,10 @@ def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = 
             'device_used': str(device),
             'vocab_size': vocab_size,
             'num_batches': len(batches),
-            'batch_size': batches[0][0].size(0) if batches else 0,
+            'batch_size': batch_size,
+            'gradient_accumulation_steps': gradient_accumulation_steps,
+            'effective_batch_size': effective_batch_size,
+            'sequence_length': sequence_length,
             'dataset': dataset_name,
             'model_type': 'text',
             'timestamp': datetime.datetime.now().isoformat(),
@@ -385,70 +879,144 @@ def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = 
             'accuracy': [],  # For visualization
             'val_accuracy': [],  # For visualization
             'perplexity': [],  # For visualization
-            'val_perplexity': []  # For visualization
+            'val_perplexity': [],  # For visualization
+            'checkpoints': []  # Store checkpoint information
         }
 
         import time
         start_time = time.time()
+        global_step = 0
+        best_val_loss = float('inf')
+        early_stopping_patience = 5
+        early_stopping_counter = 0
 
         for epoch in range(epochs):
             epoch_loss = 0
             batch_count = 0
+            
+            log_checkpoint(f"Starting epoch {epoch+1}/{epochs}")
+            optimizer.zero_grad()  # Zero gradients at the beginning of epoch
 
-            for input_batch, target_batch in tqdm(train_batches, desc=f"Epoch {epoch+1}/{epochs}"):
+            for batch_idx, (input_batch, target_batch) in enumerate(tqdm(train_batches, desc=f"Epoch {epoch+1}/{epochs}")):
                 # Move data to device
                 input_batch = input_batch.to(device)
                 target_batch = target_batch.to(device)
-
-                # Zero gradients
-                optimizer.zero_grad()
 
                 # Forward pass
                 output, _ = model(input_batch)
 
                 # Calculate loss
                 loss = criterion(output.view(-1, output.size(-1)), target_batch.view(-1))
-
-                # Backward pass and optimize
+                
+                # Scale loss for gradient accumulation
+                loss = loss / gradient_accumulation_steps
+                
+                # Backward pass
                 loss.backward()
 
                 # Clip gradients
-                if clip_value > 0:
+                if clip_value > 0 and (batch_idx + 1) % gradient_accumulation_steps == 0:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), clip_value)
+                
+                # Update weights only after accumulating gradients
+                if (batch_idx + 1) % gradient_accumulation_steps == 0:
+                    optimizer.step()
+                    optimizer.zero_grad()
+                    
+                    # Increment global step
+                    global_step += 1
+                    
+                    # Log every 50 steps
+                    if global_step % 50 == 0:
+                        log_checkpoint(f"Step {global_step}: Loss = {loss.item() * gradient_accumulation_steps:.4f}")
+                    
+                    # Save checkpoint periodically
+                    if global_step % checkpoint_frequency == 0:
+                        checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint-{global_step}.pt")
+                        torch.save({
+                            'epoch': epoch,
+                            'global_step': global_step,
+                            'model_state_dict': model.state_dict(),
+                            'optimizer_state_dict': optimizer.state_dict(),
+                            'loss': loss.item() * gradient_accumulation_steps,
+                            'vocab_size': vocab_size
+                        }, checkpoint_path)
+                        log_checkpoint(f"Saved checkpoint to {checkpoint_path}")
+                        
+                        # Add checkpoint info to metrics
+                        metrics['checkpoints'].append({
+                            'step': global_step,
+                            'path': checkpoint_path,
+                            'loss': loss.item() * gradient_accumulation_steps,
+                            'epoch': epoch
+                        })
 
-                optimizer.step()
-
-                # Track metrics
-                epoch_loss += loss.item()
+                # Track metrics (use the unnormalized loss for reporting)
+                epoch_loss += loss.item() * gradient_accumulation_steps
                 batch_count += 1
 
+            # Handle any remaining gradients
+            if len(train_batches) % gradient_accumulation_steps != 0:
+                optimizer.step()
+                optimizer.zero_grad()
+            
             # Calculate epoch statistics
             avg_epoch_loss = epoch_loss / batch_count if batch_count > 0 else 0
             metrics['epoch_losses'].append(avg_epoch_loss)
             
             # Calculate training metrics
+            log_checkpoint("Calculating training metrics")
             train_metrics = calculate_metrics(model, train_batches[:min(10, len(train_batches))], device)
             metrics['loss'].append(train_metrics['loss'])
             metrics['accuracy'].append(train_metrics['accuracy'])
             metrics['perplexity'].append(train_metrics['perplexity'])
             
             # Calculate validation metrics if available
+            val_loss = None
             if val_batches:
+                log_checkpoint("Calculating validation metrics")
                 val_metrics = calculate_metrics(model, val_batches, device)
                 metrics['val_loss'].append(val_metrics['loss'])
                 metrics['val_accuracy'].append(val_metrics['accuracy'])
                 metrics['val_perplexity'].append(val_metrics['perplexity'])
+                val_loss = val_metrics['loss']
                 
-                print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_epoch_loss:.4f}, "
+                log_checkpoint(f"Epoch {epoch+1}/{epochs}, Loss: {avg_epoch_loss:.4f}, "
                       f"Val Loss: {val_metrics['loss']:.4f}, "
                       f"Val Accuracy: {val_metrics['accuracy']:.4f}, "
                       f"Val Perplexity: {val_metrics['perplexity']:.4f}")
+                
+                # Early stopping check
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                    early_stopping_counter = 0
+                    
+                    # Save best model
+                    if model_path:
+                        best_model_path = model_path.replace('.pt', '_best.pt')
+                        torch.save({
+                            'model_state_dict': model.state_dict(),
+                            'optimizer_state_dict': optimizer.state_dict(),
+                            'epoch': epoch,
+                            'loss': best_val_loss,
+                            'vocab_size': vocab_size,
+                            'metrics': metrics
+                        }, best_model_path)
+                        log_checkpoint(f"Saved best model with val_loss={best_val_loss:.4f} to {best_model_path}")
+                else:
+                    early_stopping_counter += 1
+                    log_checkpoint(f"Validation loss did not improve. Early stopping counter: {early_stopping_counter}/{early_stopping_patience}")
+                    
+                    if early_stopping_counter >= early_stopping_patience:
+                        log_checkpoint(f"Early stopping triggered after {epoch+1} epochs")
+                        break
             else:
-                print(f"Epoch {epoch+1}/{epochs}, Loss: {avg_epoch_loss:.4f}")
+                log_checkpoint(f"Epoch {epoch+1}/{epochs}, Loss: {avg_epoch_loss:.4f}")
 
             metrics['training_progress'].append({
                 'epoch': epoch + 1,
                 'loss': avg_epoch_loss,
+                'val_loss': val_loss,
                 'timestamp': datetime.datetime.now().isoformat()
             })
 
@@ -456,22 +1024,47 @@ def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = 
             if use_scheduler:
                 val_loss = val_metrics['loss'] if val_batches else avg_epoch_loss
                 scheduler.step(val_loss)
-                metrics['learning_rates'].append(optimizer.param_groups[0]['lr'])
+                current_lr = optimizer.param_groups[0]['lr']
+                metrics['learning_rates'].append(current_lr)
+                log_checkpoint(f"Learning rate updated to: {current_lr}")
+                
+            # Save model after each epoch
+            if model_path:
+                epoch_model_path = model_path.replace('.pt', f'_epoch_{epoch+1}.pt')
+                torch.save({
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'epoch': epoch,
+                    'loss': avg_epoch_loss,
+                    'vocab_size': vocab_size,
+                    'metrics': metrics
+                }, epoch_model_path)
+                log_checkpoint(f"Saved model at epoch {epoch+1} to {epoch_model_path}")
 
         # Final metrics
+        training_time = time.time() - start_time
         metrics['final_loss'] = metrics['epoch_losses'][-1] if metrics['epoch_losses'] else None
-        metrics['training_time'] = time.time() - start_time
+        metrics['training_time'] = training_time
+        log_checkpoint(f"Training completed in {training_time:.2f} seconds")
 
         # Create visualizations if requested
         if create_visualizations:
+            log_checkpoint("Generating training visualizations")
             visualizer = TrainingVisualizer(output_dir="visualizations")
             visualizer.visualize_training(dataset_name, metrics)
 
-        # Save model if requested
+        # Save final model if requested
         if model_path:
             os.makedirs(os.path.dirname(model_path), exist_ok=True)
-            torch.save(model.state_dict(), model_path)
-            print(f"Model saved to {model_path}")
+            torch.save({
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'epoch': epochs,
+                'loss': metrics['final_loss'],
+                'vocab_size': vocab_size,
+                'metrics': metrics
+            }, model_path)
+            log_checkpoint(f"Final model saved to {model_path}")
             
             # Save metrics
             metrics_path = os.path.join(os.path.dirname(model_path), f"{dataset_name}_metrics.json")
@@ -484,14 +1077,37 @@ def train_text_generator(dataset_name: str, epochs: int = 50, model_path: str = 
                     elif isinstance(v, torch.Tensor):
                         serializable_metrics[k] = v.item() if v.numel() == 1 else v.tolist()
                 json.dump(serializable_metrics, f, indent=2)
-            print(f"Training metrics saved to {metrics_path}")
+            log_checkpoint(f"Training metrics saved to {metrics_path}")
+            
+            # Create a completion marker
+            with open(os.path.join(os.path.dirname(model_path), f"{dataset_name}_TRAINING_COMPLETE.txt"), 'w') as f:
+                f.write(f"Training completed at: {datetime.datetime.now().isoformat()}\n")
+                f.write(f"Final loss: {metrics['final_loss']}\n")
+                if 'val_loss' in metrics and metrics['val_loss']:
+                    f.write(f"Best validation loss: {best_val_loss}\n")
+                f.write(f"Training time: {training_time:.2f} seconds\n")
 
+        log_checkpoint("Training process completed successfully")
         return model, metrics
 
     except Exception as e:
-        print(f"Error during training: {e}")
+        error_msg = f"Error during training: {e}"
+        log_checkpoint(error_msg)
         import traceback
-        traceback.print_exc()
+        traceback_str = traceback.format_exc()
+        log_checkpoint(f"Traceback: {traceback_str}")
+        
+        # Save error information
+        if model_path:
+            error_path = os.path.join(os.path.dirname(model_path), f"{dataset_name}_error.json")
+            with open(error_path, 'w') as f:
+                json.dump({
+                    'error': str(e),
+                    'traceback': traceback_str,
+                    'timestamp': datetime.datetime.now().isoformat()
+                }, f, indent=2)
+            log_checkpoint(f"Error information saved to {error_path}")
+            
         return None, None
 
 def train_code_generator(dataset_name="writing_prompts", epochs=50, model_path=None):
@@ -976,101 +1592,182 @@ def split_data(data: Dict[str, Any], eval_split: float = 0.2) -> Tuple[Dict[str,
     return train_data, eval_data
 
 def main():
+    """Main function for running the unified generation pipeline"""
     args = parse_args()
     
-    # Set dataset to "both" to process both persona_chat and writing_prompts by default for training
-    if args.mode == "train" and args.dataset not in ["all", "both", "code"]:
-        print("Setting dataset to 'both' to train on both persona_chat and writing_prompts")
-        args.dataset = "both"
-        args.save_model = True  # Always save models
+    # Track execution time
+    start_time = time.time()
     
-    if args.mode == "preprocess":
-        # Preprocess all datasets
-        datasets = preprocess_datasets(args)
+    # Check for interactive mode first
+    if args.interactive:
+        # Load the correct model for interactive generation
+        model, tokenizer, model_type = load_correct_model(args)
+        if model:
+            print(f"\nEntering interactive mode with {model_type} model...")
+            interactive_generation(model, tokenizer, model_type, args.force_gpu)
+        else:
+            print("Failed to load model for interactive mode.")
+        return
     
-    elif args.mode == "train":
-        # Preprocess and train on all datasets
-        datasets = preprocess_datasets(args)
-        train_on_datasets(args, datasets)
+    # Set random seed for reproducibility if provided
+    if args.seed is not None:
+        np.random.seed(args.seed)
+        torch.manual_seed(args.seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(args.seed)
+        random.seed(args.seed)
+        print(f"Random seed set to {args.seed}")
     
-    elif args.mode == "generate":
-        load_correct_model(args)
+    # Create necessary directories
+    os.makedirs("models", exist_ok=True)
+    os.makedirs("preprocessed_data", exist_ok=True)
+    os.makedirs("metrics", exist_ok=True)
+    os.makedirs("visualizations", exist_ok=True)
+    os.makedirs("checkpoints", exist_ok=True)
+
+    # Display hardware information
+    print("\n=== Hardware Information ===")
+    if torch.cuda.is_available():
+        print(f"CUDA available: {torch.cuda.is_available()}")
+        print(f"CUDA device count: {torch.cuda.device_count()}")
+        print(f"CUDA device name: {torch.cuda.get_device_name(0)}")
+    elif hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        print("MPS (Apple Silicon) available for acceleration")
+    else:
+        print("No GPU acceleration available, using CPU")
     
-    elif args.mode == "evaluate":
-        # Load and evaluate models for each dataset
-        datasets = preprocess_datasets(args)
-        
-        # Special case for deepseek code model
-        if args.use_deepseek:
-            print("\n===== Evaluating deepseek code model =====")
-            # This would typically be handled in the fine-tuning process
-            print("Deepseek evaluation is performed during the fine-tuning process")
-            print("To evaluate the model again, run in train mode")
-        
-        for dataset_name, data in datasets.items():
-            if dataset_name in ["persona_chat", "writing_prompts"]:
-                print(f"\n===== Evaluating {dataset_name} dataset =====")
-                _, eval_data = split_data(data, args.eval_split)
-                
-                # Evaluate text model
-                model_path = os.path.join(args.model_dir, f"text_gen_{dataset_name}.pt")
-                if os.path.exists(model_path):
-                    model, _ = load_model(model_path)
-                    metrics = evaluate_model(model, eval_data, args.metrics)
-                    save_evaluation_metrics(metrics, dataset_name, "text")
+    # Preprocessing
+    datasets = {}
+    if args.preprocess:
+        print("\n=== Preprocessing Datasets ===")
+        with print_execution_time("Preprocessing"):
+            datasets = preprocess_datasets(args)
     
-    elif args.mode == "interactive":
-        # Special case for deepseek code generation
-        if args.gen_type == "code" and args.use_deepseek:
-            from generative_ai_module.code_generator import CodeGenerator
-            print("\nStarting interactive code generation mode with deepseek...")
-            print("Type 'quit' to exit")
+    # Training
+    if args.train:
+        print("\n=== Training Models ===")
+        if not datasets and not args.preprocess:
+            print("Loading preprocessed datasets for training...")
+            dataset_processor = DatasetProcessor()
             
-            code_gen = CodeGenerator(use_deepseek=True)
-            
-            while True:
-                try:
-                    prompt = input("\nEnter code description: ")
-                    if prompt.lower() == 'quit':
-                        break
-                    
-                    print("\nGenerating code...")
-                    response = code_gen.generate_code(
-                        prompt=prompt,
-                        length=args.length,
-                        temperature=args.temperature
-                    )
-                    
-                    print("\nGenerated code:")
-                    print(response)
-                    
-                except KeyboardInterrupt:
+            # Load specified datasets
+            for dataset_name in args.datasets:
+                if dataset_name == "all":
+                    for name in ["pile", "openassistant", "gpteacher"]:
+                        data = dataset_processor.load_preprocessed_data(name)
+                        if data:
+                            datasets[name] = data
+                            print(f"Loaded preprocessed data for {name}")
+                        else:
+                            print(f"Failed to load preprocessed data for {name}. Run with --preprocess first.")
                     break
-                except Exception as e:
-                    print(f"Error generating code: {e}")
+                else:
+                    data = dataset_processor.load_preprocessed_data(dataset_name)
+                    if data:
+                        datasets[dataset_name] = data
+                        print(f"Loaded preprocessed data for {dataset_name}")
+                    else:
+                        print(f"Failed to load preprocessed data for {dataset_name}. Run with --preprocess first.")
+        
+        # Initialize training visualizer for comparing results
+        visualizer = TrainingVisualizer(output_dir="visualizations")
+        all_metrics = {}
+        
+        # Batch size and sequence length settings
+        batch_size = 16  # Optimized batch size
+        sequence_length = 2048  # Optimized sequence length
+        gradient_accumulation_steps = 4  # Gradient accumulation steps
+        
+        with print_execution_time("Training"):
+            for dataset_name, dataset in datasets.items():
+                print(f"\n=== Training on {dataset_name} dataset ===")
+                # Skip if this dataset is marked to be skipped
+                if args.skip and dataset_name in args.skip:
+                    print(f"Skipping training on {dataset_name} as requested")
+                    continue
+                    
+                # Determine model path
+                model_dir = os.path.join("models", dataset_name)
+                os.makedirs(model_dir, exist_ok=True)
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                model_path = os.path.join(model_dir, f"{dataset_name}_model_{timestamp}.pt")
+                
+                # Train model with improved parameters
+                model, metrics = train_text_generator(
+                    dataset_name=dataset_name,
+                    epochs=args.epochs,
+                    model_path=model_path,
+                    learning_rate=args.learning_rate,
+                    clip_value=args.clip_value,
+                    use_scheduler=args.use_scheduler,
+                    force_gpu=args.force_gpu,
+                    validation_split=args.validation_split,
+                    create_visualizations=True,
+                    batch_size=batch_size,
+                    sequence_length=sequence_length,
+                    gradient_accumulation_steps=gradient_accumulation_steps
+                )
+                
+                if metrics:
+                    all_metrics[dataset_name] = metrics
+            
+            # Create comparison visualizations if we have metrics for multiple datasets
+            if len(all_metrics) > 1:
+                visualizer.create_final_report(all_metrics)
+                for metric in ['loss', 'accuracy', 'perplexity']:
+                    visualizer.create_comparison_plot(all_metrics, metric)
+    
+    # Generation
+    if args.generate:
+        print("\n=== Generating Text ===")
+        if not args.model_path:
+            print("Error: Model path is required for generation. Use --model_path to specify the model.")
             return
         
-        # Regular text generation
-        dataset_name = args.dataset
-        if dataset_name not in ["persona_chat", "writing_prompts"]:
-            # Default to persona_chat for interactive mode
-            dataset_name = "persona_chat"
+        model_type = "deepseek" if args.use_deepseek else "text"
+        if model_type == "text":
+            # Load the model
+            model, vocab_size = load_model(args.model_path, model_type="text")
+            if model is None:
+                print(f"Failed to load model from {args.model_path}")
+                return
+                
+            # Load the tokenizer info
+            dataset_processor = DatasetProcessor()
+            dataset_name = os.path.basename(args.model_path).split('_model_')[0]
+            data = dataset_processor.load_preprocessed_data(dataset_name)
+            if not data:
+                print(f"Failed to load preprocessed data for {dataset_name}")
+                return
             
-        model_path = os.path.join(args.model_dir, f"text_gen_{dataset_name}.pt")
-        
-        # Check if model exists, if not, train it
-        if not os.path.exists(model_path):
-            print(f"Model not found at {model_path}. Training new model...")
-            datasets = preprocess_datasets(args)
-            train_on_datasets(args, datasets)
-        
-        model, vocab_size = load_model(model_path)
-        
-        # Initialize tokenizer if requested
-        tokenizer = BasicTokenizer() if args.use_tokenizer and BasicTokenizer else None
-        
-        # Start interactive session
-        interactive_generation(model, tokenizer, args.gen_type, force_gpu=args.force_gpu)
+            # Generate text
+            print(f"\nGenerating text from prompt: {args.prompt}")
+            generated_text = generate_with_char_model(
+                model, 
+                args.prompt, 
+                vocab_size, 
+                max_length=args.max_length,
+                temperature=args.temperature
+            )
+            print(f"\nGenerated text:\n{generated_text}")
+        else:
+            # For DeepSeek model, we use a different approach
+            print("Using DeepSeek model for generation...")
+            generator = CodeGenerator(use_deepseek=True)
+            generated_code = generator.generate_code(
+                args.prompt, 
+                length=args.max_length, 
+                temperature=args.temperature
+            )
+            print(f"\nGenerated code:\n{generated_code}")
+    
+    # Total execution time
+    total_time = time.time() - start_time
+    print(f"\nTotal execution time: {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
+    
+    print("\nPipeline execution completed successfully!")
+    
+    return
 
 def load_correct_model(args):
     # Generate with deepseek if requested
