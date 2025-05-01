@@ -1,6 +1,6 @@
 # DeepSeek-Coder Fine-tuning on Paperspace Gradient
 
-This guide explains how to fine-tune DeepSeek-Coder with storage optimizations on Paperspace Gradient using an RTX 5000 GPU.
+This guide explains how to fine-tune DeepSeek-Coder with Google Drive integration on Paperspace Gradient to overcome the 15GB storage limit.
 
 ## Setup Instructions
 
@@ -21,17 +21,30 @@ Run the following commands in your Gradient notebook:
 git clone https://github.com/your-username/Jarvis-AI-Assistant.git
 cd Jarvis-AI-Assistant
 
-# Run the storage optimization setup script
-bash setup_storage_optimization.sh
+# Run the Google Drive setup script
+bash setup_google_drive.sh
 ```
 
-## Fine-tuning with Storage Optimization
+### 3. Set Up Google Drive
 
-The following command will run fine-tuning with 4-bit quantization and storage optimization:
+1. Create a folder in your Google Drive to store models and checkpoints
+2. Open that folder and copy the folder ID from the URL
+   - The folder ID is the part after "folders/" in the URL: `https://drive.google.com/drive/folders/YOUR_FOLDER_ID`
+3. Edit `run_gdrive_finetune.sh` and replace `your_folder_id_here` with your actual Google Drive folder ID
+
+## Fine-tuning with Google Drive Integration
+
+Run the pre-configured script:
 
 ```bash
-python src/generative_ai_module/optimize_deepseek_storage.py \
-    --storage-type local \
+./run_gdrive_finetune.sh
+```
+
+Or customize your run with specific parameters:
+
+```bash
+python src/generative_ai_module/optimize_deepseek_gdrive.py \
+    --gdrive-folder-id YOUR_FOLDER_ID \
     --output-dir /storage/models/deepseek_optimized \
     --quantize 4 \
     --max-steps 500 \
@@ -41,49 +54,70 @@ python src/generative_ai_module/optimize_deepseek_storage.py \
     --max-checkpoints 2
 ```
 
-### Using S3 for External Storage
+## Advanced Google Drive Integration
 
-For larger datasets and models, you can use AWS S3 for storage:
+### Using Service Account for Headless Authentication
+
+For Paperspace Gradient's headless environment, you can use a service account:
+
+1. Go to the Google Cloud Console: https://console.cloud.google.com/apis/credentials
+2. Create a project and enable the Google Drive API
+3. Create a service account and download the JSON key
+4. Rename it to `service-account.json` and upload it to your Gradient notebook
+5. Run `setup_google_drive.sh` again to configure authentication
+
+### Efficient Checkpoint Strategies
+
+Choose from multiple checkpoint saving strategies to optimize storage:
+
+- `improvement`: Only saves checkpoints that improve validation metrics (default)
+- `regular`: Saves checkpoints at regular intervals
+- `hybrid`: Saves both the best checkpoint and the latest checkpoint
+- `all`: Saves all checkpoints (not recommended for limited storage)
+
+Example:
 
 ```bash
-python src/generative_ai_module/optimize_deepseek_storage.py \
-    --storage-type s3 \
-    --s3-bucket your-bucket-name \
-    --aws-access-key-id YOUR_ACCESS_KEY \
-    --aws-secret-access-key YOUR_SECRET_KEY \
-    --output-dir /storage/models/deepseek_optimized \
-    --quantize 4 \
-    --max-steps 500
+python src/generative_ai_module/optimize_deepseek_gdrive.py \
+    --gdrive-folder-id YOUR_FOLDER_ID \
+    --checkpoint-strategy hybrid \
+    --max-checkpoints 3
 ```
 
-## Storage Optimization Features
+## Storage Management
 
-This implementation includes several features to maximize storage efficiency:
+### Cleaning Up Local Storage
 
-1. **4-bit Quantization**: Reduces model size by ~87% compared to full precision
-2. **LoRA Fine-tuning**: Only saves adapter weights (~10-100MB) instead of full model (13+GB)
-3. **Efficient Checkpointing**: Only keeps the best-performing model checkpoints
-4. **External Storage Integration**: Optional S3 or Google Drive integration
-5. **Dataset Streaming**: Minimizes storage usage for training data
+After uploading models to Google Drive, you can free up local storage:
 
-## Using the Fine-tuned Model
+```bash
+./cleanup_storage.sh
+```
 
-After fine-tuning, you can use the model as follows:
+### Downloading Models from Google Drive
+
+To use a previously uploaded model:
 
 ```python
+from src.generative_ai_module.google_drive_storage import GoogleDriveStorage
 from unsloth import FastLanguageModel
 
-# Load the fine-tuned model
-base_model = "deepseek-ai/deepseek-coder-6.7b-base"
-adapter_path = "/storage/models/deepseek_optimized"
+# Initialize Google Drive storage
+gdrive = GoogleDriveStorage(folder_id="YOUR_FOLDER_ID")
 
+# Download model from Google Drive
+file_id = "YOUR_MODEL_FILE_ID"  # Get this from Google Drive
+local_model_dir = gdrive.download_model(file_id, "/storage/models/downloaded_model")
+
+# Load the downloaded model
+base_model = "deepseek-ai/deepseek-coder-6.7b-base"
 model, tokenizer = FastLanguageModel.from_pretrained(
     model_name=base_model,
     max_seq_length=2048,
     load_in_4bit=True
 )
 model = FastLanguageModel.get_peft_model(model)
-model.load_adapter(adapter_path)
+model.load_adapter(local_model_dir)
 
 # Generate code
 prompt = "### Instruction: Write a function to calculate the factorial of a number.\n\n### Response:"
@@ -94,14 +128,27 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 ## Troubleshooting
 
+### Google Drive Authentication Issues
+
+If you encounter authentication issues:
+
+1. Try using a service account for headless authentication
+2. Make sure the Google Drive API is enabled in your Google Cloud project
+3. If using browser authentication, run the script locally first to authenticate, then upload the credentials
+
+### Out-of-Memory Errors
+
 If you encounter CUDA out-of-memory errors:
 
 - Reduce batch size (try 1 or 2)
-- Reduce sequence length
-- Increase gradient accumulation steps
-
-For storage issues:
-
+- Reduce sequence length (try 512 or 1024)
+- Increase gradient accumulation steps (try 8 or 16)
 - Use 4-bit quantization instead of 8-bit
-- Enable external storage with S3
-- Reduce the number of checkpoints to keep
+
+### Storage Issues
+
+If you encounter storage issues:
+
+- Use the `cleanup_storage.sh` script to remove local models
+- Reduce the number of checkpoints with `--max-checkpoints 1`
+- Use the `improvement` checkpoint strategy to keep only the best model

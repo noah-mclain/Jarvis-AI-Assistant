@@ -16,15 +16,15 @@ pytest = "^8.2.2"
 [tool.poetry.dependencies]
 python = ">=3.10,<3.13"
 
-# NVIDIA GPU-optimized PyTorch
+# NVIDIA GPU-optimized PyTorch - exact versions for Paperspace Gradient
 torch = "2.1.2"
 torchvision = "0.16.2"
 torchaudio = "2.1.2"
 
-# For NVIDIA GPU
+# For NVIDIA GPU optimization on Paperspace Gradient
 flash-attn = "2.5.6"
 triton = "2.1.0"
-bitsandbytes = "0.43.0"  # For quantization on NVIDIA GPUs
+bitsandbytes = "0.43.0"  # For 4-bit/8-bit quantization
 
 # Core dependencies
 numpy = "1.26.4"
@@ -43,20 +43,31 @@ pandas = "2.2.2"
 scikit-learn = "1.4.2"
 jupyterlab = "4.4.1"
 tensorboard = "2.16.2"
-huggingface-hub = "0.23.0"
-safetensors = "0.4.2"
+huggingface-hub = "0.30.2"  # Updated to latest version
+safetensors = "0.5.3"  # Updated to latest version
+
+# Google Drive integration dependencies
+gdown = "^5.1.0"  # For downloading files from Google Drive
+google-auth = "^2.29.0"  # For Google authentication
+google-auth-oauthlib = "^1.2.0"  # For Google OAuth
+google-auth-httplib2 = "^0.2.0"  # For Google HTTP authentication
+fsspec = "^2024.3.1"  # For file system abstraction
 
 # Storage optimization dependencies
-boto3 = "1.34.86"  # For AWS S3 storage
-gdown = "5.1.0"  # For Google Drive integration
-psutil = "5.9.8"  # For memory management
-platformdirs = "4.2.0"  # Better path handling
+boto3 = "^1.34.86"  # For AWS S3 storage (optional)
+psutil = "^5.9.8"  # For memory management
+platformdirs = "^4.2.0"  # Better path handling
 
 # Unsloth for efficient fine-tuning
 unsloth = { git = "https://github.com/unslothai/unsloth.git" }
 
 # Typing extensions
 typing-extensions = ">=4.5.0"
+
+# Additional dependencies for stable operation
+jsonschema = "^4.23.0"
+packaging = "^25.0"
+filelock = "^3.18.0"
 
 [[tool.poetry.source]]
 name = "mac-metal"
@@ -67,5 +78,11 @@ priority = "supplemental"
 url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0.tar.gz"
 
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0,", "setuptools", "cmake", "ninja", "rust"]
+requires = ["poetry-core>=2.0.0,<3.0.0", "setuptools", "cmake", "ninja", "rust"]
 build-backend = "poetry.core.masonry.api"
+
+# Configuration for Paperspace Gradient
+[tool.jarvis]
+paperspace_gradient = true
+storage_optimization = true
+default_storage = "google_drive"

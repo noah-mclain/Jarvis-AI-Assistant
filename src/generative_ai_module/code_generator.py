@@ -1,4 +1,4 @@
-from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments
+from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments, TrainerCallback
 from peft import get_peft_model, LoraConfig, TaskType
 from .code_preprocessing import load_and_preprocess_dataset, save_preprocessing_metrics
 from .text_generator import TextGenerator
