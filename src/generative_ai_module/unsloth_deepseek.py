@@ -33,6 +33,13 @@ from transformers import AutoTokenizer, TrainingArguments
 from trl import SFTTrainer, SFTConfig
 from peft import LoraConfig
 
+# Import storage optimization utilities
+from .storage_optimization import (
+    create_checkpoint_strategy, manage_checkpoints, 
+    setup_streaming_dataset, compress_dataset, optimize_storage_for_model,
+    setup_google_drive, setup_s3_storage, upload_to_gdrive, upload_to_s3
+)
+
 def get_unsloth_model(
     model_name: str = "deepseek-ai/deepseek-coder-6.7b-base",
     model_dir: Optional[str] = None,
@@ -117,6 +124,9 @@ def finetune_with_unsloth(
     r: int = 16,
     target_modules: list[str] = None,
     save_total_limit: int = 3,
+    # Storage optimization parameters
+    use_storage_optimization: bool = False,
+    storage_config: dict = None
 ):
     """
     Fine-tune a DeepSeek-Coder model with Unsloth optimization.
@@ -140,6 +150,8 @@ def finetune_with_unsloth(
         r: Rank for LoRA fine-tuning
         target_modules: Which modules to apply LoRA to
         save_total_limit: Maximum number of checkpoints to save
+        use_storage_optimization: Whether to use storage optimization strategies
+        storage_config: Configuration for storage optimization
         
     Returns:
         Dictionary with training metrics
@@ -149,6 +161,49 @@ def finetune_with_unsloth(
     # Set default target modules for DeepSeek-Coder if not specified
     if target_modules is None:
         target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+    
+    # Set up storage optimization if requested
+    if use_storage_optimization:
+        if storage_config is None:
+            storage_config = {
+                "checkpoint_strategy": "improvement",
+                "max_checkpoints": 2,
+                "use_external_storage": False,
+                "storage_type": "gdrive",
+                "remote_path": "DeepSeek_Models"
+            }
+        
+        # Create checkpoint strategy
+        checkpoint_strategy = create_checkpoint_strategy(
+            total_steps=max_steps,
+            save_mode=storage_config.get("checkpoint_strategy", "improvement"),
+            save_interval=save_steps,
+            max_checkpoints=storage_config.get("max_checkpoints", 2)
+        )
+        
+        # Setup external storage if enabled
+        remote_storage_func = None
+        if storage_config.get("use_external_storage", False):
+            storage_type = storage_config.get("storage_type", "gdrive")
+            if storage_type == "gdrive":
+                drive_client = setup_google_drive()
+                if drive_client:
+                    remote_path = storage_config.get("remote_path", "DeepSeek_Models")
+                    remote_storage_func = lambda path: upload_to_gdrive(path, drive_folder=remote_path)
+            elif storage_type == "s3":
+                s3_client = setup_s3_storage(
+                    storage_config.get("aws_access_key_id"),
+                    storage_config.get("aws_secret_access_key")
+                )
+                if s3_client and storage_config.get("s3_bucket"):
+                    remote_path = storage_config.get("remote_path", "deepseek_models")
+                    s3_bucket = storage_config.get("s3_bucket")
+                    remote_storage_func = lambda path: upload_to_s3(
+                        s3_client, path, s3_bucket, s3_prefix=f"{remote_path}/"
+                    )
+    else:
+        checkpoint_strategy = None
+        remote_storage_func = None
     
     # Load model and tokenizer with Unsloth optimization
     model, tokenizer = get_unsloth_model(
@@ -169,8 +224,9 @@ def finetune_with_unsloth(
         learning_rate=learning_rate,
         max_steps=max_steps,
         logging_steps=logging_steps,
-        save_steps=save_steps,
-        save_total_limit=save_total_limit,
+        # Adjust save behavior based on storage optimization
+        save_steps=save_steps if not use_storage_optimization else max_steps + 1,  # Disable default saving if using custom strategy
+        save_total_limit=save_total_limit if not use_storage_optimization else None,
         warmup_steps=warmup_steps,
         weight_decay=weight_decay,
         lr_scheduler_type="cosine",
@@ -179,10 +235,55 @@ def finetune_with_unsloth(
         optim="adamw_torch",
         report_to="none",  # Disable reporting to wandb or other services by default
         group_by_length=True,  # More efficient batching by sequence length
-        save_strategy="steps",
+        save_strategy="steps" if not use_storage_optimization else "no",  # Disable default saving if using custom strategy
         remove_unused_columns=True,
         run_name="deepseek_unsloth"
     )
+    
+    # Custom evaluation callback for storage-optimized checkpointing
+    if use_storage_optimization:
+        from transformers.trainer_callback import TrainerCallback
+        
+        class StorageOptimizedCallback(TrainerCallback):
+            def __init__(self, checkpoint_strategy, output_dir, remote_storage_func):
+                self.checkpoint_strategy = checkpoint_strategy
+                self.output_dir = output_dir
+                self.remote_storage_func = remote_storage_func
+                self.best_metric = float('inf')
+                
+            def on_step_end(self, args, state, control, **kwargs):
+                # Check if we should save based on strategy
+                if self.checkpoint_strategy:
+                    should_save, checkpoint_path = manage_checkpoints(
+                        self.checkpoint_strategy,
+                        state.global_step,
+                        self.output_dir,
+                        remote_storage_func=self.remote_storage_func
+                    )
+                    if should_save:
+                        print(f"Saving checkpoint at step {state.global_step} to {checkpoint_path}")
+                        # Trigger trainer save
+                        control.should_save = True
+                        # If we have a custom path, we need to handle that in on_save
+                        if checkpoint_path and checkpoint_path != self.output_dir:
+                            state.best_model_checkpoint = checkpoint_path
+            
+            def on_evaluate(self, args, state, control, metrics=None, **kwargs):
+                # Save if improvement detected and using "improvement" strategy
+                if metrics and self.checkpoint_strategy and 'eval_loss' in metrics:
+                    metric_value = metrics['eval_loss']
+                    should_save, checkpoint_path = manage_checkpoints(
+                        self.checkpoint_strategy,
+                        state.global_step,
+                        self.output_dir,
+                        metric_value=metric_value,
+                        remote_storage_func=self.remote_storage_func
+                    )
+                    if should_save:
+                        print(f"Saving improved model at step {state.global_step} with eval_loss {metric_value:.4f}")
+                        control.should_save = True
+                        if checkpoint_path and checkpoint_path != self.output_dir:
+                            state.best_model_checkpoint = checkpoint_path
     
     # Create SFT trainer
     # We need to set tokenizer_name explicitly here for DeepSeek
@@ -198,13 +299,39 @@ def finetune_with_unsloth(
         tokenizer_name=model_name  # Set tokenizer name explicitly
     )
     
+    # Add storage optimization callback if needed
+    if use_storage_optimization:
+        trainer.add_callback(StorageOptimizedCallback(
+            checkpoint_strategy=checkpoint_strategy,
+            output_dir=output_dir,
+            remote_storage_func=remote_storage_func
+        ))
+    
     # Train the model
     print("Starting training...")
     trainer.train()
     
-    # Save the fine-tuned model
-    trainer.save_model(output_dir)
-    print(f"Model saved to {output_dir}")
+    # Save the fine-tuned model (only LoRA adapters, much smaller than full model)
+    model.save_pretrained(output_dir)
+    print(f"Model adapters saved to {output_dir}")
+    
+    # Store the base model name for future loading
+    config_path = os.path.join(output_dir, "base_model_info.json")
+    with open(config_path, 'w') as f:
+        json.dump({
+            "base_model": model_name,
+            "date_trained": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "quantization": "4bit" if load_in_4bit else "8bit" if load_in_8bit else "none",
+            "lora_rank": r,
+        }, f, indent=2)
+    
+    # Upload final model to external storage if configured
+    if use_storage_optimization and remote_storage_func:
+        try:
+            remote_path = remote_storage_func(output_dir)
+            print(f"Uploaded final model to remote storage: {remote_path}")
+        except Exception as e:
+            print(f"Failed to upload final model to remote storage: {e}")
     
     # Create metrics dictionary
     metrics = {
@@ -388,6 +515,131 @@ def preprocess_for_unsloth(
 
     # If we have raw code samples
     return {"text": examples["code"]} if "code" in examples else examples
+
+def finetune_with_optimal_storage(
+    train_dataset: Dataset,
+    eval_dataset: Optional[Dataset] = None,
+    model_name: str = "deepseek-ai/deepseek-coder-6.7b-base",
+    output_dir: str = "models/deepseek_unsloth",
+    max_seq_length: int = 2048,
+    per_device_train_batch_size: int = 2,
+    gradient_accumulation_steps: int = 4,
+    learning_rate: float = 2e-5,
+    max_steps: int = 500,
+    warmup_steps: int = 50,
+    quantize_bits: int = 4,  # Use 4-bit quantization by default for maximum storage efficiency
+    r: int = 16,  # LoRA rank
+    # Storage optimization parameters
+    storage_type: str = "gdrive",  # "gdrive", "s3", or "local"
+    remote_path: str = "DeepSeek_Models",
+    checkpoint_strategy: str = "improvement",
+    max_checkpoints: int = 2,
+    # AWS parameters (if using S3)
+    aws_access_key_id: str = None,
+    aws_secret_access_key: str = None,
+    s3_bucket: str = None,
+):
+    """
+    Fine-tune a DeepSeek model with optimal storage usage, ideal for environments with limited storage.
+    
+    This function implements:
+    1. Model quantization (4-bit or 8-bit)
+    2. External cloud storage integration (Google Drive or S3)
+    3. Efficient checkpointing strategies
+    4. LoRA for parameter-efficient fine-tuning
+    
+    Args:
+        train_dataset: Training dataset
+        eval_dataset: Evaluation dataset
+        model_name: The model name or path to fine-tune
+        output_dir: Directory to save fine-tuned model
+        max_seq_length: Maximum sequence length for the model
+        per_device_train_batch_size: Batch size per device during training
+        gradient_accumulation_steps: Number of updates steps to accumulate before backward pass
+        learning_rate: Learning rate for training
+        max_steps: Maximum number of training steps
+        warmup_steps: Number of steps for learning rate warm-up
+        quantize_bits: Quantization precision (4 or 8)
+        r: Rank for LoRA fine-tuning
+        storage_type: Type of external storage ("gdrive", "s3", or "local")
+        remote_path: Path in external storage
+        checkpoint_strategy: Strategy for saving checkpoints ("improvement", "regular", or "hybrid")
+        max_checkpoints: Maximum number of checkpoints to keep
+        aws_access_key_id: AWS access key ID (for S3 storage)
+        aws_secret_access_key: AWS secret access key (for S3 storage)
+        s3_bucket: S3 bucket name (for S3 storage)
+        
+    Returns:
+        Dictionary with training metrics
+    """
+    # Configure storage optimization
+    use_external_storage = storage_type in ["gdrive", "s3"]
+    
+    # Setup storage configuration
+    storage_config = {
+        "checkpoint_strategy": checkpoint_strategy,
+        "max_checkpoints": max_checkpoints,
+        "use_external_storage": use_external_storage,
+        "storage_type": storage_type,
+        "remote_path": remote_path
+    }
+    
+    # Add AWS credentials if using S3
+    if storage_type == "s3":
+        storage_config.update({
+            "aws_access_key_id": aws_access_key_id,
+            "aws_secret_access_key": aws_secret_access_key,
+            "s3_bucket": s3_bucket
+        })
+    
+    # Determine quantization settings
+    load_in_4bit = quantize_bits == 4
+    load_in_8bit = quantize_bits == 8
+    
+    print(f"Fine-tuning with optimal storage settings:")
+    print(f"- Using {quantize_bits}-bit quantization")
+    print(f"- LoRA rank: {r}")
+    print(f"- External storage: {storage_type if use_external_storage else 'disabled'}")
+    print(f"- Checkpoint strategy: {checkpoint_strategy} (max {max_checkpoints})")
+    
+    # Run the fine-tuning with storage optimization
+    metrics = finetune_with_unsloth(
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        model_name=model_name,
+        output_dir=output_dir,
+        max_seq_length=max_seq_length,
+        per_device_train_batch_size=per_device_train_batch_size,
+        gradient_accumulation_steps=gradient_accumulation_steps,
+        learning_rate=learning_rate,
+        max_steps=max_steps,
+        warmup_steps=warmup_steps,
+        # Storage-optimized settings
+        load_in_4bit=load_in_4bit,
+        load_in_8bit=load_in_8bit,
+        r=r,
+        # Storage optimization
+        use_storage_optimization=True,
+        storage_config=storage_config
+    )
+    
+    # Ensure the metrics include storage optimization info
+    metrics.update({
+        "storage_optimization": {
+            "quantize_bits": quantize_bits,
+            "storage_type": storage_type,
+            "checkpoint_strategy": checkpoint_strategy,
+            "max_checkpoints": max_checkpoints,
+            "external_storage_used": use_external_storage
+        }
+    })
+    
+    # Save updated metrics
+    metrics_path = os.path.join(output_dir, "training_metrics.json")
+    with open(metrics_path, 'w') as f:
+        json.dump(metrics, f, indent=2)
+    
+    return metrics
 
 if __name__ == "__main__":
     # Simple test with mini dataset

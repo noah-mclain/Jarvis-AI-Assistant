@@ -7,6 +7,12 @@ license = "GPL"
 readme = "README.md"
 packages = [{include = "src", from = "."}]
 
+[tool.poetry.group.dev.dependencies]
+black = "^24.4.2"
+flake8 = "^7.1.0"
+mypy = "^1.10.0"
+pytest = "^8.2.2"
+
 [tool.poetry.dependencies]
 python = ">=3.10,<3.13"
 
@@ -34,8 +40,8 @@ jupyterlab = "4.4.1"
 tensorboard = "2.16.2"
 
 # Apple Silicon-specific optimizations
-unsloth = {git = "https://github.com/unslothai/unsloth.git"}
-bitsandbytes = { version = "0.43.0", markers = "sys_platform == 'darwin' and platform_machine == 'arm64'", python = ">=3.10" }
+unsloth = { git = "https://github.com/unslothai/unsloth.git", extras = ["mps"] }
+bitsandbytes = { version = "0.43.0", extras = ["metal"], markers = "sys_platform == 'darwin'" }
 psutil = "5.9.8"  # For memory management
 platformdirs = "4.2.0"  # Better path handling
 
@@ -52,5 +58,5 @@ priority = "supplemental"
 url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0.tar.gz"
 
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0,", "setuptools", "cmake", "rust"]
+requires = ["poetry-core>=2.0.0,<3.0.0,", "setuptools", "cmake", "ninja", "rust"]
 build-backend = "poetry.core.masonry.api"
