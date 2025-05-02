@@ -7,82 +7,58 @@ license = "GPL"
 readme = "README.md"
 packages = [{include = "src", from = "."}]
 
-[tool.poetry.group.dev.dependencies]
-black = "^24.4.2"
-flake8 = "^7.1.0"
-mypy = "^1.10.0"
-pytest = "^8.2.2"
-
 [tool.poetry.dependencies]
 python = ">=3.10,<3.13"
 
-# NVIDIA GPU-optimized PyTorch - exact versions for Paperspace Gradient
-torch = "2.1.2"
-torchvision = "0.16.2"
-torchaudio = "2.1.2"
+# Core CUDA 12.1 Stack --------------------------------------------------------
+torch = {version = "2.3.1", source = "pytorch"}
+torchvision = {version = "0.18.1", source = "pytorch"}
+torchaudio = {version = "2.3.1", source = "pytorch"}
+xformers = {version = "0.0.25", source = "pytorch"}
+triton = "3.0.0"
+bitsandbytes = "0.45.4"
+flash-attn = "2.5.8"
 
-# For NVIDIA GPU optimization on Paperspace Gradient
-flash-attn = "2.5.6"
-triton = "2.1.0"
-bitsandbytes = "0.43.0"  # For 4-bit/8-bit quantization
-
-# Core dependencies
-numpy = "1.26.4"
-transformers = "4.40.2"
+# Hugging Face Ecosystem ------------------------------------------------------
+transformers = "4.41.2"
+accelerate = "0.34.1"
+peft = "0.15.2"
+trl = "0.15.2"
 datasets = "2.19.0"
+huggingface-hub = "0.30.2"
+safetensors = "0.5.3"
+
+# Unsloth & Optimization ------------------------------------------------------
+unsloth = {git = "https://github.com/unslothai/unsloth.git", extras = ["cu121"]}
+unsloth_zoo = "2025.4.4"
+
+# NLP & Utilities -------------------------------------------------------------
 spacy = "3.7.4"
-pydantic = "1.10.13"
 nltk = "3.8.1"
 tqdm = "4.66.2"
-peft = "0.10.0"
-accelerate = "0.30.1"
-pillow = "10.3.0"
-bert-score = "0.3.12"
-rouge-score = "0.1.2"
 pandas = "2.2.2"
 scikit-learn = "1.4.2"
+numpy = "1.26.4"
+pydantic = "1.10.13"
+
+# Storage & Cloud Integration -------------------------------------------------
+boto3 = "1.34.86"
+gdown = "5.1.0"
+fsspec = "2024.3.1"
+psutil = "5.9.8"
+
+# Development Tools -----------------------------------------------------------
 jupyterlab = "4.4.1"
 tensorboard = "2.16.2"
-huggingface-hub = "0.30.2"  # Updated to latest version
-safetensors = "0.5.3"  # Updated to latest version
-
-# Google Drive integration dependencies
-gdown = "^5.1.0"  # For downloading files from Google Drive
-google-auth = "^2.29.0"  # For Google authentication
-google-auth-oauthlib = "^1.2.0"  # For Google OAuth
-google-auth-httplib2 = "^0.2.0"  # For Google HTTP authentication
-fsspec = "^2024.3.1"  # For file system abstraction
-
-# Storage optimization dependencies
-boto3 = "^1.34.86"  # For AWS S3 storage (optional)
-psutil = "^5.9.8"  # For memory management
-platformdirs = "^4.2.0"  # Better path handling
-
-# Unsloth for efficient fine-tuning
-unsloth = { git = "https://github.com/unslothai/unsloth.git" }
-
-# Typing extensions
-typing-extensions = ">=4.5.0"
-
-# Additional dependencies for stable operation
-jsonschema = "^4.23.0"
-packaging = "^25.0"
-filelock = "^3.18.0"
 
 [[tool.poetry.source]]
-name = "mac-metal"
-url = "https://pip-index.lilac.ai/"
-priority = "supplemental"
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu121"
+priority = "explicit"
 
 [tool.poetry.dependencies."en-core-web-sm"]
 url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0.tar.gz"
 
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0", "setuptools", "cmake", "ninja", "rust"]
+requires = ["poetry-core>=2.0.0", "setuptools", "ninja", "cmake"]
 build-backend = "poetry.core.masonry.api"
-
-# Configuration for Paperspace Gradient
-[tool.jarvis]
-paperspace_gradient = true
-storage_optimization = true
-default_storage = "google_drive"
