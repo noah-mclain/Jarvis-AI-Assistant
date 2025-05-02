@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Paperspace Setup Script for RTX4000/5000 GPUs
-echo "Setting up Paperspace environment with RTX GPU optimizations..."
+# Paperspace Setup Script for RTX4000/5000 GPUs with Google Drive Integration
+echo "Setting up Paperspace environment with RTX GPU optimizations and Google Drive integration..."
 
 # Check if running in Paperspace
 if [ ! -d "/notebooks" ] && [ ! -d "/storage" ]; then
@@ -53,22 +53,72 @@ else
     exit 1
 fi
 
-# Set up persistent storage directory structure
-echo "Setting up persistent storage in /storage..."
-if [ -d "/storage" ]; then
-    mkdir -p /storage/Jarvis_AI_Assistant
-    mkdir -p /storage/Jarvis_AI_Assistant/models
-    mkdir -p /storage/Jarvis_AI_Assistant/datasets
-    mkdir -p /storage/Jarvis_AI_Assistant/checkpoints
+# Install Google Drive integration tools
+echo "Installing Google Drive integration tools..."
+pip install -q gdown pydrive2 google-auth google-auth-oauthlib google-auth-httplib2
+
+# Create function to check if Google Drive is mounted
+check_drive_mounted() {
+    python -c "import os; print(os.path.exists('/content/drive/MyDrive'))" | grep -q "True"
+    return $?
+}
+
+# Mount Google Drive
+echo "Attempting to mount Google Drive in Paperspace..."
+cat > mount_drive.py << EOF
+from google.colab import drive
+try:
+    drive.mount('/content/drive')
+    print("Google Drive successfully mounted at /content/drive")
+except:
+    print("Failed to mount Google Drive")
+EOF
+
+python mount_drive.py
+
+# Check if Google Drive mounted successfully
+if check_drive_mounted; then
+    echo "Google Drive mounted successfully. Using Google Drive for storage."
+    DRIVE_MOUNTED=true
+    # Create directories in Google Drive (same structure as Colab)
+    mkdir -p /content/drive/MyDrive/Jarvis_AI_Assistant
+    mkdir -p /content/drive/MyDrive/Jarvis_AI_Assistant/models
+    mkdir -p /content/drive/MyDrive/Jarvis_AI_Assistant/datasets
+    mkdir -p /content/drive/MyDrive/Jarvis_AI_Assistant/checkpoints
     
-    # Create symlinks for easier access
-    ln -sf /storage/Jarvis_AI_Assistant /notebooks/Jarvis_AI_Assistant_storage
-    echo "Created symlink to persistent storage in /notebooks/Jarvis_AI_Assistant_storage"
+    # Create symlinks from Paperspace storage to Google Drive
+    ln -sf /content/drive/MyDrive/Jarvis_AI_Assistant /notebooks/google_drive_storage
+    echo "Created symlink to Google Drive storage in /notebooks/google_drive_storage"
+    
+    # Set primary storage path to Google Drive
+    STORAGE_BASE_PATH="/content/drive/MyDrive/Jarvis_AI_Assistant"
 else
-    echo "WARNING: /storage directory not found. Using local storage instead."
-    mkdir -p ~/Jarvis_AI_Assistant
-    mkdir -p ~/Jarvis_AI_Assistant/models
-    mkdir -p ~/Jarvis_AI_Assistant/datasets
+    echo "Google Drive mount failed. Using Paperspace persistent storage instead."
+    DRIVE_MOUNTED=false
+    
+    # Set up persistent storage directory structure in Paperspace
+    echo "Setting up persistent storage in /storage..."
+    if [ -d "/storage" ]; then
+        mkdir -p /storage/Jarvis_AI_Assistant
+        mkdir -p /storage/Jarvis_AI_Assistant/models
+        mkdir -p /storage/Jarvis_AI_Assistant/datasets
+        mkdir -p /storage/Jarvis_AI_Assistant/checkpoints
+        
+        # Create symlinks for easier access
+        ln -sf /storage/Jarvis_AI_Assistant /notebooks/Jarvis_AI_Assistant_storage
+        echo "Created symlink to persistent storage in /notebooks/Jarvis_AI_Assistant_storage"
+        
+        # Set primary storage path to Paperspace storage
+        STORAGE_BASE_PATH="/storage/Jarvis_AI_Assistant"
+    else
+        echo "WARNING: /storage directory not found. Using local storage instead."
+        mkdir -p ~/Jarvis_AI_Assistant
+        mkdir -p ~/Jarvis_AI_Assistant/models
+        mkdir -p ~/Jarvis_AI_Assistant/datasets
+        
+        # Set primary storage path to local storage
+        STORAGE_BASE_PATH="$HOME/Jarvis_AI_Assistant"
+    fi
 fi
 
 # Clean up any conflicting packages
@@ -414,6 +464,193 @@ if __name__ == "__main__":
         print("python analyze_gpu_memory.py --model MODEL_NAME")
 EOF
 
+# Create Google Drive file sync script
+cat > sync_to_drive.py << EOF
+#!/usr/bin/env python
+"""
+Sync utility for synchronizing model files between Paperspace storage and Google Drive.
+This ensures consistency between Paperspace and Google Colab workflows.
+"""
+
+import os
+import sys
+import shutil
+import argparse
+from pathlib import Path
+import time
+
+def check_drive_mounted():
+    """Check if Google Drive is mounted"""
+    return os.path.exists('/content/drive/MyDrive')
+
+def sync_directory(source_dir, target_dir, dry_run=False):
+    """Sync files from source to target directory recursively"""
+    source_path = Path(source_dir)
+    target_path = Path(target_dir)
+    
+    if not source_path.exists():
+        print(f"Source directory does not exist: {source_path}")
+        return 0
+    
+    # Create target dir if it doesn't exist
+    if not target_path.exists() and not dry_run:
+        print(f"Creating target directory: {target_path}")
+        os.makedirs(target_path, exist_ok=True)
+    
+    # Count of files copied
+    copied_files = 0
+    
+    # Walk through source directory
+    for root, dirs, files in os.walk(source_path):
+        # Create corresponding subdirectories in target
+        rel_path = os.path.relpath(root, source_path)
+        target_subdir = target_path / rel_path
+        
+        if not target_subdir.exists() and not dry_run:
+            print(f"Creating directory: {target_subdir}")
+            os.makedirs(target_subdir, exist_ok=True)
+        
+        # Copy each file
+        for file in files:
+            source_file = Path(root) / file
+            target_file = target_subdir / file
+            
+            # Check if target file exists and is newer
+            if target_file.exists() and target_file.stat().st_mtime >= source_file.stat().st_mtime:
+                # Skip if target is same or newer
+                continue
+                
+            # Copy the file
+            if not dry_run:
+                print(f"Copying: {source_file} -> {target_file}")
+                shutil.copy2(source_file, target_file)
+            else:
+                print(f"Would copy: {source_file} -> {target_file}")
+                
+            copied_files += 1
+    
+    return copied_files
+
+def main():
+    parser = argparse.ArgumentParser(description="Sync files between Paperspace storage and Google Drive")
+    parser.add_argument("--source", help="Source directory", default="/storage/Jarvis_AI_Assistant")
+    parser.add_argument("--target", help="Target directory", default="/content/drive/MyDrive/Jarvis_AI_Assistant")
+    parser.add_argument("--direction", choices=["to_drive", "from_drive"], default="to_drive", 
+                        help="Sync direction: to Google Drive or from Google Drive")
+    parser.add_argument("--dry-run", action="store_true", help="Show what would be copied without making changes")
+    
+    args = parser.parse_args()
+    
+    if not check_drive_mounted():
+        print("Error: Google Drive is not mounted. Please mount it first.")
+        print("Run: from google.colab import drive; drive.mount('/content/drive')")
+        return 1
+    
+    # Set source and target based on direction
+    if args.direction == "to_drive":
+        source_dir = args.source
+        target_dir = args.target
+        print(f"Syncing from Paperspace storage to Google Drive")
+    else:
+        source_dir = args.target
+        target_dir = args.source
+        print(f"Syncing from Google Drive to Paperspace storage")
+    
+    print(f"Source: {source_dir}")
+    print(f"Target: {target_dir}")
+    
+    if args.dry_run:
+        print("Dry run mode: No files will be copied")
+    
+    start_time = time.time()
+    copied_files = sync_directory(source_dir, target_dir, args.dry_run)
+    elapsed_time = time.time() - start_time
+    
+    print(f"Sync completed in {elapsed_time:.2f} seconds")
+    print(f"Files copied: {copied_files}")
+    
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
+EOF
+
+chmod +x sync_to_drive.py
+
+# Update the COLAB_COMMANDS.md file with Google Drive sync commands for Paperspace
+cat > paperspace_gdrive_commands.md << EOF
+# Google Drive Integration for Paperspace
+
+This document provides commands for integrating Google Drive with Paperspace to maintain a consistent workflow between Colab and Paperspace.
+
+## Mount Google Drive in Paperspace
+
+```python
+# Mount Google Drive
+from google.colab import drive
+drive.mount('/content/drive')
+
+# Verify Drive is mounted and list contents
+!ls -la /content/drive/MyDrive
+```
+
+## Sync Models Between Paperspace and Google Drive
+
+```python
+# Sync models from Paperspace storage to Google Drive
+!python sync_to_drive.py --direction to_drive
+
+# Sync models from Google Drive to Paperspace storage
+!python sync_to_drive.py --direction from_drive
+
+# Dry run to see what would be synced without making changes
+!python sync_to_drive.py --dry-run
+```
+
+## Using Google Drive Path in Commands
+
+Replace `/storage/Jarvis_AI_Assistant` with `/content/drive/MyDrive/Jarvis_AI_Assistant` in all commands to use Google Drive directly.
+
+### Example Training Command with Google Drive
+
+```python
+# Train using Google Drive storage
+!python src/generative_ai_module/jarvis_unified.py \\
+    --mode train \\
+    --model deepseek-ai/deepseek-coder-1.3b-base \\
+    --datasets pile \\
+    --max-samples 200 \\
+    --epochs 1 \\
+    --batch-size 2 \\
+    --gradient-accumulation-steps 8 \\
+    --sequence-length 512 \\
+    --load-in-4bit \\
+    --use-unsloth \\
+    --memory-file /content/drive/MyDrive/Jarvis_AI_Assistant/memory.json
+```
+
+### Example Interactive Mode with Google Drive
+
+```python
+# Interactive mode using Google Drive for memory file
+!python src/generative_ai_module/jarvis_unified.py \\
+    --mode interactive \\
+    --model deepseek-ai/deepseek-coder-1.3b-instruct \\
+    --load-in-4bit \\
+    --use-unsloth \\
+    --memory-file /content/drive/MyDrive/Jarvis_AI_Assistant/chat_history.json
+```
+EOF
+
+# Use the correct storage path for the output summary
+if [ "$DRIVE_MOUNTED" = true ]; then
+    STORAGE_PATH="/content/drive/MyDrive/Jarvis_AI_Assistant"
+    echo "Google Drive integration active. Using: $STORAGE_PATH"
+else
+    STORAGE_PATH="$STORAGE_BASE_PATH"
+    echo "Using local storage path: $STORAGE_PATH"
+fi
+
 # Output summary
 if [ "$RTX4000_GPU" = true ]; then
     echo "==================================================================="
@@ -452,8 +689,21 @@ else
     echo "==================================================================="
 fi
 
-echo "Persistent storage path: /storage/Jarvis_AI_Assistant"
-echo "Storage symlink: /notebooks/Jarvis_AI_Assistant_storage"
+if [ "$DRIVE_MOUNTED" = true ]; then
+    echo "Google Drive mounted path: /content/drive/MyDrive/Jarvis_AI_Assistant"
+    echo "Google Drive symlink: /notebooks/google_drive_storage"
+    echo ""
+    echo "Use Google Drive commands for consistent storage with Colab:"
+    echo "See paperspace_gdrive_commands.md for details."
+else
+    echo "Google Drive was not mounted. Fallback storage paths:"
+    echo "Persistent storage path: $STORAGE_BASE_PATH"
+    echo "Storage symlink: /notebooks/Jarvis_AI_Assistant_storage"
+    echo ""
+    echo "To try mounting Google Drive manually, run:"
+    echo "from google.colab import drive; drive.mount('/content/drive')"
+fi
+
 echo ""
 echo "If you encounter issues with bitsandbytes, run:"
 echo "python fix_bitsandbytes.py"
