@@ -1,160 +1,141 @@
 #!/bin/bash
 
-# Google Colab Setup Script for Jarvis AI Assistant - A100 Optimized
-echo "Setting up Jarvis AI Assistant on Google Colab with A100 GPU optimization..."
+# Google Colab / Paperspace Fine-Tuning Setup Script for GPU
+echo "Setting up GPU-optimized environment for model fine-tuning..."
 
-# Check if running in Google Colab
+# Check if running in Google Colab or Paperspace
 IN_COLAB=0
+IN_PAPERSPACE=0
 if python -c "import google.colab" 2>/dev/null; then
     echo "Running in Google Colab environment"
     IN_COLAB=1
+elif [ -d "/notebooks" ] || [ -d "/storage" ]; then
+    echo "Running in Paperspace environment"
+    IN_PAPERSPACE=1
 else
-    echo "Not running in Google Colab environment"
+    echo "Running in standard environment"
 fi
 
-# Function to print Colab GPU setup instructions
-print_colab_gpu_instructions() {
+# Function to print GPU setup instructions
+print_gpu_instructions() {
     echo "============================================================"
-    echo "ERROR: No GPU detected in your Colab environment!"
+    echo "ERROR: No GPU detected in your environment!"
     echo "============================================================"
-    echo "To enable GPU in Google Colab:"
-    echo "1. Click on 'Runtime' in the top menu"
-    echo "2. Select 'Change runtime type'"
-    echo "3. Choose 'GPU' from the hardware accelerator dropdown"
-    echo "4. Click 'Save'"
-    echo "5. Click on 'Runtime' in the top menu again and select 'Restart runtime'"
+    if [ $IN_COLAB -eq 1 ]; then
+        echo "To enable GPU in Google Colab:"
+        echo "1. Click on 'Runtime' in the top menu"
+        echo "2. Select 'Change runtime type'"
+        echo "3. Choose 'GPU' from the hardware accelerator dropdown"
+        echo "4. Click 'Save'"
+        echo "5. Click on 'Runtime' in the top menu again and select 'Restart runtime'"
+    elif [ $IN_PAPERSPACE -eq 1 ]; then
+        echo "Please ensure you selected a GPU machine in Paperspace."
+        echo "You should select a machine with RTX4000, RTX5000, or A100 GPU."
+    else
+        echo "Please ensure you have a CUDA-capable GPU and NVIDIA drivers installed."
+    fi
     echo "6. Run this script again after restart"
     echo "============================================================"
     exit 1
 }
 
-# Check for NVIDIA GPU with multiple detection methods
+# Check for GPU using PyTorch
 echo "Checking for GPU..."
-
 GPU_AVAILABLE=0
+A100_GPU=false
+RTX4000_GPU=false
+RTX5000_GPU=false
 
-# Method 1: Check CUDA version file
-if [ -f "/usr/local/cuda/version.txt" ]; then
-    echo "CUDA installation found:"
-    cat /usr/local/cuda/version.txt
-    GPU_AVAILABLE=1
-fi
-
-# Method 2: Try nvidia-smi
-if command -v nvidia-smi &> /dev/null; then
-    echo "NVIDIA GPU detected with nvidia-smi:"
-    nvidia-smi | head -5
-    GPU_AVAILABLE=1
-    
-    # Check if A100 GPU is available
-    if nvidia-smi | grep -q "A100"; then
-        echo "A100 GPU detected - using optimized settings"
-        A100_GPU=true
-    else
-        echo "Non-A100 GPU detected - will use standard settings"
-        A100_GPU=false
-    fi
-else
-    echo "nvidia-smi command not found or not working"
-fi
-
-# Method 3: Try PyTorch detection
-if python -c "import torch; print('CUDA available:', torch.cuda.is_available())" 2>/dev/null | grep -q "CUDA available: True"; then
+if python -c "import torch; print(torch.cuda.is_available())" 2>/dev/null | grep -q "True"; then
     echo "PyTorch confirms CUDA is available"
     GPU_AVAILABLE=1
     
-    # Get GPU info from PyTorch
-    python -c "import torch; print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None')" 2>/dev/null
+    # Get CUDA version and GPU info from PyTorch
+    CUDA_VERSION=$(python -c "import torch; print(torch.version.cuda)")
+    GPU_NAME=$(python -c "import torch; print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None')")
     
-    # Check if A100 via PyTorch
-    if python -c "import torch; print('A100' in torch.cuda.get_device_name(0) if torch.cuda.is_available() else False)" 2>/dev/null | grep -q "True"; then
+    echo "CUDA Version: $CUDA_VERSION"
+    echo "GPU: $GPU_NAME"
+    
+    # Check GPU type via PyTorch
+    if echo "$GPU_NAME" | grep -q "A100"; then
         echo "A100 GPU confirmed by PyTorch - using optimized settings"
         A100_GPU=true
+    elif echo "$GPU_NAME" | grep -q "RTX 4000"; then
+        echo "RTX 4000 GPU confirmed by PyTorch - using optimized settings"
+        RTX4000_GPU=true
+    elif echo "$GPU_NAME" | grep -q "RTX 5000"; then
+        echo "RTX 5000 GPU confirmed by PyTorch - using optimized settings"
+        RTX5000_GPU=true
+    else
+        echo "Using generic GPU settings for $GPU_NAME"
     fi
 else
     echo "PyTorch cannot detect CUDA"
 fi
 
-# Show instructions if no GPU in Colab
-if [ $IN_COLAB -eq 1 ] && [ $GPU_AVAILABLE -eq 0 ]; then
-    print_colab_gpu_instructions
-elif [ $GPU_AVAILABLE -eq 0 ]; then
-    echo "ERROR: No NVIDIA GPU detected. This setup requires GPU acceleration."
-    exit 1
+# Show instructions if no GPU 
+if [ $GPU_AVAILABLE -eq 0 ]; then
+    print_gpu_instructions
 fi
 
-# Install dependencies using pip
-echo "Installing dependencies..."
+# First, clean up any conflicting packages with a clean environment
+echo "First, let's clean up potential conflicts..."
+if [ $IN_COLAB -eq 1 ] || [ $IN_PAPERSPACE -eq 1 ]; then
+    # Remove problematic packages that cause conflicts
+    pip uninstall -y bitsandbytes
+    pip uninstall -y unsloth
+    pip uninstall -y peft
+    pip uninstall -y accelerate
+fi
 
-# PyTorch with CUDA 12.1 - optimized for A100
-echo "Installing PyTorch with CUDA 12.1..."
-pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --extra-index-url https://download.pytorch.org/whl/cu121
+# Use the built-in PyTorch in Colab/Paperspace or install if not available
+if [ $IN_COLAB -eq 1 ]; then
+    echo "Using pre-installed PyTorch in Google Colab"
+else
+    echo "Installing PyTorch with CUDA support"
+    pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --extra-index-url https://download.pytorch.org/whl/cu121
+fi
 
-# GPU optimization libraries - A100 optimized
-echo "Installing GPU optimization libraries..."
-pip install bitsandbytes==0.41.1    # Better GPU memory handling
-pip install triton==2.1.0           # Optimized kernels for Tensor Cores
-pip install flash-attn==2.3.4       # A100-optimized attention mechanism
-pip install xformers==0.0.23.post1 --index-url https://download.pytorch.org/whl/cu121  # Efficient attention
+python -c "import torch; print(f'PyTorch version: {torch.__version__}')"
+python -c "import torch; print(f'CUDA version: {torch.version.cuda}')"
 
-# Hugging Face ecosystem - versions compatible with A100 optimizations
-echo "Installing Hugging Face ecosystem..."
-pip install transformers==4.36.2
-pip install accelerate==0.25.0
-pip install peft==0.6.2
-pip install trl==0.7.10
-pip install datasets==2.19.0
-pip install huggingface-hub==0.19.4
-pip install safetensors==0.4.1
+# IMPORTANT: Fix the bitsandbytes CUDA compatibility issue
+echo "Setting up bitsandbytes for CUDA $CUDA_VERSION..."
+# For CUDA 12.x, we need to build bitsandbytes from source or use a special installation method
+pip install --no-cache-dir --upgrade --no-deps https://github.com/jllllll/bitsandbytes-windows-webui/releases/download/wheels/bitsandbytes-0.41.1-py3-none-any.whl
 
-# Unsloth - optimized for efficient fine-tuning
-echo "Installing Unsloth..."
-pip install unsloth==2025.4.4
+# Install accelerate first since many packages depend on it
+echo "Installing accelerate..."
+pip install -q "accelerate>=0.30.0" --no-deps
+pip install -q "accelerate>=0.30.0" --upgrade
 
-# NLP & Utilities
-echo "Installing NLP & Utilities..."
-pip install spacy==3.7.4
-pip install nltk==3.8.1
-pip install tqdm==4.66.2
-pip install pandas==2.2.2
-pip install scikit-learn==1.4.2
-pip install numpy==1.26.4
-pip install pydantic==1.10.13
+# Install core dependencies required for fine-tuning
+echo "Installing fine-tuning dependencies..."
+pip install -q "transformers>=4.36.0,<4.40.0" --no-deps
+pip install -q "transformers>=4.36.0,<4.40.0"
+pip install -q "peft>=0.7.0" --no-deps
+pip install -q "peft>=0.7.0"
+pip install -q "safetensors>=0.4.0"
+pip install -q "datasets>=2.14.0"
+pip install -q "trl>=0.7.1"
+pip install -q "einops>=0.7.0"
+pip install -q "tokenizers>=0.19.0"
+pip install -q "flash-attn>=2.3.0" --no-deps
+pip install -q "flash-attn>=2.3.0"
 
-# Additional A100 optimizations from requirements.txt
-echo "Installing additional optimizations..."
-pip install einops==0.7.0
-pip install ninja==1.11.1
-pip install packaging==23.2
+# Install unsloth safely
+echo "Installing unsloth..."
+pip install -q "unsloth>=2025.3.0"
 
-# Storage & Cloud Integration
-echo "Installing Storage & Cloud Integration..."
-pip install boto3==1.34.86
-pip install gdown==5.1.0
-pip install fsspec==2024.3.1
-pip install psutil==5.9.8
-
-# Development Tools
-echo "Installing Development Tools..."
-pip install jupyterlab==4.4.1
-pip install tensorboard==2.16.2
-
-# Spacy language model
-python -m pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0.tar.gz
-
-# A100-specific optimizations
-if [ "${A100_GPU:-false}" = true ]; then
+# GPU-specific optimizations based on detected hardware
+if [ "$A100_GPU" = true ]; then
     echo "Applying A100-specific optimizations..."
     
     # Set environment variables for optimal A100 performance
     export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
     export CUDA_LAUNCH_BLOCKING=0
     export TOKENIZERS_PARALLELISM=true
-    
-    # Create a .bashrc entry for future sessions
-    echo 'export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512' >> ~/.bashrc
-    echo 'export CUDA_LAUNCH_BLOCKING=0' >> ~/.bashrc
-    echo 'export TOKENIZERS_PARALLELISM=true' >> ~/.bashrc
     
     # Create an A100-optimized config file
     mkdir -p ~/.config/accelerate
@@ -173,24 +154,49 @@ use_cpu: false
 EOF
     
     echo "Created A100-optimized accelerate config with BF16 mixed precision"
+elif [ "$RTX4000_GPU" = true ] || [ "$RTX5000_GPU" = true ]; then
+    echo "Applying RTX 4000/5000-specific optimizations..."
+    
+    # Set environment variables for optimal RTX performance
+    export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:256
+    export CUDA_LAUNCH_BLOCKING=0
+    export TOKENIZERS_PARALLELISM=true
+    
+    # Create an RTX-optimized config file for reduced memory usage
+    mkdir -p ~/.config/accelerate
+    cat > ~/.config/accelerate/default_config.yaml << EOF
+compute_environment: LOCAL_MACHINE
+distributed_type: 'NO'
+downcast_bf16: 'no'
+machine_rank: 0
+main_process_ip: null
+main_process_port: null
+main_training_function: main
+mixed_precision: 'fp16'
+num_machines: 1
+num_processes: 1
+use_cpu: false
+EOF
+    
+    echo "Created RTX-optimized accelerate config with FP16 mixed precision (BF16 not used)"
 fi
 
-# Mount Google Drive
-echo "Mounting Google Drive..."
-python -c "
-try:
-    from google.colab import drive
-    drive.mount('/content/drive')
-    print('Google Drive mounted successfully')
-except ImportError:
-    print('Not running in Google Colab')
-except Exception as e:
-    print(f'Error mounting Google Drive: {e}')
-    print('You can try mounting it manually using: from google.colab import drive; drive.mount(\"/content/drive\")')
-"
+# Install other dependencies
+echo "Installing additional dependencies..."
+pip install -q "xformers>=0.0.23.post1" --no-deps
+pip install -q "xformers>=0.0.23.post1"
+pip install -q "triton>=2.1.0"
+pip install -q "boto3>=1.34.0" "gdown>=5.1.0" "fsspec>=2024.3.0" "psutil>=5.9.0"
+pip install -q "jupyterlab>=4.4.0" "tensorboard>=2.16.0"
+pip install -q "ninja>=1.11.0" "packaging>=23.2"
 
-# Create directories in Google Drive
+# Mount Google Drive in Colab or create Paperspace storage links
 if [ $IN_COLAB -eq 1 ]; then
+    echo "Mounting Google Drive (if in Colab)..."
+    echo "from google.colab import drive; drive.mount('/content/drive')" > mount_drive.py
+    python mount_drive.py || echo "Failed to mount Google Drive. You can try manually using: from google.colab import drive; drive.mount('/content/drive')"
+    
+    # Create directories in Google Drive if mounted
     if [ -d "/content/drive/MyDrive" ]; then
         echo "Creating directories in Google Drive..."
         mkdir -p /content/drive/MyDrive/Jarvis_AI_Assistant
@@ -199,20 +205,34 @@ if [ $IN_COLAB -eq 1 ]; then
     else
         echo "Google Drive not mounted or not accessible. Skipping directory creation."
     fi
+elif [ $IN_PAPERSPACE -eq 1 ]; then
+    echo "Setting up Paperspace storage..."
+    
+    # Create directories in Paperspace persistent storage
+    if [ -d "/storage" ]; then
+        echo "Creating directories in Paperspace persistent storage..."
+        mkdir -p /storage/Jarvis_AI_Assistant
+        mkdir -p /storage/Jarvis_AI_Assistant/models
+        mkdir -p /storage/Jarvis_AI_Assistant/datasets
+        
+        # Create symlinks for easier access
+        ln -sf /storage/Jarvis_AI_Assistant /notebooks/Jarvis_AI_Assistant_storage
+        echo "Created symlink to persistent storage in /notebooks/Jarvis_AI_Assistant_storage"
+    else
+        echo "Paperspace /storage not found. Using local storage instead."
+        mkdir -p ~/Jarvis_AI_Assistant
+        mkdir -p ~/Jarvis_AI_Assistant/models
+        mkdir -p ~/Jarvis_AI_Assistant/datasets
+    fi
 fi
 
-# Clone the repository if not already present
-if [ ! -d "Jarvis-AI-Assistant" ]; then
-    echo "Cloning repository..."
-    git clone https://github.com/your-username/Jarvis-AI-Assistant.git
-    cd Jarvis-AI-Assistant
-else
-    echo "Repository already exists, changing to directory"
-    cd Jarvis-AI-Assistant
-fi
+# Create project directory
+echo "Creating project directory..."
+mkdir -p Jarvis-AI-Assistant
+cd Jarvis-AI-Assistant || echo "Failed to change to project directory"
 
 # Test installations
-echo "Testing installations..."
+echo "Testing fine-tuning components..."
 python -c "
 import sys
 print(f'Python version: {sys.version}')
@@ -226,76 +246,57 @@ try:
         print('GPU:', torch.cuda.get_device_name(0))
         print('GPU memory:', torch.cuda.get_device_properties(0).total_memory / 1e9, 'GB')
         print('BF16 support:', torch.cuda.is_bf16_supported())
-    else:
-        print('WARNING: CUDA is not available to PyTorch!')
-except ImportError:
-    print('PyTorch not installed correctly')
 except Exception as e:
     print(f'PyTorch error: {e}')
 
 try:
     import bitsandbytes as bnb
-    print(f'bitsandbytes version: {bnb.__version__}')
-except ImportError:
-    print('bitsandbytes not installed correctly')
+    # Test if bitsandbytes can create a quantized linear layer
+    if torch.cuda.is_available():
+        cuda_setup_success = bnb.cuda_setup.get_compute_capability() is not None
+        print(f'bitsandbytes CUDA setup: {cuda_setup_success}')
+        lin8bit = bnb.nn.Linear8bitLt(10, 10, has_fp16_weights=False)
+        print('Successfully created 8-bit linear layer')
 except Exception as e:
     print(f'bitsandbytes error: {e}')
 
 try:
-    import xformers
-    print(f'xformers version: {xformers.__version__}')
-except ImportError:
-    print('xformers not installed correctly')
+    import transformers
+    print(f'transformers version: {transformers.__version__}')
 except Exception as e:
-    print(f'xformers error: {e}')
+    print(f'transformers error: {e}')
+
+try:
+    import peft
+    print(f'peft version: {peft.__version__}')
+except Exception as e:
+    print(f'peft error: {e}')
 
 try:
     import unsloth
     print(f'unsloth version: {unsloth.__version__}')
-except ImportError:
-    print('unsloth not installed correctly')
 except Exception as e:
     print(f'unsloth error: {e}')
 
-print('\\nGPU performance test:')
-if torch.cuda.is_available():
-    # Create a test tensor and measure performance
-    a = torch.randn(4096, 4096, device='cuda')
-    b = torch.randn(4096, 4096, device='cuda')
-    
-    # Warm-up
-    for _ in range(5):
-        c = torch.matmul(a, b)
-    
-    # Measure
-    import time
-    torch.cuda.synchronize()
-    start = time.time()
-    for _ in range(10):
-        c = torch.matmul(a, b)
-    torch.cuda.synchronize()
-    end = time.time()
-    
-    print(f'Matrix multiplication speed test (10 iterations): {end-start:.4f} seconds')
-    
-    if 'A100' in torch.cuda.get_device_name(0):
-        print('A100 is properly configured and performing well.')
-else:
-    print('GPU performance test skipped: CUDA not available')
+try:
+    import xformers
+    print(f'xformers version: {xformers.__version__}')
+except Exception as e:
+    print(f'xformers error: {e}')
 "
 
-# Create a sample Colab notebook for A100 optimization if we're in Colab
-if [ $IN_COLAB -eq 1 ]; then
-    cat > A100_Optimization.ipynb << EOF
+# Create a fine-tuning example notebook
+echo "Creating GPU fine-tuning example notebook..."
+cat > GPU_Fine_Tuning.ipynb << EOF
 {
  "cells": [
   {
    "cell_type": "markdown",
    "metadata": {},
    "source": [
-    "# A100 GPU Optimization for Jarvis AI Assistant\n",
+    "# GPU Fine-Tuning with Unsloth\n",
     "\n",
-    "This notebook demonstrates how to use the A100 GPU optimally with this project."
+    "This notebook demonstrates how to fine-tune a model using GPU hardware in Google Colab or Paperspace."
    ]
   },
   {
@@ -303,14 +304,15 @@ if [ $IN_COLAB -eq 1 ]; then
    "execution_count": null,
    "metadata": {},
    "source": [
-    "# First, make sure you're using a GPU runtime\n",
-    "# Runtime > Change runtime type > Hardware accelerator > GPU\n",
+    "# Verify GPU setup\n",
     "import torch\n",
+    "print(f\"PyTorch version: {torch.__version__}\")\n",
     "print(f\"CUDA available: {torch.cuda.is_available()}\")\n",
     "if torch.cuda.is_available():\n",
     "    print(f\"GPU: {torch.cuda.get_device_name(0)}\")\n",
-    "else:\n",
-    "    print(\"No GPU detected! Please change runtime to GPU.\")"
+    "    print(f\"CUDA version: {torch.version.cuda}\")\n",
+    "    print(f\"GPU memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB\")\n",
+    "    print(f\"BF16 support: {torch.cuda.is_bf16_supported()}\")"
    ],
    "outputs": []
   },
@@ -319,35 +321,69 @@ if [ $IN_COLAB -eq 1 ]; then
    "execution_count": null,
    "metadata": {},
    "source": [
-    "# Run the setup script\n",
-    "!chmod +x ./colab_setup.sh\n",
-    "!./colab_setup.sh"
-   ],
-   "outputs": []
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "source": [
-    "# Configure for A100 optimal batch sizes\n",
-    "import torch\n",
-    "from accelerate import Accelerator\n",
+    "# Import required libraries\n",
+    "import os\n",
+    "from datasets import load_dataset\n",
+    "from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig\n",
+    "from peft import LoraConfig\n",
     "\n",
-    "# A100 typically has 40-80GB of VRAM, so we can use large batch sizes\n",
-    "if 'A100' in torch.cuda.get_device_name(0):\n",
-    "    BATCH_SIZE = 32  # Can be increased based on your model\n",
-    "    GRADIENT_ACCUMULATION_STEPS = 4\n",
-    "    print(f\"Using A100-optimized batch size: {BATCH_SIZE}\")\n",
-    "else:\n",
+    "# Unsloth for efficient fine-tuning\n",
+    "from unsloth import FastLanguageModel"
+   ],
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "source": [
+    "# Detect environment and adjust settings accordingly\n",
+    "IN_COLAB = 'google.colab' in str(get_ipython())\n",
+    "IN_PAPERSPACE = os.path.exists('/storage') or os.path.exists('/notebooks')\n",
+    "\n",
+    "# Detect GPU type and adjust settings\n",
+    "gpu_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else \"\"\n",
+    "IS_A100 = \"A100\" in gpu_name\n",
+    "IS_RTX4000 = \"RTX 4000\" in gpu_name \n",
+    "IS_RTX5000 = \"RTX 5000\" in gpu_name\n",
+    "\n",
+    "# Adjust batch size and sequence length based on GPU type\n",
+    "if IS_A100:\n",
+    "    # A100 has plenty of memory\n",
+    "    BATCH_SIZE = 8\n",
+    "    SEQ_LENGTH = 2048\n",
+    "    USE_BF16 = torch.cuda.is_bf16_supported()\n",
+    "    LOAD_IN_4BIT = True\n",
+    "elif IS_RTX4000 or IS_RTX5000:\n",
+    "    # RTX4000/5000 have less memory\n",
     "    BATCH_SIZE = 4\n",
-    "    GRADIENT_ACCUMULATION_STEPS = 8\n",
-    "    print(f\"Using standard batch size: {BATCH_SIZE}\")\n",
+    "    SEQ_LENGTH = 1024\n",
+    "    USE_BF16 = False  # Use FP16 instead\n",
+    "    LOAD_IN_4BIT = True\n",
+    "else:\n",
+    "    # Conservative defaults\n",
+    "    BATCH_SIZE = 2\n",
+    "    SEQ_LENGTH = 512\n",
+    "    USE_BF16 = False\n",
+    "    LOAD_IN_4BIT = True\n",
     "\n",
-    "# Initialize accelerator with BF16 mixed precision (optimal for A100)\n",
-    "accelerator = Accelerator(mixed_precision='bf16')\n",
-    "print(f\"Using device: {accelerator.device}\")\n",
-    "print(f\"Mixed precision: {accelerator.mixed_precision}\")"
+    "print(f\"Environment: {'Colab' if IN_COLAB else 'Paperspace' if IN_PAPERSPACE else 'Other'}\")\n",
+    "print(f\"GPU Type: {gpu_name}\")\n",
+    "print(f\"Batch Size: {BATCH_SIZE}\")\n",
+    "print(f\"Sequence Length: {SEQ_LENGTH}\")\n",
+    "print(f\"Using BF16: {USE_BF16}\")\n",
+    "print(f\"Load in 4-bit: {LOAD_IN_4BIT}\")\n",
+    "\n",
+    "# Set up storage path based on environment\n",
+    "if IN_COLAB and os.path.exists('/content/drive/MyDrive'):\n",
+    "    STORAGE_PATH = \"/content/drive/MyDrive/Jarvis_AI_Assistant\"\n",
+    "elif IN_PAPERSPACE and os.path.exists('/storage'):\n",
+    "    STORAGE_PATH = \"/storage/Jarvis_AI_Assistant\"\n",
+    "else:\n",
+    "    STORAGE_PATH = \"./jarvis_models\"\n",
+    "    \n",
+    "print(f\"Storage Path: {STORAGE_PATH}\")\n",
+    "os.makedirs(STORAGE_PATH, exist_ok=True)"
    ],
    "outputs": []
   },
@@ -356,28 +392,156 @@ if [ $IN_COLAB -eq 1 ]; then
    "execution_count": null,
    "metadata": {},
    "source": [
-    "# Example of loading a model with A100 optimizations\n",
-    "from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig\n",
+    "# Configure model and quantization\n",
+    "model_id = \"deepseek-ai/deepseek-coder-6.7b-base\"  # Replace with your preferred model\n",
     "\n",
-    "# Configure quantization for A100\n",
+    "# Create BitsAndBytesConfig for 4-bit quantization\n",
     "bnb_config = BitsAndBytesConfig(\n",
-    "    load_in_4bit=True,\n",
-    "    bnb_4bit_use_double_quant=True,\n",
+    "    load_in_4bit=LOAD_IN_4BIT,\n",
     "    bnb_4bit_quant_type=\"nf4\",\n",
-    "    bnb_4bit_compute_dtype=torch.bfloat16  # Use BF16 on A100\n",
-    ")\n",
-    "\n",
-    "# Load model with A100 optimizations\n",
-    "model_name = \"deepseek-ai/deepseek-coder-6.7b-base\"  # Example model\n",
-    "tokenizer = AutoTokenizer.from_pretrained(model_name)\n",
-    "model = AutoModelForCausalLM.from_pretrained(\n",
-    "    model_name,\n",
+    "    bnb_4bit_compute_dtype=torch.bfloat16 if USE_BF16 else torch.float16,\n",
+    "    bnb_4bit_use_double_quant=True,\n",
+    ")"
+   ],
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "source": [
+    "# Load and prepare the model with Unsloth\n",
+    "# This loads faster and uses less memory than the standard HF way\n",
+    "model, tokenizer = FastLanguageModel.from_pretrained(\n",
+    "    model_name=model_id,\n",
     "    quantization_config=bnb_config,\n",
+    "    max_seq_length=SEQ_LENGTH,\n",
     "    device_map=\"auto\",\n",
     "    trust_remote_code=True\n",
     ")\n",
     "\n",
-    "print(f\"Model loaded with A100 optimizations\")"
+    "# Set up LoRA for efficient fine-tuning\n",
+    "lora_config = LoraConfig(\n",
+    "    r=64,                     # Rank\n",
+    "    lora_alpha=16,            # Alpha parameter for LoRA scaling\n",
+    "    target_modules=[\"q_proj\", \"k_proj\", \"v_proj\", \"o_proj\", \"gate_proj\", \"up_proj\", \"down_proj\"],\n",
+    "    lora_dropout=0.05,        # Dropout\n",
+    "    bias=\"none\",              # No bias parameters\n",
+    "    task_type=\"CAUSAL_LM\"     # Task type\n",
+    ")\n",
+    "\n",
+    "# Apply LoRA to the model\n",
+    "model = FastLanguageModel.get_peft_model(\n",
+    "    model, \n",
+    "    lora_config,\n",
+    "    use_gradient_checkpointing=True,  # Save GPU memory with gradient checkpointing\n",
+    ")"
+   ],
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "source": [
+    "# Example: Prepare a small dataset\n",
+    "# For a real task, replace this with your actual dataset\n",
+    "data = [\n",
+    "    {\"text\": \"def fibonacci(n):\\n    if n <= 1:\\n        return n\\n    else:\\n        return fibonacci(n-1) + fibonacci(n-2)\\n\"},\n",
+    "    {\"text\": \"def quicksort(arr):\\n    if len(arr) <= 1:\\n        return arr\\n    pivot = arr[len(arr) // 2]\\n    left = [x for x in arr if x < pivot]\\n    middle = [x for x in arr if x == pivot]\\n    right = [x for x in arr if x > pivot]\\n    return quicksort(left) + middle + quicksort(right)\\n\"},\n",
+    "]\n",
+    "\n",
+    "from datasets import Dataset\n",
+    "dataset = Dataset.from_list(data)\n",
+    "\n",
+    "# GPU-optimized training parameters\n",
+    "training_args = {\n",
+    "    \"num_train_epochs\": 1,\n",
+    "    \"per_device_train_batch_size\": BATCH_SIZE,\n",
+    "    \"gradient_accumulation_steps\": 8 // BATCH_SIZE,  # Adjust based on batch size\n",
+    "    \"optim\": \"adamw_torch_fused\",      # Optimized for NVIDIA GPUs\n",
+    "    \"learning_rate\": 2e-4,\n",
+    "    \"max_grad_norm\": 0.3,\n",
+    "    \"warmup_ratio\": 0.03,\n",
+    "    \"lr_scheduler_type\": \"constant\",\n",
+    "    \"save_strategy\": \"steps\",\n",
+    "    \"save_steps\": 10,\n",
+    "    \"save_total_limit\": 2,\n",
+    "    \"bf16\": USE_BF16,                 # Use BF16 for A100, FP16 for others\n",
+    "    \"fp16\": not USE_BF16,             # Use FP16 when not using BF16\n",
+    "    \"logging_steps\": 1,\n",
+    "    \"report_to\": [\"tensorboard\"],\n",
+    "    \"output_dir\": os.path.join(STORAGE_PATH, \"models\", \"fine_tuned\")\n",
+    "}\n",
+    "\n",
+    "# This is just a setup example - no actual training happens here to save notebook space\n",
+    "print(\"Model and dataset prepared for fine-tuning\")"
+   ],
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "source": [
+    "# Fine-tune the model\n",
+    "# Uncomment the following to run actual training:\n",
+    "\n",
+    "'''\n",
+    "from transformers import TrainingArguments, Trainer\n",
+    "\n",
+    "# Tokenize the dataset\n",
+    "def tokenize_function(examples):\n",
+    "    return tokenizer(examples[\"text\"], truncation=True, max_length=SEQ_LENGTH)\n",
+    "\n",
+    "tokenized_dataset = dataset.map(tokenize_function, batched=True)\n",
+    "\n",
+    "# Create training arguments\n",
+    "args = TrainingArguments(**training_args)\n",
+    "\n",
+    "# Create Trainer\n",
+    "trainer = Trainer(\n",
+    "    model=model,\n",
+    "    args=args,\n",
+    "    train_dataset=tokenized_dataset,\n",
+    ")\n",
+    "\n",
+    "# Start training\n",
+    "trainer.train()\n",
+    "\n",
+    "# Save the model\n",
+    "model.save_pretrained(training_args[\"output_dir\"])\n",
+    "tokenizer.save_pretrained(training_args[\"output_dir\"])\n",
+    "'''"
+   ],
+   "outputs": []
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "source": [
+    "# Example of text generation with the model\n",
+    "prompt = \"def calculate_fibonacci_sequence(n):\\n\"\n",
+    "\n",
+    "# Set the generation parameters\n",
+    "generation_config = {\n",
+    "    \"max_new_tokens\": 500,\n",
+    "    \"temperature\": 0.7,\n",
+    "    \"top_p\": 0.95,\n",
+    "    \"top_k\": 50,\n",
+    "    \"repetition_penalty\": 1.1,\n",
+    "    \"do_sample\": True,\n",
+    "    \"use_cache\": True\n",
+    "}\n",
+    "\n",
+    "# Generate text\n",
+    "input_ids = tokenizer(prompt, return_tensors=\"pt\").input_ids.to(model.device)\n",
+    "generated_ids = model.generate(input_ids, **generation_config)\n",
+    "\n",
+    "# Decode the generated text\n",
+    "generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)\n",
+    "print(generated_text)"
    ],
    "outputs": []
   }
@@ -406,14 +570,189 @@ if [ $IN_COLAB -eq 1 ]; then
  "nbformat_minor": 4
 }
 EOF
-fi
 
-echo "Setup complete! You can now run your notebooks or Python scripts."
-if [ $IN_COLAB -eq 1 ]; then
-    echo "An A100 optimization notebook has been created: A100_Optimization.ipynb"
+# Create a quick-fix script for bitsandbytes issues
+cat > fix_bitsandbytes.py << EOF
+import os
+import torch
+import subprocess
+from pathlib import Path
+
+print("BitsAndBytes CUDA Compatibility Fixer")
+print("=====================================")
+
+# Check CUDA version
+if torch.cuda.is_available():
+    cuda_version = torch.version.cuda
+    print(f"CUDA version: {cuda_version}")
     
-    # If no GPU detected but we're in Colab, remind about runtime change
-    if [ $GPU_AVAILABLE -eq 0 ]; then
-        print_colab_gpu_instructions
-    fi
-fi 
+    # Find bitsandbytes installation
+    try:
+        import bitsandbytes as bnb
+        bnb_path = Path(bnb.__file__).parent
+        print(f"bitsandbytes installation found at: {bnb_path}")
+        
+        # Attempt to run the diagnostic
+        print("Running bitsandbytes diagnostic...")
+        try:
+            subprocess.run(["python", "-m", "bitsandbytes"], check=True)
+        except subprocess.CalledProcessError:
+            print("Diagnostic failed, trying to fix...")
+        
+        # Check if we're on CUDA 12.x which might need special handling
+        if cuda_version.startswith("12"):
+            print(f"Detected CUDA 12.x - attempting special fix for this version")
+            # Special case for CUDA 12.x
+            print("Re-installing bitsandbytes with a CUDA 12.x compatible wheel...")
+            subprocess.run(["pip", "install", "--force-reinstall", "--no-deps", 
+                          "https://github.com/jllllll/bitsandbytes-windows-webui/releases/download/wheels/bitsandbytes-0.41.1-py3-none-any.whl"], 
+                          check=True)
+            print("Fixed bitsandbytes for CUDA 12.x")
+    except ImportError:
+        print("bitsandbytes not installed, installing compatible version...")
+        subprocess.run(["pip", "install", "--no-deps", 
+                      "https://github.com/jllllll/bitsandbytes-windows-webui/releases/download/wheels/bitsandbytes-0.41.1-py3-none-any.whl"], 
+                      check=True)
+    
+    print("Testing bitsandbytes installation...")
+    try:
+        import bitsandbytes as bnb
+        if bnb.cuda_setup.get_compute_capability() is not None:
+            print("bitsandbytes CUDA setup successful!")
+            # Try to create a quantized layer as final test
+            lin8bit = bnb.nn.Linear8bitLt(10, 10, has_fp16_weights=False)
+            print("Successfully created 8-bit linear layer - bitsandbytes is working correctly!")
+        else:
+            print("bitsandbytes CUDA setup failed.")
+    except Exception as e:
+        print(f"Error testing bitsandbytes: {e}")
+else:
+    print("CUDA not available. Cannot fix bitsandbytes without CUDA.")
+EOF
+
+# Create a Paperspace-specific instructions file
+echo "Creating Paperspace-specific instructions..."
+cat > PAPERSPACE_INSTRUCTIONS.md << EOF
+# Running Jarvis AI Assistant on Paperspace
+
+This guide provides instructions for running Jarvis AI Assistant on Paperspace with RTX4000 or RTX5000 GPUs.
+
+## Creating a Paperspace Machine
+
+1. Sign up or log in to [Paperspace](https://www.paperspace.com/)
+2. Create a new Gradient Notebook with:
+   - Runtime: PyTorch 2.1.0
+   - Machine: Choose one of:
+     - RTX4000 (8GB VRAM): Good for smaller models or tight budgets
+     - RTX5000 (16GB VRAM): Better for mid-size models
+   - Disk Size: At least 50GB recommended
+
+## Initial Setup
+
+After your Paperspace notebook is running:
+
+1. Open a terminal and clone the repository:
+   \`\`\`bash
+   git clone https://github.com/your-username/Jarvis-AI-Assistant.git
+   cd Jarvis-AI-Assistant
+   bash colab_setup.sh
+   \`\`\`
+
+2. The setup script will automatically detect that you're running in Paperspace and apply RTX4000/5000 appropriate optimizations.
+
+## Using Persistent Storage
+
+Paperspace notebooks have:
+- **/notebooks**: Non-persistent storage (deleted when machine is off)
+- **/storage**: Persistent storage (maintained between sessions)
+
+The setup script creates these directories in persistent storage:
+- **/storage/Jarvis_AI_Assistant**
+- **/storage/Jarvis_AI_Assistant/models**
+- **/storage/Jarvis_AI_Assistant/datasets**
+
+It also creates a symlink in your notebook directory:
+- **/notebooks/Jarvis_AI_Assistant_storage** → /storage/Jarvis_AI_Assistant
+
+## RTX4000/5000 Optimizations
+
+RTX4000 (8GB VRAM) and RTX5000 (16GB VRAM) have less memory than A100 GPUs, so:
+
+1. Use smaller batch sizes:
+   - RTX4000: batch size 2-4
+   - RTX5000: batch size 4-6
+
+2. Use shorter sequence lengths:
+   - RTX4000: sequence length 512-1024
+   - RTX5000: sequence length 1024-2048
+
+3. Always use gradient accumulation:
+   - Use \`--gradient-accumulation-steps 4\` or higher
+
+4. Use FP16 instead of BF16 (RTX GPUs don't support BF16 natively)
+
+## Example Commands
+
+### Fine-tuning on RTX4000:
+
+\`\`\`bash
+python src/generative_ai_module/jarvis_unified.py \\
+    --mode train \\
+    --model deepseek-ai/deepseek-coder-1.3b-base \\
+    --datasets pile \\
+    --max-samples 200 \\
+    --epochs 1 \\
+    --batch-size 2 \\
+    --load-in-4bit \\
+    --use-unsloth \\
+    --memory-file /storage/Jarvis_AI_Assistant/memory.json
+\`\`\`
+
+### Fine-tuning on RTX5000:
+
+\`\`\`bash
+python src/generative_ai_module/jarvis_unified.py \\
+    --mode train \\
+    --model deepseek-ai/deepseek-coder-6.7b-base \\
+    --datasets pile \\
+    --max-samples 500 \\
+    --epochs 1 \\
+    --batch-size 4 \\
+    --load-in-4bit \\
+    --use-unsloth \\
+    --memory-file /storage/Jarvis_AI_Assistant/memory.json
+\`\`\`
+
+### Interactive mode:
+
+\`\`\`bash
+python src/generative_ai_module/jarvis_unified.py \\
+    --mode interactive \\
+    --model deepseek-ai/deepseek-coder-1.3b-instruct \\
+    --load-in-4bit \\
+    --use-unsloth \\
+    --memory-file /storage/Jarvis_AI_Assistant/chat_history.json
+\`\`\`
+
+## Troubleshooting
+
+If you encounter out-of-memory errors:
+1. Reduce the batch size
+2. Use a smaller model (e.g., 1.3B instead of 6.7B)
+3. Reduce sequence length
+4. Increase gradient accumulation steps
+5. Run \`python fix_bitsandbytes.py\` to fix CUDA compatibility issues
+EOF
+
+echo "==================================================================="
+echo "Setup complete! You can now run fine-tuning on your GPU."
+echo ""
+echo "IMPORTANT: If you encounter any issues with bitsandbytes, run:"
+echo "python fix_bitsandbytes.py"
+echo ""
+echo "A fine-tuning notebook has been created: GPU_Fine_Tuning.ipynb"
+echo ""
+if [ $IN_PAPERSPACE -eq 1 ]; then
+    echo "For Paperspace-specific instructions, see: PAPERSPACE_INSTRUCTIONS.md"
+fi
+echo "===================================================================" 

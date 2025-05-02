@@ -10,7 +10,7 @@ packages = [{include = "src", from = "."}]
 [tool.poetry.dependencies]
 python = ">=3.10,<3.13"
 
-# Core CUDA 12.1 Stack --------------------------------------------------------
+# Core CUDA Stack (A100-optimized) --------------------------------------------
 torch = {version = "2.1.2", source = "pytorch"}
 torchvision = {version = "0.16.2", source = "pytorch"}
 torchaudio = {version = "2.1.2", source = "pytorch"}
@@ -24,8 +24,8 @@ flash-attn = "2.3.4"
 
 # Hugging Face Ecosystem ------------------------------------------------------
 transformers = "4.36.2"
-accelerate = "0.25.0"
-peft = "0.6.2"
+accelerate = "0.30.0"  # Updated for better A100 compatibility
+peft = "0.7.0"  # Updated for compatibility with newer transformers
 trl = "0.7.10"
 datasets = "2.19.0"
 huggingface-hub = "0.19.4"
@@ -34,6 +34,7 @@ safetensors = "0.4.1"
 # Unsloth & Optimization ------------------------------------------------------
 # Installing unsloth via PyPI instead of git for better stability
 unsloth = "2025.4.4"
+einops = "0.7.0"      # Required for efficient tensor operations
 
 # NLP & Utilities -------------------------------------------------------------
 spacy = "3.7.4"
@@ -53,6 +54,8 @@ psutil = "5.9.8"
 # Development Tools -----------------------------------------------------------
 jupyterlab = "4.4.1"
 tensorboard = "2.16.2"
+packaging = "23.2"
+ninja = "1.11.1"      # Speeds up custom CUDA extension builds
 
 [[tool.poetry.source]]
 name = "pytorch"

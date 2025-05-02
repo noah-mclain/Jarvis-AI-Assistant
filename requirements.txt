@@ -1,4 +1,4 @@
-# A100 GPU-optimized dependencies
+# A100 GPU-optimized dependencies for Google Colab
 --find-links https://download.pytorch.org/whl/cu121/torch_stable.html
 torch==2.1.2+cu121
 torchvision==0.16.2+cu121
@@ -10,15 +10,17 @@ flash-attn==2.3.4
 
 # Hugging Face Ecosystem
 transformers==4.36.2
-accelerate==0.25.0
-peft==0.6.2
+accelerate==0.30.0
+peft==0.7.0
 trl==0.7.10
 datasets==2.19.0
 huggingface-hub==0.19.4
 safetensors==0.4.1
+tokenizers==0.19.1
 
-# Unsloth
+# Unsloth & Optimization
 unsloth==2025.4.4
+einops==0.7.0
 
 # NLP & Utilities
 spacy==3.7.4
@@ -38,11 +40,12 @@ psutil==5.9.8
 # Development Tools
 jupyterlab==4.4.1
 tensorboard==2.16.2
+packaging==23.2
+ninja==1.11.1
 
-# Additional A100 optimizations
-einops==0.7.0        # Helps with tensor operations on A100
-ninja==1.11.1        # Speeds up custom CUDA extension builds
-packaging==23.2      # Required for proper version handling
+# Additional A100-specific optimizations
+matplotlib==3.7.3
+cloudpathlib==0.16.0
 
 # Language model
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0.tar.gz

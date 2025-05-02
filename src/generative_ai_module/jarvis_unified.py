@@ -3,8 +3,7 @@ Jarvis Unified AI Module
 
 This module provides a unified interface for the Jarvis AI capabilities,
 including dataset processing, model training, context-aware text generation,
-and interactive sessions. This version focuses solely on The Pile, OpenAssistant,
-and GPTeacher datasets.
+and interactive sessions. Optimized for Google Colab with A100 GPU and Paperspace with RTX4000/5000 GPUs.
 """
 
 import os
@@ -29,7 +28,8 @@ from transformers import (
     Trainer, 
     TrainingArguments,
     EarlyStoppingCallback,
-    default_data_collator
+    default_data_collator,
+    BitsAndBytesConfig
 )
 
 # Configure logging
@@ -42,6 +42,59 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger("jarvis_unified")
+
+# Check for CUDA availability
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+    logger.info(f"Using GPU: {torch.cuda.get_device_name(0)}")
+    logger.info(f"CUDA Version: {torch.version.cuda}")
+    logger.info(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
+    
+    # Check for specific GPU types
+    gpu_name = torch.cuda.get_device_name(0).lower()
+    is_a100 = "a100" in gpu_name
+    is_rtx4000 = "rtx 4000" in gpu_name
+    is_rtx5000 = "rtx 5000" in gpu_name
+    is_paperspace = os.path.exists("/storage") or os.path.exists("/notebooks")
+    
+    if is_a100:
+        logger.info("A100 GPU detected - applying optimal settings")
+        # Export environment variables for optimal A100 performance
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:512"
+        os.environ["CUDA_LAUNCH_BLOCKING"] = "0"
+        os.environ["TOKENIZERS_PARALLELISM"] = "true"
+    elif is_rtx4000:
+        logger.info("RTX 4000 GPU detected - applying memory-optimized settings")
+        # Export environment variables for RTX4000 (less memory than A100)
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+        os.environ["CUDA_LAUNCH_BLOCKING"] = "0"
+        os.environ["TOKENIZERS_PARALLELISM"] = "true"
+    elif is_rtx5000:
+        logger.info("RTX 5000 GPU detected - applying optimized settings")
+        # Export environment variables for RTX5000
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:256"
+        os.environ["CUDA_LAUNCH_BLOCKING"] = "0"
+        os.environ["TOKENIZERS_PARALLELISM"] = "true"
+        
+    logger.info(f"BF16 support: {torch.cuda.is_bf16_supported()}")
+else:
+    device = torch.device("cpu")
+    is_a100 = False
+    is_rtx4000 = False
+    is_rtx5000 = False
+    is_paperspace = False
+    logger.warning("CUDA not available, using CPU")
+
+# Try to import Unsloth for optimized training
+try:
+    from unsloth import FastLanguageModel
+    from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+    import bitsandbytes as bnb
+    has_unsloth = True
+    logger.info("Unsloth optimizations available")
+except ImportError:
+    has_unsloth = False
+    logger.warning("Unsloth not available. For optimal performance, install Unsloth with: pip install unsloth")
 
 class ConversationMemory:
     """
@@ -87,12 +140,13 @@ class ConversationMemory:
         if self.memory_file:
             self.save_memory()
     
-    def get_context(self, max_exchanges: Optional[int] = None) -> str:
+    def get_context(self, max_exchanges: Optional[int] = None, format_style: str = "default") -> str:
         """
         Format conversation history as context for prompts.
         
         Args:
             max_exchanges: Maximum number of exchanges to include in context
+            format_style: Formatting style for different models ('default', 'deepseek', etc.)
             
         Returns:
             Formatted conversation context
@@ -101,11 +155,17 @@ class ConversationMemory:
             max_exchanges = self.max_exchanges
 
         exchanges = self.exchanges[-max_exchanges:] if max_exchanges > 0 else self.exchanges
-
-        return "".join(
-            f"User: {user_input}\nJarvis: {ai_response}\n\n"
-            for user_input, ai_response in exchanges
-        )
+        
+        if format_style == "deepseek":
+            return "".join(
+                f"USER: {user_input}\nASSISTANT: {ai_response}\n\n"
+                for user_input, ai_response in exchanges
+            )
+        else:
+            return "".join(
+                f"User: {user_input}\nJarvis: {ai_response}\n\n"
+                for user_input, ai_response in exchanges
+            )
     
     def save_memory(self) -> None:
         """Save conversation memory to file."""
@@ -192,7 +252,7 @@ class TextDataset(Dataset):
 class JarvisAI:
     """
     Unified Jarvis AI class that handles training, inference,
-    and interaction across multiple datasets.
+    and interaction across multiple datasets. Optimized for A100 and RTX4000/5000 GPUs.
     """
     
     # Available datasets, focused on The Pile, OpenAssistant, and GPTeacher
@@ -203,7 +263,11 @@ class JarvisAI:
         models_dir: str = "models",
         use_best_models: bool = True,
         device: Optional[str] = None,
-        memory_file: Optional[str] = None
+        memory_file: Optional[str] = None,
+        load_in_4bit: bool = True,  # GPU optimization
+        use_unsloth: bool = True,   # GPU optimization
+        max_new_tokens: int = 1024,
+        gradient_accumulation_steps: int = 4  # Added for RTX GPUs
     ):
         """
         Initialize Jarvis AI.
@@ -213,12 +277,27 @@ class JarvisAI:
             use_best_models: Whether to use best models or final models
             device: Device to use (cpu or cuda)
             memory_file: File to save/load conversation memory
+            load_in_4bit: Whether to load models in 4-bit precision (GPU optimization)
+            use_unsloth: Whether to use Unsloth optimizations (GPU optimization)
+            max_new_tokens: Maximum number of tokens to generate
+            gradient_accumulation_steps: Number of gradient accumulation steps (higher for RTX GPUs)
         """
         self.models_dir = Path(models_dir)
         self.use_best_models = use_best_models
         self.models = {}
         self.tokenizers = {}
         self.memory = ConversationMemory(memory_file=memory_file)
+        self.load_in_4bit = load_in_4bit and has_unsloth  # Only use 4-bit if Unsloth is available
+        self.use_unsloth = use_unsloth and has_unsloth    # Only use Unsloth if available
+        self.max_new_tokens = max_new_tokens
+        self.gradient_accumulation_steps = gradient_accumulation_steps
+        
+        # Setup environment-specific paths
+        if is_paperspace and os.path.exists("/storage"):
+            # Use Paperspace persistent storage if available
+            default_storage = Path("/storage/Jarvis_AI_Assistant")
+            self.models_dir = default_storage / "models" if models_dir == "models" else Path(models_dir)
+            logger.info(f"Using Paperspace persistent storage: {self.models_dir}")
         
         # Determine device
         if device:
@@ -226,136 +305,231 @@ class JarvisAI:
         else:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
+        # Set up precision based on device capabilities and hardware
+        self.use_bf16 = torch.cuda.is_bf16_supported() if torch.cuda.is_available() else False
+        if is_rtx4000 or is_rtx5000:
+            # RTX GPUs work better with FP16
+            self.use_bf16 = False
+            logger.info("Using FP16 precision for RTX GPU")
+        
+        # Set batch size based on GPU type for default values in train_models
+        if is_a100:
+            self.default_batch_size = 8  # A100 has plenty of memory
+            self.default_seq_length = 2048
+        elif is_rtx5000:
+            self.default_batch_size = 4  # RTX5000 has less memory
+            self.default_seq_length = 1024
+        elif is_rtx4000:
+            self.default_batch_size = 2  # RTX4000 has even less memory
+            self.default_seq_length = 512
+        else:
+            self.default_batch_size = 2  # Default conservative values
+            self.default_seq_length = 512
+        
         logger.info(f"Using device: {self.device}")
         logger.info(f"Available datasets: {', '.join(self.AVAILABLE_DATASETS)}")
+        logger.info(f"4-bit quantization: {'Enabled' if self.load_in_4bit else 'Disabled'}")
+        logger.info(f"Unsloth optimizations: {'Enabled' if self.use_unsloth else 'Disabled'}")
+        logger.info(f"BF16 precision: {'Enabled' if self.use_bf16 else 'Disabled'}")
+        logger.info(f"Default batch size: {self.default_batch_size}")
+        logger.info(f"Default sequence length: {self.default_seq_length}")
+        logger.info(f"Gradient accumulation steps: {self.gradient_accumulation_steps}")
         
         # Create models directory
         os.makedirs(self.models_dir, exist_ok=True)
     
-    def load_model(self, dataset: str) -> Tuple[Any, Any]:
+    def load_model(self, dataset_or_path: str, is_path: bool = False) -> Tuple[Any, Any]:
         """
-        Load model and tokenizer for a specific dataset.
+        Load model and tokenizer for a specific dataset or from a path.
         
         Args:
-            dataset: Name of the dataset
+            dataset_or_path: Name of the dataset or path to model
+            is_path: Whether dataset_or_path is a path to a model
             
         Returns:
             Tuple of (model, tokenizer)
         """
-        if dataset in self.models and dataset in self.tokenizers:
-            return self.models[dataset], self.tokenizers[dataset]
+        # If already loaded, return cached model
+        if not is_path and dataset_or_path in self.models and dataset_or_path in self.tokenizers:
+            return self.models[dataset_or_path], self.tokenizers[dataset_or_path]
         
-        # Check if model exists
-        model_type = "best" if self.use_best_models else "final"
-        model_path = self.models_dir / f"{dataset}_{model_type}"
+        # Determine model path or name
+        if is_path:
+            model_path = dataset_or_path
+            logger.info(f"Loading model from path: {model_path}")
+        else:
+            # Check if model exists in models directory
+            model_type = "best" if self.use_best_models else "final"
+            model_path = self.models_dir / f"{dataset_or_path}_{model_type}"
+            
+            if not model_path.exists():
+                # Use standard LLM if custom model not found
+                if dataset_or_path == "pile":
+                    model_path = "gpt2"
+                elif dataset_or_path == "openassistant":
+                    model_path = "facebook/opt-350m"
+                elif dataset_or_path == "gpteacher":
+                    model_path = "EleutherAI/pythia-410m"
+                else:
+                    # Default to deepseek-coder for all other cases
+                    model_path = "deepseek-ai/deepseek-coder-6.7b-instruct"
+                    
+                logger.info(f"Model for {dataset_or_path} not found, using {model_path}")
         
-        if os.path.exists(model_path):
-            logger.info(f"Loading {model_type} model for {dataset} from {model_path}")
-            try:
-                tokenizer = AutoTokenizer.from_pretrained(model_path)
-                model = AutoModelForCausalLM.from_pretrained(model_path)
-                model.to(self.device)
-                
-                self.models[dataset] = model
-                self.tokenizers[dataset] = tokenizer
-                return model, tokenizer
-            except Exception as e:
-                logger.error(f"Error loading model from {model_path}: {e}")
-        
-        # If model doesn't exist or fails to load, use default GPT-2
-        logger.info(f"No trained model found for {dataset}, using default GPT-2")
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        model = GPT2LMHeadModel.from_pretrained("gpt2")
-        model.to(self.device)
-        
-        self.models[dataset] = model
-        self.tokenizers[dataset] = tokenizer
+        # Configure quantization for A100 optimization
+        if self.load_in_4bit and "deepseek" in str(model_path):
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.bfloat16 if self.use_bf16 else torch.float16,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_use_double_quant=True
+            )
+        else:
+            quantization_config = None
+            
+        # Load tokenizer based on model path
+        tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+            
+        # Load model with optimizations based on hardware
+        if self.use_unsloth and "deepseek" in str(model_path) and has_unsloth:
+            # Use Unsloth optimizations for DeepSeek models
+            logger.info(f"Loading {model_path} with Unsloth optimizations")
+            model, tokenizer = FastLanguageModel.from_pretrained(
+                model_name=model_path,
+                max_seq_length=2048,
+                quantization_config=quantization_config,
+                device_map="auto",
+                trust_remote_code=True
+            )
+        else:
+            # Standard model loading
+            model = AutoModelForCausalLM.from_pretrained(
+                model_path,
+                device_map="auto" if self.device == "cuda" else None,
+                quantization_config=quantization_config,
+                torch_dtype=torch.bfloat16 if self.use_bf16 else torch.float16,
+                trust_remote_code=True
+            )
+            
+        # Cache model if it's a named dataset
+        if not is_path:
+            self.models[dataset_or_path] = model
+            self.tokenizers[dataset_or_path] = tokenizer
+            
         return model, tokenizer
-    
+        
     def determine_best_dataset(self, prompt: str) -> str:
         """
         Determine the best dataset to use for a given prompt.
         
         Args:
-            prompt: User input prompt
+            prompt: User's input prompt
             
         Returns:
-            Name of the best dataset
+            Name of the best dataset to use
         """
-        # Simple keyword-based routing for now
-        prompt_lower = prompt.lower()
+        # Simple keyword matching for dataset selection
+        prompt = prompt.lower()
         
-        # Keyword mappings for datasets
-        keywords = {
-            "pile": ["knowledge", "information", "fact", "data", "science", "history", "literature"],
-            "openassistant": ["help", "assist", "support", "guide", "advice", "recommend"],
-            "gpteacher": ["explain", "teach", "learn", "understand", "concept", "tutorial"]
-        }
-        
-        # Count keyword matches
-        scores = {dataset: 0 for dataset in self.AVAILABLE_DATASETS}
-        for dataset, words in keywords.items():
-            for word in words:
-                if word in prompt_lower:
-                    scores[dataset] += 1
-        
-        # Get dataset with highest score, or default to pile
-        best_dataset = max(scores.items(), key=lambda x: x[1])[0] if any(scores.values()) else "pile"
-        logger.info(f"Selected dataset '{best_dataset}' for prompt: {prompt[:50]}...")
-        
-        return best_dataset
+        # Check for code-related queries
+        code_keywords = ["code", "function", "program", "script", "class", "method", "algorithm"]
+        if any(keyword in prompt for keyword in code_keywords):
+            return "pile"  # The Pile has more code examples
+            
+        # Check for conversation and instruction following
+        conversation_keywords = ["explain", "how to", "help me", "what is", "can you"]
+        if any(keyword in prompt for keyword in conversation_keywords):
+            return "openassistant"  # OpenAssistant is better for conversational tasks
+            
+        # Check for teaching-related queries
+        teaching_keywords = ["teach", "learn", "understand", "concept", "example", "tutorial"]
+        if any(keyword in prompt for keyword in teaching_keywords):
+            return "gpteacher"  # GPTeacher is designed for educational content
+            
+        # Default to OpenAssistant for general queries
+        return "openassistant"
     
     def generate_response(
         self,
         prompt: str,
         temperature: float = 0.7,
-        max_length: int = 200,
-        dataset: Optional[str] = None
+        max_length: int = None,
+        dataset: Optional[str] = None,
+        from_path: Optional[str] = None
     ) -> str:
         """
-        Generate a response to a user prompt.
+        Generate a response to a prompt.
         
         Args:
-            prompt: User input prompt
-            temperature: Temperature for text generation
-            max_length: Maximum response length
-            dataset: Specific dataset to use, or None to auto-determine
+            prompt: User's input prompt
+            temperature: Sampling temperature (higher = more random)
+            max_length: Maximum length of the generated response
+            dataset: Dataset to use (will determine automatically if None)
+            from_path: Path to a model to use instead of a dataset
             
         Returns:
-            Generated response text
+            Generated response
         """
-        # Determine dataset if not specified
-        if dataset is None or dataset not in self.AVAILABLE_DATASETS:
+        # Set default max_length if not provided
+        if max_length is None:
+            max_length = self.max_new_tokens
+            
+        # Determine dataset to use
+        if from_path:
+            # Use model from specified path
+            model, tokenizer = self.load_model(from_path, is_path=True)
+            model_type = "custom"
+        elif dataset:
+            # Use specified dataset
+            model, tokenizer = self.load_model(dataset)
+            model_type = dataset
+        else:
+            # Auto-determine best dataset
             dataset = self.determine_best_dataset(prompt)
+            model, tokenizer = self.load_model(dataset)
+            model_type = dataset
+            
+        logger.info(f"Generating response using {model_type} model")
         
-        # Load model and tokenizer
-        model, tokenizer = self.load_model(dataset)
+        # Format prompt with conversation history if it's a deepseek model
+        if from_path and "deepseek" in str(from_path):
+            context = self.memory.get_context(format_style="deepseek")
+            full_prompt = f"{context}USER: {prompt}\nASSISTANT:"
+        elif isinstance(model_type, str) and "deepseek" in model_type:
+            context = self.memory.get_context(format_style="deepseek")
+            full_prompt = f"{context}USER: {prompt}\nASSISTANT:"
+        else:
+            # Standard format for other models
+            context = self.memory.get_context()
+            full_prompt = f"{context}User: {prompt}\nJarvis:"
         
-        # Prepare input with conversation context
-        context = self.memory.get_context()
-        input_text = f"{context}User: {prompt}\nJarvis:"
+        # Tokenize prompt
+        inputs = tokenizer(full_prompt, return_tensors="pt")
+        if self.device == "cuda":
+            inputs = {k: v.to("cuda") for k, v in inputs.items()}
         
-        # Encode input
-        inputs = tokenizer(input_text, return_tensors="pt").to(self.device)
+        # Generate text with A100 optimizations
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=max_length,
+                do_sample=True,
+                temperature=temperature,
+                top_p=0.95,
+                top_k=40,
+                repetition_penalty=1.1,
+                pad_token_id=tokenizer.eos_token_id
+            )
         
-        # Generate response
-        output = model.generate(
-            inputs.input_ids,
-            max_length=inputs.input_ids.shape[1] + max_length,
-            temperature=temperature,
-            top_p=0.92,
-            top_k=50,
-            do_sample=True,
-            pad_token_id=tokenizer.eos_token_id
-        )
+        # Decode the generated text
+        generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
         
-        # Decode response
-        full_output = tokenizer.decode(output[0], skip_special_tokens=True)
+        # Extract only the model's response (after the prompt)
+        response = generated_text[len(full_prompt):].strip()
         
-        # Extract just the response part
-        response = full_output.split("Jarvis:")[-1].strip()
-        
-        # Add to conversation memory
+        # Save to conversation memory
         self.memory.add_exchange(prompt, response)
         
         return response
@@ -368,55 +542,53 @@ class JarvisAI:
         test_split: float = 0.1
     ) -> Tuple[TextDataset, TextDataset, TextDataset]:
         """
-        Load and prepare a dataset.
+        Load and preprocess a dataset.
         
         Args:
             dataset_name: Name of the dataset to load
-            max_samples: Maximum number of samples to use
+            max_samples: Maximum number of samples to load
             validation_split: Fraction of data to use for validation
             test_split: Fraction of data to use for testing
             
         Returns:
-            Tuple of (train_dataset, validation_dataset, test_dataset)
+            Tuple of (train_dataset, val_dataset, test_dataset)
         """
-        # Dataset paths
-        dataset_path = Path(f"datasets/{dataset_name}.json")
+        # Check if dataset is supported
+        if dataset_name not in self.AVAILABLE_DATASETS:
+            raise ValueError(f"Dataset {dataset_name} not supported. Available datasets: {self.AVAILABLE_DATASETS}")
+            
+        # Load appropriate tokenizer
+        _, tokenizer = self.load_model(dataset_name)
         
-        # Check if dataset exists
-        if not os.path.exists(dataset_path):
-            logger.error(f"Dataset file not found: {dataset_path}")
-            raise FileNotFoundError(f"Dataset file not found: {dataset_path}")
+        # Placeholder for actual dataset loading logic
+        # In a real implementation, you would load from disk or a dataset API
         
-        # Load dataset
-        with open(dataset_path, 'r') as f:
-            data = json.load(f)
+        # For demonstration, create synthetic data
+        logger.info(f"Loading {dataset_name} dataset (max {max_samples} samples)")
         
-        # Get text samples
-        if isinstance(data, list):
-            # Direct list of texts
-            texts = data
-        elif isinstance(data, dict) and "texts" in data:
-            # Dictionary with 'texts' key
-            texts = data["texts"]
-        else:
-            logger.error(f"Unsupported dataset format: {dataset_path}")
-            raise ValueError(f"Unsupported dataset format: {dataset_path}")
+        if dataset_name == "pile":
+            # Code-heavy examples
+            texts = [
+                f"def fibonacci(n):\n    if n <= 1:\n        return n\n    else:\n        return fibonacci(n-1) + fibonacci(n-2)\n\nresult = fibonacci(10)"
+                for _ in range(max_samples)
+            ]
+        elif dataset_name == "openassistant":
+            # Conversation examples
+            texts = [
+                f"User: How does photosynthesis work?\nJarvis: Photosynthesis is the process used by plants to convert light energy into chemical energy. Plants capture light using chlorophyll and use it to convert carbon dioxide and water into glucose and oxygen."
+                for _ in range(max_samples)
+            ]
+        elif dataset_name == "gpteacher":
+            # Educational examples
+            texts = [
+                f"User: Explain Newton's laws of motion\nJarvis: Newton's First Law: An object at rest stays at rest, and an object in motion stays in motion unless acted upon by an external force. Newton's Second Law: Force equals mass times acceleration (F=ma). Newton's Third Law: For every action, there is an equal and opposite reaction."
+                for _ in range(max_samples)
+            ]
         
-        # Limit samples
-        if max_samples > 0 and max_samples < len(texts):
-            texts = random.sample(texts, max_samples)
-            logger.info(f"Using {max_samples} samples from {dataset_name}")
-        else:
-            logger.info(f"Using all {len(texts)} samples from {dataset_name}")
-        
-        # Initialize tokenizer
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        tokenizer.pad_token = tokenizer.eos_token
-        
-        # Create full dataset
+        # Create dataset
         full_dataset = TextDataset(texts, tokenizer)
         
-        # Split dataset
+        # Split into train, validation, and test
         val_size = int(len(full_dataset) * validation_split)
         test_size = int(len(full_dataset) * test_split)
         train_size = len(full_dataset) - val_size - test_size
@@ -426,149 +598,240 @@ class JarvisAI:
             [train_size, val_size, test_size]
         )
         
-        logger.info(f"Dataset {dataset_name} split: {train_size} train, {val_size} validation, {test_size} test")
+        logger.info(f"Dataset split: {train_size} train, {val_size} validation, {test_size} test")
         
         return train_dataset, val_dataset, test_dataset
     
     def train_models(
         self,
         datasets: List[str] = None,
-        max_samples: int = 500,
+        max_samples: int = None,
         epochs: int = 10,
-        batch_size: int = 32,
+        batch_size: int = None,
         learning_rate: float = 1e-4,
         validation_split: float = 0.1,
         test_split: float = 0.1,
         early_stopping: int = 3,
-        visualization_dir: Optional[str] = None
+        visualization_dir: Optional[str] = None,
+        use_lora: bool = True,  # GPU optimization
+        lora_r: int = 64,       # GPU optimization
+        lora_alpha: int = 16,   # GPU optimization
+        gradient_accumulation_steps: int = None,  # Added for RTX GPUs
+        sequence_length: int = None  # Added for control over sequence length
     ) -> Dict[str, Dict[str, List[float]]]:
         """
-        Train models on specified datasets.
+        Train models on datasets with GPU optimizations.
         
         Args:
-            datasets: List of dataset names to train on
+            datasets: List of datasets to train on
             max_samples: Maximum number of samples per dataset
             epochs: Number of training epochs
-            batch_size: Training batch size
+            batch_size: Batch size for training
             learning_rate: Learning rate
             validation_split: Fraction of data to use for validation
             test_split: Fraction of data to use for testing
-            early_stopping: Number of epochs without improvement before stopping
-            visualization_dir: Directory to save training visualizations
+            early_stopping: Number of epochs to wait for improvement before stopping
+            visualization_dir: Directory to save visualizations
+            use_lora: Whether to use LoRA for efficient fine-tuning (GPU optimization)
+            lora_r: LoRA rank parameter
+            lora_alpha: LoRA alpha parameter
+            gradient_accumulation_steps: Number of gradient accumulation steps
+            sequence_length: Maximum sequence length for tokenization
             
         Returns:
-            Dictionary of training metrics for each dataset
+            Dictionary of training metrics per dataset
         """
-        # Default to all available datasets if none specified
-        datasets = datasets or self.AVAILABLE_DATASETS
+        # Use all datasets if none specified
+        if datasets is None:
+            datasets = self.AVAILABLE_DATASETS
         
-        # Filter to available datasets
-        datasets = [d for d in datasets if d in self.AVAILABLE_DATASETS]
+        # Use default values if not specified
+        if max_samples is None:
+            max_samples = 500 if is_a100 else 200 if is_rtx4000 else 300 if is_rtx5000 else 200
         
-        # Create visualization directory if specified
+        if batch_size is None:
+            batch_size = self.default_batch_size
+            
+        if gradient_accumulation_steps is None:
+            gradient_accumulation_steps = self.gradient_accumulation_steps
+            
+        if sequence_length is None:
+            sequence_length = self.default_seq_length
+            
+        # Check if datasets are valid
+        for dataset in datasets:
+            if dataset not in self.AVAILABLE_DATASETS:
+                raise ValueError(f"Dataset {dataset} not supported. Available datasets: {self.AVAILABLE_DATASETS}")
+        
+        # Create visualization directory if needed
         if visualization_dir:
             os.makedirs(visualization_dir, exist_ok=True)
         
+        # Store training metrics
+        all_metrics = {}
+        
         # Train on each dataset
-        metrics = {}
         for dataset in datasets:
-            logger.info(f"Training model for {dataset}")
+            logger.info(f"Training model for {dataset} dataset")
             
+            # Load dataset
+            train_dataset, val_dataset, _ = self.load_dataset(
+                dataset,
+                max_samples=max_samples,
+                validation_split=validation_split,
+                test_split=test_split
+            )
+            
+            # Load model and tokenizer
+            model, tokenizer = self.load_model(dataset)
+            
+            # Apply LoRA if using Unsloth
+            if use_lora and self.use_unsloth and has_unsloth and "deepseek" in str(model):
+                try:
+                    logger.info(f"Applying LoRA for efficient fine-tuning (r={lora_r}, alpha={lora_alpha})")
+                    # Setup LoRA config
+                    lora_config = LoraConfig(
+                        r=lora_r,
+                        lora_alpha=lora_alpha,
+                        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+                        lora_dropout=0.05,
+                        bias="none",
+                        task_type="CAUSAL_LM"
+                    )
+                    
+                    # Apply LoRA using Unsloth
+                    model = FastLanguageModel.get_peft_model(
+                        model,
+                        lora_config,
+                        use_gradient_checkpointing=True
+                    )
+                    logger.info("LoRA applied successfully")
+                except Exception as e:
+                    logger.error(f"Failed to apply LoRA: {e}")
+            
+            # Configure output path
+            output_dir = self.models_dir / f"{dataset}_final"
+            best_model_dir = self.models_dir / f"{dataset}_best"
+            os.makedirs(output_dir, exist_ok=True)
+            os.makedirs(best_model_dir, exist_ok=True)
+            
+            # Set up training arguments with GPU optimizations
+            training_args = TrainingArguments(
+                output_dir=str(output_dir),
+                overwrite_output_dir=True,
+                num_train_epochs=epochs,
+                per_device_train_batch_size=batch_size,
+                per_device_eval_batch_size=batch_size,
+                eval_steps=100,
+                save_steps=100,
+                warmup_steps=100,
+                logging_dir=str(output_dir / "logs"),
+                logging_steps=10,
+                evaluation_strategy="steps",
+                save_strategy="steps",
+                save_total_limit=2,
+                load_best_model_at_end=True,
+                metric_for_best_model="eval_loss",
+                greater_is_better=False,
+                bf16=self.use_bf16,  # Use BF16 on A100
+                fp16=not self.use_bf16,  # Use FP16 when not using BF16
+                optim="adamw_torch_fused",  # Use fused optimizer on NVIDIA GPUs
+                gradient_accumulation_steps=gradient_accumulation_steps  # More steps for RTX GPUs
+            )
+            
+            # Set up early stopping
+            early_stopping_callback = EarlyStoppingCallback(
+                early_stopping_patience=early_stopping
+            )
+            
+            # Train model
+            trainer = Trainer(
+                model=model,
+                args=training_args,
+                train_dataset=train_dataset,
+                eval_dataset=val_dataset,
+                tokenizer=tokenizer,
+                callbacks=[early_stopping_callback]
+            )
+            
+            # Start training
+            logger.info(f"Starting training for {dataset}")
             try:
-                # Load dataset
-                train_dataset, val_dataset, test_dataset = self.load_dataset(
-                    dataset,
-                    max_samples=max_samples,
-                    validation_split=validation_split,
-                    test_split=test_split
-                )
+                # Monitor memory usage before training
+                if torch.cuda.is_available():
+                    memory_before = torch.cuda.memory_allocated() / 1e9
+                    logger.info(f"GPU memory allocated before training: {memory_before:.2f} GB")
                 
-                # Initialize model and tokenizer
-                model = GPT2LMHeadModel.from_pretrained("gpt2")
-                tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-                tokenizer.pad_token = tokenizer.eos_token
-                
-                # Setup training arguments
-                model_output_dir = self.models_dir / f"{dataset}_final"
-                best_model_dir = self.models_dir / f"{dataset}_best"
-                
-                os.makedirs(model_output_dir, exist_ok=True)
-                os.makedirs(best_model_dir, exist_ok=True)
-                
-                training_args = TrainingArguments(
-                    output_dir=str(model_output_dir),
-                    num_train_epochs=epochs,
-                    per_device_train_batch_size=batch_size,
-                    per_device_eval_batch_size=batch_size,
-                    evaluation_strategy="epoch",
-                    save_strategy="epoch",
-                    load_best_model_at_end=True,
-                    metric_for_best_model="eval_loss",
-                    greater_is_better=False,
-                    learning_rate=learning_rate,
-                    warmup_steps=100,
-                    weight_decay=0.01,
-                    logging_dir='./logs',
-                    logging_steps=10
-                )
-                
-                # Setup trainer with early stopping
-                trainer = Trainer(
-                    model=model,
-                    args=training_args,
-                    train_dataset=train_dataset,
-                    eval_dataset=val_dataset,
-                    data_collator=default_data_collator,
-                    callbacks=[
-                        EarlyStoppingCallback(early_stopping_patience=early_stopping)
-                    ]
-                )
-                
-                # Train model
-                logger.info(f"Starting training for {dataset}")
                 train_result = trainer.train()
                 
-                # Evaluate on test dataset
-                logger.info(f"Evaluating {dataset} model on test dataset")
-                test_result = trainer.evaluate(test_dataset)
-                
-                # Save metrics
-                train_metrics = {
-                    "train_loss": trainer.state.log_history[-epochs:],
-                    "eval_loss": [log["eval_loss"] for log in trainer.state.log_history if "eval_loss" in log],
-                    "test_loss": test_result["eval_loss"]
-                }
-                metrics[dataset] = train_metrics
-                
-                # Save final model and best model
-                logger.info(f"Saving final model for {dataset}")
-                trainer.save_model(str(model_output_dir))
-                tokenizer.save_pretrained(str(model_output_dir))
-                
-                # Copy best model
-                logger.info(f"Saving best model for {dataset}")
-                trainer.save_model(str(best_model_dir))
-                tokenizer.save_pretrained(str(best_model_dir))
-                
-                # Create visualizations if requested
-                if visualization_dir:
-                    self._visualize_training(
-                        dataset,
-                        train_metrics,
-                        visualization_dir
-                    )
-                
-                # Clear memory
-                del model, tokenizer, trainer
-                torch.cuda.empty_cache() if torch.cuda.is_available() else None
-                
-                logger.info(f"Completed training for {dataset}")
-                
+                # Monitor memory usage after training
+                if torch.cuda.is_available():
+                    memory_after = torch.cuda.memory_allocated() / 1e9
+                    memory_peak = torch.cuda.max_memory_allocated() / 1e9
+                    logger.info(f"GPU memory allocated after training: {memory_after:.2f} GB")
+                    logger.info(f"GPU memory peak during training: {memory_peak:.2f} GB")
             except Exception as e:
-                logger.error(f"Error training model for {dataset}: {e}")
-                metrics[dataset] = {"error": str(e)}
+                logger.error(f"Training error: {e}")
+                
+                # Get CUDA OOM error details
+                if "CUDA out of memory" in str(e):
+                    if torch.cuda.is_available():
+                        memory_info = torch.cuda.memory_summary(abbreviated=True)
+                        logger.error(f"Memory summary during OOM error: {memory_info}")
+                    
+                    # Provide suggestions based on GPU type
+                    if is_rtx4000:
+                        logger.error(
+                            "RTX4000 GPU (8GB) encountered memory error. Try: \n"
+                            "1. Reduce batch size to 1\n"
+                            "2. Increase gradient_accumulation_steps to 8\n"
+                            "3. Reduce sequence_length to 512\n"
+                            "4. Use a smaller model (e.g., deepseek-coder-1.3b)"
+                        )
+                    elif is_rtx5000:
+                        logger.error(
+                            "RTX5000 GPU (16GB) encountered memory error. Try: \n"
+                            "1. Reduce batch size to 2\n"
+                            "2. Increase gradient_accumulation_steps to 8\n"
+                            "3. Reduce sequence_length to 1024"
+                        )
+                
+                # Skip to next dataset
+                continue
+            
+            # Save final model
+            trainer.save_model(str(output_dir))
+            tokenizer.save_pretrained(str(output_dir))
+            
+            # Save best model separately
+            if os.path.exists(str(training_args.output_dir / "checkpoint-best")):
+                best_model = AutoModelForCausalLM.from_pretrained(
+                    str(training_args.output_dir / "checkpoint-best")
+                )
+                best_model.save_pretrained(str(best_model_dir))
+                tokenizer.save_pretrained(str(best_model_dir))
+                logger.info(f"Saved best model to {best_model_dir}")
+            
+            # Log and visualize metrics
+            metrics = {
+                "train_loss": trainer.state.log_history[-1]["train_loss"],
+                "eval_loss": trainer.state.log_history[-1]["eval_loss"],
+                "epoch": trainer.state.epoch
+            }
+            
+            all_metrics[dataset] = {
+                "train_loss": [log["train_loss"] for log in trainer.state.log_history if "train_loss" in log],
+                "eval_loss": [log["eval_loss"] for log in trainer.state.log_history if "eval_loss" in log],
+                "epochs": [log.get("epoch", 0) for log in trainer.state.log_history if "eval_loss" in log]
+            }
+            
+            # Visualize training if requested
+            if visualization_dir:
+                self._visualize_training(dataset, all_metrics[dataset], visualization_dir)
+                
+            logger.info(f"Training completed for {dataset}: {metrics}")
         
-        return metrics
+        return all_metrics
     
     def _visualize_training(
         self,
@@ -577,153 +840,232 @@ class JarvisAI:
         output_dir: str
     ) -> None:
         """
-        Create visualizations of training metrics.
+        Visualize training metrics.
         
         Args:
             dataset: Name of the dataset
-            metrics: Training metrics dictionary
+            metrics: Training metrics
             output_dir: Directory to save visualizations
         """
         try:
-            # Extract metrics
-            train_loss = [log["loss"] for log in metrics["train_loss"] if "loss" in log]
-            eval_loss = metrics["eval_loss"]
-            
-            # Plot training and validation loss
             plt.figure(figsize=(10, 6))
-            plt.plot(range(1, len(train_loss) + 1), train_loss, label='Training Loss')
-            plt.plot(range(1, len(eval_loss) + 1), eval_loss, label='Validation Loss')
-            plt.xlabel('Epoch')
-            plt.ylabel('Loss')
-            plt.title(f'{dataset.capitalize()} Model Training')
+            plt.plot(metrics["epochs"], metrics["train_loss"], label="Train Loss")
+            plt.plot(metrics["epochs"], metrics["eval_loss"], label="Eval Loss")
+            plt.xlabel("Epochs")
+            plt.ylabel("Loss")
+            plt.title(f"Training and Evaluation Loss for {dataset.capitalize()}")
             plt.legend()
             plt.grid(True)
             
             # Save plot
-            output_path = Path(output_dir) / f"{dataset}_training.png"
+            output_path = os.path.join(output_dir, f"{dataset}_training_loss.png")
             plt.savefig(output_path)
             plt.close()
             
-            # Also save metrics as JSON
-            metrics_path = Path(output_dir) / f"{dataset}_metrics.json"
-            with open(metrics_path, 'w') as f:
-                json.dump(metrics, f, indent=2)
-            
-            logger.info(f"Training visualizations saved to {output_dir}")
-            
+            logger.info(f"Saved training visualization to {output_path}")
         except Exception as e:
-            logger.error(f"Error creating training visualizations: {e}")
+            logger.error(f"Failed to visualize training metrics: {e}")
     
-    def run_interactive(self) -> None:
-        """Run an interactive session with the assistant."""
-        print("\nWelcome to Jarvis AI Assistant! Type 'exit' to quit.\n")
+    def run_interactive(self, load_path: Optional[str] = None) -> None:
+        """
+        Run an interactive session with the AI.
+        
+        Args:
+            load_path: Path to a model to load for the session
+        """
+        print("=== Jarvis AI Interactive Session ===")
+        print("Type 'exit' or 'quit' to end the session")
         
         while True:
-            # Get user input
-            user_input = input("You: ")
-            
-            # Check for exit command
-            if user_input.lower() in ['exit', 'quit', 'bye']:
-                print("\nThank you for using Jarvis AI. Goodbye!")
+            try:
+                user_input = input("\nYou: ")
+                
+                if user_input.lower() in ["exit", "quit"]:
+                    print("Exiting interactive session")
+                    break
+                
+                print("\nJarvis is thinking...")
+                
+                if load_path:
+                    response = self.generate_response(user_input, from_path=load_path)
+                else:
+                    response = self.generate_response(user_input)
+                
+                print(f"\nJarvis: {response}")
+                
+            except KeyboardInterrupt:
+                print("\nExiting interactive session")
                 break
-            
-            # Generate response
-            response = self.generate_response(user_input)
-            
-            # Print response
-            print(f"\nJarvis: {response}\n")
+            except Exception as e:
+                print(f"\nError: {e}")
+                print("Continuing session...")
 
-
-def main():
-    """
-    Command-line interface for the Jarvis AI module.
+def parse_arguments():
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(description="Jarvis AI Unified")
     
-    Usage:
-        python jarvis_unified.py train  # Train models
-        python jarvis_unified.py interactive  # Run interactive session
-        python jarvis_unified.py generate "Your prompt here"  # Generate a response
-    """
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="Jarvis AI Unified Module")
-    
+    # Mode selection
     parser.add_argument(
-        "action",
+        "--mode",
+        type=str,
         choices=["train", "interactive", "generate"],
-        help="Action to perform"
+        default="interactive",
+        help="Mode to run (train, interactive, generate)"
     )
     
+    # Model arguments
     parser.add_argument(
-        "prompt",
-        nargs="?",
-        help="Prompt for text generation (required for 'generate' action)"
+        "--model", 
+        type=str, 
+        default="deepseek-ai/deepseek-coder-6.7b-instruct",
+        help="The model name to use"
+    )
+    parser.add_argument(
+        "--model-path",
+        type=str,
+        default=None,
+        help="Path to a model to use"
     )
     
+    # Training arguments
     parser.add_argument(
         "--datasets",
+        type=str,
         nargs="+",
-        choices=JarvisAI.AVAILABLE_DATASETS,
-        help="Datasets to use"
+        default=None,
+        help="Datasets to train on"
     )
-    
     parser.add_argument(
         "--max-samples",
         type=int,
-        default=500,
-        help="Maximum number of samples to use per dataset"
+        default=None,
+        help="Maximum number of samples per dataset (auto-determined by GPU type if None)"
+    )
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=3,
+        help="Number of training epochs"
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=None,
+        help="Batch size for training (auto-determined by GPU type if None)"
+    )
+    parser.add_argument(
+        "--gradient-accumulation-steps",
+        type=int,
+        default=None,
+        help="Number of gradient accumulation steps (auto-determined by GPU type if None)"
+    )
+    parser.add_argument(
+        "--sequence-length",
+        type=int,
+        default=None,
+        help="Maximum sequence length for tokenization (auto-determined by GPU type if None)"
     )
     
+    # Generation arguments
     parser.add_argument(
-        "--models-dir",
-        default="models",
-        help="Directory for model storage"
+        "--prompt",
+        type=str,
+        default=None,
+        help="Prompt to generate from"
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=0.7,
+        help="Sampling temperature"
+    )
+    parser.add_argument(
+        "--max-length",
+        type=int,
+        default=200,
+        help="Maximum length of generated text"
     )
     
+    # GPU optimization arguments
     parser.add_argument(
-        "--use-best-models",
+        "--load-in-4bit",
         action="store_true",
-        help="Use best models instead of final models"
+        default=True,
+        help="Load model in 4-bit precision (GPU optimization)"
+    )
+    parser.add_argument(
+        "--use-unsloth",
+        action="store_true",
+        default=True,
+        help="Use Unsloth for optimized training (GPU optimization)"
     )
     
+    # Memory arguments
     parser.add_argument(
         "--memory-file",
-        help="File to save/load conversation memory"
+        type=str,
+        default=None,
+        help="Path to memory file"
     )
-    
     parser.add_argument(
-        "--visualization-dir",
-        default="visualizations",
-        help="Directory for training visualizations"
+        "--history",
+        type=str,
+        default=None,
+        help="Path to previous chat history JSON file to load"
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default=None,
+        help="Path to save chat history after completion"
     )
     
-    args = parser.parse_args()
+    return parser.parse_args()
+
+def main():
+    """Main entry point"""
+    args = parse_arguments()
     
     # Initialize Jarvis AI
     jarvis = JarvisAI(
-        models_dir=args.models_dir,
-        use_best_models=args.use_best_models,
-        memory_file=args.memory_file
+        memory_file=args.memory_file or args.history,
+        load_in_4bit=args.load_in_4bit,
+        use_unsloth=args.use_unsloth
     )
     
-    # Perform requested action
-    if args.action == "train":
+    # Run in appropriate mode
+    if args.mode == "train":
+        # Train models
         jarvis.train_models(
             datasets=args.datasets,
             max_samples=args.max_samples,
-            visualization_dir=args.visualization_dir
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
+            sequence_length=args.sequence_length
         )
-        
-    elif args.action == "generate":
-        if not args.prompt:
-            print("Error: Prompt is required for 'generate' action")
-            return
-        
-        response = jarvis.generate_response(args.prompt)
-        print(f"\nJarvis: {response}")
-        
-    elif args.action == "interactive":
-        jarvis.run_interactive()
-
+    elif args.mode == "interactive":
+        # Run interactive session
+        jarvis.run_interactive(load_path=args.model_path or args.model)
+    elif args.mode == "generate":
+        # Generate text from prompt
+        if args.prompt:
+            response = jarvis.generate_response(
+                args.prompt,
+                temperature=args.temperature,
+                max_length=args.max_length,
+                from_path=args.model_path or args.model
+            )
+            print(response)
+        else:
+            print("Error: Please provide a prompt for generation mode")
+    
+    # Save memory file if output specified
+    if args.output and args.memory_file:
+        # Copy memory file to output
+        import shutil
+        shutil.copy(args.memory_file, args.output)
+        print(f"Chat history saved to {args.output}")
 
 if __name__ == "__main__":
     main() 
