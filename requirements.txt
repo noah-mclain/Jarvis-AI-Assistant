@@ -1,3 +1,4 @@
+# A100 GPU-optimized dependencies
 --find-links https://download.pytorch.org/whl/cu121/torch_stable.html
 torch==2.1.2+cu121
 torchvision==0.16.2+cu121
@@ -37,6 +38,11 @@ psutil==5.9.8
 # Development Tools
 jupyterlab==4.4.1
 tensorboard==2.16.2
+
+# Additional A100 optimizations
+einops==0.7.0        # Helps with tensor operations on A100
+ninja==1.11.1        # Speeds up custom CUDA extension builds
+packaging==23.2      # Required for proper version handling
 
 # Language model
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0.tar.gz
