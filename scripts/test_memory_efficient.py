@@ -56,14 +56,14 @@ def main():
     models = memory_efficient_loader.preload_models_from_standard_weights(model_file, DEVICE)
 
     uncond_prompt = ""
-    do_cfg = True
-    cfg_scale = 8
+    do_cfg = True # Enables classifier-free guidance
+    cfg_scale = 8 # Controls how closely output follows the prompt
 
     input_image = None
-    strength = 0.9
+    strength = 0.9 # Controls how much of the original image to preserve when doing img2img generation
 
     sampler = "ddpm"
-    num_inference_steps = 40
+    num_inference_steps = 40 # Higher values (40+) give better quality but slower generation, Lower values (20-30) are faster but may reduce quality
     seed = 42
 
     if "cuda" in DEVICE:
