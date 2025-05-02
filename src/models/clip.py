@@ -1,28 +1,59 @@
-# clip.py file
 import torch
 from torch import nn
 from torch.nn import functional as F
 from .attention import SelfAttention
 
+import torch
+from torch import nn
+
 class CLIPEmbedding(nn.Module):
     def __init__(self, n_vocab: int, n_embd: int, n_token: int):
+        """
+        Initializes the CLIPEmbedding module.
+        Converts text tokens into embeddings with positional information
+
+        Args:
+            n_vocab (int): Number of tokens in the vocabulary (e.g., 49408 for OpenAI CLIP).
+            n_embd (int): Dimension of the embedding vectors (e.g., 768 or 1024).
+            n_token (int): Maximum number of tokens in the input sequence.
+        """
         super().__init__()
-        
+
+        # Learnable token embeddings: each token ID gets mapped to an n_embd-dimensional vector
         self.token_embedding = nn.Embedding(n_vocab, n_embd)
-        # A learnable weight matrix encodes the position information for each token
+
+        # Learnable positional embeddings: for each position in the sequence (up to n_token),
+        # there's an n_embd-dimensional vector that tells the model where the token is
         self.position_embedding = nn.Parameter(torch.zeros((n_token, n_embd)))
-    
+
     def forward(self, tokens):
-        # (Batch_Size, Seq_Len) -> (Batch_Size, Seq_Len, Dim) 
+        """
+        Forward pass of the embedding layer.
+
+        Args:
+            tokens (Tensor): Input tensor of token IDs with shape (Batch_Size, Seq_Len)
+
+        Returns:
+            Tensor: Combined token and position embeddings of shape (Batch_Size, Seq_Len, n_embd)
+        """
+
+        # Convert token IDs to dense vectors: (Batch_Size, Seq_Len) -> (Batch_Size, Seq_Len, n_embd)
         x = self.token_embedding(tokens)
-        # (Batch_Size, Seq_Len) -> (Batch_Size, Seq_Len, Dim)
+
+        # Add positional embeddings (broadcasted across the batch)
+        # Positional embedding shape: (n_token, n_embd)
+        # Automatically broadcasted to match x's shape
         x += self.position_embedding
-        
+
         return x
+
 
 class CLIPLayer(nn.Module):
     def __init__(self, n_head: int, n_embd: int):
         super().__init__()
+        """
+        Processes embeddings through self-attention and feedforward layers
+        """
         
         # Pre-attention norm
         self.layernorm_1 = nn.LayerNorm(n_embd)

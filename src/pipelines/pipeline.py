@@ -1,5 +1,3 @@
-# the pipeline.py file
-
 import torch
 import numpy as np
 from tqdm import tqdm

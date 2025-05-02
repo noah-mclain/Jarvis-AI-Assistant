@@ -1,5 +1,3 @@
-# the encoder.py file
-
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -11,7 +9,7 @@ class VAE_Encoder(nn.Sequential):
             # (Batch_Size, Channel, Height, Width) -> (Batch_Size, 128, Height, Width)
             nn.Conv2d(3, 128, kernel_size=3, padding=1),
             
-             # (Batch_Size, 128, Height, Width) -> (Batch_Size, 128, Height, Width)
+            # (Batch_Size, 128, Height, Width) -> (Batch_Size, 128, Height, Width)
             VAE_ResidualBlock(128, 128),
             
             # (Batch_Size, 128, Height, Width) -> (Batch_Size, 128, Height, Width)
@@ -77,20 +75,26 @@ class VAE_Encoder(nn.Sequential):
 
         for module in self:
 
-            if getattr(module, 'stride', None) == (2, 2):  # Padding at downsampling should be asymmetric (see #8)
+            if getattr(module, 'stride', None) == (2, 2):  # Padding at downsampling should be asymmetric
                 # Pad: (Padding_Left, Padding_Right, Padding_Top, Padding_Bottom).
                 # Pad with zeros on the right and bottom.
                 # (Batch_Size, Channel, Height, Width) -> (Batch_Size, Channel, Height + Padding_Top + Padding_Bottom, Width + Padding_Left + Padding_Right) = (Batch_Size, Channel, Height + 1, Width + 1)
+                # we add padding in the right and bottom to compensate for the kernel size of 3.
                 x = F.pad(x, (0, 1, 0, 1))
             
             x = module(x)
+        
         # (Batch_Size, 8, Height / 8, Width / 8) -> two tensors of shape (Batch_Size, 4, Height / 8, Width / 8)
+        # The output shape (Batch_Size, 8, Height / 8, Width / 8) gets divided into two tensors: (Batch_Size, 4, Height / 8, Width / 8) each.
         mean, log_variance = torch.chunk(x, 2, dim=1)
+        
         # Clamp the log variance between -30 and 20, so that the variance is between (circa) 1e-14 and 1e8. 
         # (Batch_Size, 4, Height / 8, Width / 8) -> (Batch_Size, 4, Height / 8, Width / 8)
         log_variance = torch.clamp(log_variance, -30, 20)
+        
         # (Batch_Size, 4, Height / 8, Width / 8) -> (Batch_Size, 4, Height / 8, Width / 8)
         variance = log_variance.exp()
+        
         # (Batch_Size, 4, Height / 8, Width / 8) -> (Batch_Size, 4, Height / 8, Width / 8)
         stdev = variance.sqrt()
         
