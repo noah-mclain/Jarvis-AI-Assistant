@@ -123,10 +123,7 @@ fi
 
 # Clean up any conflicting packages
 echo "Cleaning up potential conflicts..."
-pip uninstall -y bitsandbytes
-pip uninstall -y unsloth
-pip uninstall -y peft
-pip uninstall -y accelerate
+pip uninstall -y bitsandbytes unsloth peft accelerate xformers flash-attn
 
 # Install PyTorch with CUDA support
 echo "Installing PyTorch with CUDA 12.1 support..."
@@ -135,35 +132,43 @@ pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --extra-index-url
 python -c "import torch; print(f'PyTorch version: {torch.__version__}')"
 python -c "import torch; print(f'CUDA version: {torch.version.cuda}')"
 
-# Fix bitsandbytes CUDA compatibility issues
-echo "Setting up bitsandbytes for CUDA $CUDA_VERSION..."
-pip install --no-cache-dir --upgrade --no-deps https://github.com/jllllll/bitsandbytes-windows-webui/releases/download/wheels/bitsandbytes-0.41.1-py3-none-any.whl
+# Fix LD_LIBRARY_PATH for CUDA compatibility
+echo "Setting up CUDA library path..."
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/lib64-nvidia
+echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/lib64-nvidia' >> ~/.bashrc
+
+# Install bitsandbytes with direct installation (not using the failing URL)
+echo "Installing bitsandbytes..."
+pip install bitsandbytes==0.41.0
 
 # Install accelerate
 echo "Installing accelerate..."
-pip install accelerate==0.30.0
+pip install accelerate==0.27.0
 
-# Install core dependencies required for fine-tuning
+# Install core dependencies required for fine-tuning with compatible versions
 echo "Installing fine-tuning dependencies..."
 pip install transformers==4.36.2
-pip install peft==0.7.0
+pip install peft==0.6.0
 pip install safetensors==0.4.1
 pip install datasets==2.19.0
 pip install trl==0.7.10
 pip install einops==0.7.0
-pip install tokenizers==0.19.1
+pip install tokenizers==0.14.1  # Compatible with transformers 4.36.2
+
+# Install xformers compatible with PyTorch 2.1.2
+pip install -U xformers==0.0.23.post1 --index-url https://download.pytorch.org/whl/cu121
 
 # Install flash-attention conditionally based on GPU type
 if [ "$RTX5000_GPU" = true ]; then
     echo "Installing flash-attention for RTX5000..."
-    pip install flash-attn==2.3.4
+    pip install -U "flash-attn<2.3.5" --no-build-isolation
 else
     echo "Skipping flash-attention for RTX4000 due to memory constraints"
 fi
 
-# Install unsloth
+# Install unsloth without dependencies to avoid conflicts
 echo "Installing unsloth..."
-pip install unsloth==2025.4.4
+pip install "unsloth>=2025.3.0" --no-deps
 
 # Create RTX-optimized config file
 mkdir -p ~/.config/accelerate
@@ -185,11 +190,9 @@ echo "Created RTX-optimized accelerate config with FP16 mixed precision (BF16 no
 
 # Install other dependencies
 echo "Installing additional dependencies..."
-pip install xformers==0.0.23.post1
-pip install triton==2.1.0
-pip install boto3==1.34.86 gdown==5.1.0 fsspec==2024.3.1 psutil==5.9.8
-pip install jupyterlab==4.4.1 tensorboard==2.16.2
-pip install ninja==1.11.1 packaging==23.2
+pip install ninja==1.11.1 packaging==23.2 psutil==5.9.8
+pip install jupyterlab==3.6.5 tensorboard==2.15.1
+pip install gdown==5.1.0 fsspec==2024.3.1 boto3==1.28.51
 
 # Test installations
 echo "Testing fine-tuning components..."
@@ -245,15 +248,19 @@ except Exception as e:
     print(f'xformers error: {e}')
 "
 
-# Create a bitsandbytes fixer script
+# Create a bitsandbytes and CUDA fixer script
 cat > fix_bitsandbytes.py << EOF
 import os
 import torch
 import subprocess
 from pathlib import Path
 
-print("BitsAndBytes CUDA Compatibility Fixer")
-print("=====================================")
+print("BitsAndBytes and CUDA Compatibility Fixer")
+print("========================================")
+
+# Fix CUDA library path
+os.environ['LD_LIBRARY_PATH'] = os.environ.get('LD_LIBRARY_PATH', '') + ':/usr/local/cuda/lib64:/usr/lib64-nvidia'
+print(f"Set LD_LIBRARY_PATH to: {os.environ['LD_LIBRARY_PATH']}")
 
 # Check CUDA version
 if torch.cuda.is_available():
@@ -266,27 +273,18 @@ if torch.cuda.is_available():
         bnb_path = Path(bnb.__file__).parent
         print(f"bitsandbytes installation found at: {bnb_path}")
         
-        # Attempt to run the diagnostic
-        print("Running bitsandbytes diagnostic...")
+        # Attempt to create a quantized layer to test functionality
         try:
-            subprocess.run(["python", "-m", "bitsandbytes"], check=True)
-        except subprocess.CalledProcessError:
-            print("Diagnostic failed, trying to fix...")
-        
-        # Check if we're on CUDA 12.x which might need special handling
-        if cuda_version.startswith("12"):
-            print(f"Detected CUDA 12.x - attempting special fix for this version")
-            # Special case for CUDA 12.x
-            print("Re-installing bitsandbytes with a CUDA 12.x compatible wheel...")
-            subprocess.run(["pip", "install", "--force-reinstall", "--no-deps", 
-                          "https://github.com/jllllll/bitsandbytes-windows-webui/releases/download/wheels/bitsandbytes-0.41.1-py3-none-any.whl"], 
-                          check=True)
-            print("Fixed bitsandbytes for CUDA 12.x")
+            lin8bit = bnb.nn.Linear8bitLt(10, 10, has_fp16_weights=False)
+            print("Successfully created 8-bit linear layer - bitsandbytes is working!")
+        except Exception as e:
+            print(f"Error testing bitsandbytes: {e}")
+            print("Reinstalling bitsandbytes...")
+            subprocess.run(["pip", "uninstall", "-y", "bitsandbytes"], check=False)
+            subprocess.run(["pip", "install", "bitsandbytes==0.41.0"], check=False)
     except ImportError:
-        print("bitsandbytes not installed, installing compatible version...")
-        subprocess.run(["pip", "install", "--no-deps", 
-                      "https://github.com/jllllll/bitsandbytes-windows-webui/releases/download/wheels/bitsandbytes-0.41.1-py3-none-any.whl"], 
-                      check=True)
+        print("bitsandbytes not installed, installing version 0.41.0...")
+        subprocess.run(["pip", "install", "bitsandbytes==0.41.0"], check=False)
     
     print("Testing bitsandbytes installation...")
     try:
@@ -302,6 +300,26 @@ if torch.cuda.is_available():
         print(f"Error testing bitsandbytes: {e}")
 else:
     print("CUDA not available. Cannot fix bitsandbytes without CUDA.")
+
+print("\nChecking torch and dependencies...")
+try:
+    import torch
+    print(f"PyTorch version: {torch.__version__}")
+    print(f"CUDA available: {torch.cuda.is_available()}")
+    
+    import transformers
+    print(f"Transformers version: {transformers.__version__}")
+    
+    try:
+        import unsloth
+        print(f"Unsloth version: {unsloth.__version__}")
+    except ImportError:
+        print("Unsloth not installed properly. Consider reinstalling with:")
+        print("pip install unsloth --no-deps")
+        
+    print("\nIf you continue to have issues, try the fix_dependencies.sh script.")
+except Exception as e:
+    print(f"Error checking dependencies: {e}")
 EOF
 
 # Create a memory analyzer script
@@ -463,6 +481,83 @@ if __name__ == "__main__":
         print("\nTo test a specific model, run:")
         print("python analyze_gpu_memory.py --model MODEL_NAME")
 EOF
+
+# Create comprehensive dependency fix script
+cat > fix_dependencies.sh << 'EOF'
+#!/bin/bash
+
+echo "Fixing dependency issues for Jarvis AI Assistant on Paperspace..."
+
+# Clean environment first
+pip uninstall -y bitsandbytes unsloth peft accelerate flash-attn xformers
+
+# Fix LD_LIBRARY_PATH for CUDA compatibility
+echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/lib64-nvidia' >> ~/.bashrc
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/lib64-nvidia
+
+# Fix torch version to ensure compatibility
+pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --extra-index-url https://download.pytorch.org/whl/cu121
+
+# Install compatible bitsandbytes
+pip install bitsandbytes==0.41.0
+
+# Install other dependencies with pinned versions
+pip install accelerate==0.27.0
+pip install peft==0.6.0
+pip install tokenizers==0.14.1
+pip install transformers==4.36.2
+pip install einops==0.7.0
+
+# Install xformers compatible with PyTorch 2.1.2
+pip install -U xformers==0.0.23.post1 --index-url https://download.pytorch.org/whl/cu121
+
+# Skip flash-attention for RTX4000, install for RTX5000
+if python -c "import torch; print('RTX 5000' in torch.cuda.get_device_name(0))" | grep -q "True"; then
+  pip install -U "flash-attn<2.3.5" --no-build-isolation
+else
+  echo "Skipping flash-attention for RTX4000 GPU"
+fi
+
+# Install unsloth with modified dependencies
+pip install "unsloth>=2025.3.0" --no-deps
+pip install trl==0.7.10 datasets==2.19.0
+
+# Install other compatible packages
+pip install ninja==1.11.1 packaging==23.2 psutil==5.9.8
+pip install gdown==5.1.0 fsspec==2024.3.1 boto3==1.28.51
+
+# Verify installations
+python -c "
+import torch
+print(f'PyTorch version: {torch.__version__}')
+print('CUDA available:', torch.cuda.is_available())
+if torch.cuda.is_available():
+    print('GPU:', torch.cuda.get_device_name(0))
+
+try:
+    import bitsandbytes as bnb
+    lin8bit = bnb.nn.Linear8bitLt(10, 10, has_fp16_weights=False)
+    print('bitsandbytes working correctly!')
+except Exception as e:
+    print(f'bitsandbytes error: {e}')
+
+try:
+    import transformers
+    print(f'transformers version: {transformers.__version__}')
+except Exception as e:
+    print(f'transformers error: {e}')
+
+try:
+    import unsloth
+    print(f'unsloth version: {unsloth.__version__}')
+except Exception as e:
+    print(f'unsloth error: {e}')
+"
+
+echo "Dependency fixes complete"
+EOF
+
+chmod +x fix_dependencies.sh
 
 # Create Google Drive file sync script
 cat > sync_to_drive.py << EOF
@@ -705,7 +800,10 @@ else
 fi
 
 echo ""
-echo "If you encounter issues with bitsandbytes, run:"
+echo "If you encounter dependency issues, run:"
+echo "bash fix_dependencies.sh"
+echo ""
+echo "If you encounter bitsandbytes or CUDA issues, run:"
 echo "python fix_bitsandbytes.py"
 echo ""
-echo "For details on running the assistant, see COLAB_COMMANDS.md" 
+echo "For details on running the assistant, see PAPERSPACE_COMMANDS.md" 
