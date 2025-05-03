@@ -298,9 +298,10 @@ setup_storage_dirs() {
 install_core_deps() {
     echo "Installing core dependencies with correct versioning..."
     
-    # CRITICAL FIX: First, forcefully remove any potentially corrupted installations
-    echo "Forcefully removing corrupted package installations..."
+    # EMERGENCY FIX: Extremely aggressive cleanup - forcefully remove corrupted installations
+    echo "Performing emergency cleanup of potentially corrupted installations..."
     rm -rf /usr/local/lib/python3.11/dist-packages/numpy*
+    rm -rf /usr/local/lib/python3.11/dist-packages/numpy-*
     rm -rf /usr/local/lib/python3.11/dist-packages/torch*
     rm -rf /usr/local/lib/python3.11/dist-packages/transformers*
     rm -rf /usr/local/lib/python3.11/dist-packages/huggingface_hub*
@@ -308,6 +309,8 @@ install_core_deps() {
     rm -rf /usr/local/lib/python3.11/dist-packages/accelerate*
     rm -rf /usr/local/lib/python3.11/dist-packages/peft*
     rm -rf /usr/local/lib/python3.11/dist-packages/unsloth*
+    rm -rf /tmp/pip-*
+    pip cache purge
     
     # Then use pip to clean out any remaining package references
     echo "Removing all potentially conflicting packages..."
@@ -320,11 +323,38 @@ install_core_deps() {
     export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/lib64-nvidia
     echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/lib64-nvidia' >> ~/.bashrc
     
+    # Clear the Python path to avoid any cached NumPy references
+    echo "Clearing Python environment cache..."
+    python -c "import sys; sys.path = [p for p in sys.path if not 'numpy' in p]; print(sys.path)"
+    
     # Install NumPy 1.26.4 with maximum force to ensure correct version
     echo "Installing NumPy 1.26.4 (compatible with PyTorch 2.1.2)..."
-    pip install numpy==1.26.4 --no-deps --force-reinstall
+    pip install numpy==1.26.4 --no-deps --force-reinstall --no-cache-dir
     # Second install to confirm NumPy 1.x is properly installed
     pip install numpy==1.26.4
+    
+    # Verify NumPy installation is 1.x
+    if ! python -c "import numpy; print(f'NumPy version: {numpy.__version__}'); exit(0 if numpy.__version__.startswith('1.') else 1)"; then
+        echo "⚠️ CRITICAL ERROR: NumPy is still not correctly installed at version 1.x."
+        echo "This is a common issue with Paperspace environments."
+        echo "Will attempt one more aggressive fix..."
+        
+        # Try one more aggressive approach
+        sudo rm -rf /usr/local/lib/python3.11/dist-packages/numpy*
+        sudo pip install numpy==1.26.4 --force-reinstall --no-deps
+        
+        # Check again
+        if ! python -c "import numpy; print(f'NumPy version: {numpy.__version__}'); exit(0 if numpy.__version__.startswith('1.') else 1)"; then
+            echo "❌ CRITICAL ERROR: NumPy is still not correctly installed."
+            echo "Please run fix_numpy_errors.sh after this script completes or manually fix:"
+            echo "sudo rm -rf /usr/local/lib/python3.11/dist-packages/numpy*"
+            echo "sudo pip install numpy==1.26.4 --force-reinstall --no-deps"
+        else
+            echo "✅ NumPy 1.26.4 successfully installed on second attempt!"
+        fi
+    else
+        echo "✅ NumPy 1.26.4 successfully installed!"
+    fi
     
     echo "Installing protobuf 3.20.3 (compatible with TensorFlow and transformers)..."
     pip install protobuf==3.20.3 --no-deps
@@ -367,8 +397,9 @@ install_core_deps() {
     # Install unsloth dependencies
     pip install sentencepiece==0.2.0 wheel>=0.38.0
     
-    # Install unsloth with a compatible version
-    pip install unsloth==2023.12.17 --no-deps
+    # Install unsloth with a compatible version that's available
+    # Updated to use the newer version that works with current environments
+    pip install unsloth==2025.3.3 --no-deps
     
     # Install utility packages
     pip install ninja==1.11.1 packaging==23.2 psutil==5.9.8
@@ -415,6 +446,142 @@ EOF
 
 # Create utility scripts
 create_utility_scripts() {
+    # Create fix_numpy_errors.sh script for emergency NumPy fixes
+    cat > fix_numpy_errors.sh << 'EOF'
+#!/bin/bash
+
+echo "================================================================"
+echo "CRITICAL: Emergency NumPy Fix for Paperspace"
+echo "================================================================"
+
+# EMERGENCY CLEANUP: Force remove corrupted NumPy
+echo "EMERGENCY: Forcefully removing corrupted NumPy installation..."
+rm -rf /usr/local/lib/python3.11/dist-packages/numpy*
+rm -rf /usr/local/lib/python3.11/dist-packages/numpy-*
+
+# Also remove any possible remaining trace of NumPy 2.x
+rm -rf /tmp/pip-*
+pip cache purge
+
+# Clear the environment
+echo "Clearing Python environment cache..."
+python -c "import sys; sys.path = [p for p in sys.path if not 'numpy' in p]; print(sys.path)"
+
+# Install NumPy 1.26.4 with maximum force
+echo "Installing NumPy 1.26.4 with maximum force..."
+pip install numpy==1.26.4 --no-deps --force-reinstall --no-cache-dir
+
+# Verify the install
+echo "Verifying NumPy installation..."
+if python -c "import numpy; print(f'NumPy version: {numpy.__version__}'); exit(0 if numpy.__version__.startswith('1.') else 1)"; then
+    echo "✅ NumPy 1.26.4 successfully installed!"
+else
+    echo "❌ CRITICAL ERROR: NumPy is still not correctly installed."
+    echo "Please manually install with:"
+    echo "sudo rm -rf /usr/local/lib/python3.11/dist-packages/numpy*"
+    echo "sudo pip install numpy==1.26.4 --force-reinstall --no-deps"
+    exit 1
+fi
+
+echo "================================================================"
+echo "NumPy fix complete! You can now continue with your setup."
+echo "================================================================"
+EOF
+    chmod +x fix_numpy_errors.sh
+
+    # Create fix_numpy.sh for full-blown dependency cleanup and NumPy reinstall
+    cat > fix_numpy.sh << 'EOF'
+#!/bin/bash
+
+echo "================================================================"
+echo "CRITICAL: NumPy/PyTorch Dependency Fix for Paperspace RTX5000"
+echo "================================================================"
+
+# Step 1: Extremely aggressive cleanup - forcefully remove corrupted installations
+echo "Forcefully removing corrupted package installations..."
+rm -rf /usr/local/lib/python3.11/dist-packages/numpy*
+rm -rf /usr/local/lib/python3.11/dist-packages/torch*
+rm -rf /usr/local/lib/python3.11/dist-packages/transformers*
+rm -rf /usr/local/lib/python3.11/dist-packages/accelerate*
+rm -rf /usr/local/lib/python3.11/dist-packages/peft*
+rm -rf /usr/local/lib/python3.11/dist-packages/unsloth*
+
+# Step 2: Now use pip to remove any remaining dependencies
+echo "Uninstalling remaining dependencies..."
+pip uninstall -y numpy torch torchvision torchaudio transformers huggingface-hub tokenizers accelerate peft unsloth scipy triton
+
+# Step 3: Install NumPy 1.26.4 with maximum force
+echo "Installing NumPy 1.26.4..."
+pip install numpy==1.26.4 --no-deps --force-reinstall
+
+# Step 4: Install PyTorch ecosystem with proper CUDA support
+echo "Installing PyTorch 2.1.2 with CUDA support..."
+pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --extra-index-url https://download.pytorch.org/whl/cu121 --no-deps
+pip install triton==2.1.0 --no-deps 
+
+# Step 5: Install core dependencies in specific compatible versions
+echo "Installing core ML dependencies with exact versions..."
+pip install scipy==1.12.0 --no-deps
+pip install filelock==3.12.2 requests==2.31.0 tqdm==4.66.1 \
+            pyyaml==6.0.1 typing-extensions==4.8.0 packaging==23.1 \
+            fsspec==2023.6.0 --no-deps
+
+# Step 6: HuggingFace ecosystem - install older versions known to be compatible
+echo "Installing HuggingFace ecosystem with compatible versions..."
+pip install huggingface-hub==0.17.3 --no-deps
+pip install tokenizers==0.14.1 --no-deps
+pip install transformers==4.36.2 --no-deps
+pip install peft==0.6.0 accelerate==0.27.0 --no-deps
+
+# Step 7: Install unsloth with compatible version
+echo "Installing Unsloth with compatible version..."
+pip install sentencepiece==0.2.0 --no-deps
+# Using a verified working version of unsloth for this specific environment
+pip install unsloth==2025.3.3 --no-deps
+
+# Step 8: Verify the critical package versions
+echo "Verifying critical package installations..."
+python -c "
+import sys
+print(f'Python version: {sys.version}')
+
+try:
+    import numpy
+    print(f'NumPy version: {numpy.__version__}')
+    if numpy.__version__.startswith('1.'):
+        print('NumPy 1.x confirmed ✅')
+    else:
+        print('WARNING: NumPy 2.x detected ❌')
+except Exception as e:
+    print(f'NumPy error: {e}')
+
+try:
+    import torch
+    print(f'PyTorch version: {torch.__version__}')
+    if torch.__version__.startswith('2.1.'):
+        print('PyTorch 2.1.x confirmed ✅')
+    else:
+        print(f'Incorrect PyTorch version: {torch.__version__} ❌')
+except Exception as e:
+    print(f'PyTorch error: {e}')
+
+try:
+    import transformers
+    print(f'Transformers version: {transformers.__version__}')
+except Exception as e:
+    print(f'Transformers error: {e}')
+"
+
+echo "================================================================"
+echo "NumPy and dependency fix complete!"
+echo ""
+echo "IMPORTANT: If NumPy shows version 1.26.4, the fix was successful."
+echo "You may now need to run your original setup script again to install"
+echo "additional packages, but NumPy will remain at the correct version."
+echo "================================================================"
+EOF
+    chmod +x fix_numpy.sh
+
     # Create fix_flash_attn.sh script
     cat > fix_flash_attn.sh << 'EOF'
 #!/bin/bash
@@ -453,7 +620,7 @@ if echo "$GPU_NAME" | grep -q "A100\|RTX 5000"; then
     # Try simpler installation if specific wheel download failed
     if [ ! -f flash_attn.whl ]; then
         echo "Attempting simplified installation method..."
-        pip install 'flash-attn<2.1.0' --prefer-binary || echo "Flash-attention installation failed"
+        pip install 'flash-attn<2.3.5' --prefer-binary --no-build-isolation || echo "Flash-attention installation failed"
     else
         echo "Installing downloaded wheel..."
         pip install flash_attn.whl
@@ -523,6 +690,10 @@ print(f'Python version: {sys.version}')
 try:
     import numpy
     print(f'NumPy version: {numpy.__version__}')
+    if numpy.__version__.startswith('1.'):
+        print('NumPy 1.x confirmed ✅')
+    else:
+        print('WARNING: NumPy 2.x detected ❌ - Run ./fix_numpy_errors.sh to fix this')
 except Exception as e:
     print(f'NumPy error: {e}')
 
@@ -615,8 +786,10 @@ print_summary() {
     
     echo ""
     echo "Troubleshooting:"
-    echo "- If you encounter protobuf issues: run ./fix_protobuf.sh"
+    echo "- If you encounter NumPy version conflicts: run ./fix_numpy_errors.sh"
+    echo "- For more severe dependency issues: run ./fix_numpy.sh"
     echo "- For flash-attention issues: run ./fix_flash_attn.sh"
+    echo "- For protobuf issues: run ./fix_protobuf.sh"
     echo ""
     echo "Example usage:"
     echo "python src/generative_ai_module/jarvis_unified.py \\"

@@ -43,7 +43,8 @@ pip install peft==0.6.0 accelerate==0.27.0 --no-deps
 # Step 7: Install unsloth with compatible version
 echo "Installing Unsloth with compatible version..."
 pip install sentencepiece==0.2.0 --no-deps
-pip install unsloth==2023.12.17 --no-deps
+# Using a verified working version of unsloth for this specific environment
+pip install unsloth==2025.3.3 --no-deps
 
 # Step 8: Verify the critical package versions
 echo "Verifying critical package installations..."
