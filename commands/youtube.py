@@ -10,7 +10,10 @@ import platform
 import logging
 import webbrowser
 import urllib.parse
+from youtubesearchpython import VideosSearch
+from pytube import Search
 from pathlib import Path
+import keyboard
 import sys
 
 sys.path.append(str(Path(__file__).parent.parent))
@@ -173,26 +176,22 @@ class YoutubeCommand(Command):
             return False
     
     def _youtube_play(self, query: str) -> bool:
-        """Search YouTube and play the first result directly."""
         if not query or not query.strip():
-            logger.error("Empty search query provided")
+            logger.error("Empty search query")
             return False
-            
+
         try:
-            # URL encode the query
-            encoded_query = urllib.parse.quote(query.strip())
-            
-            # Create the YouTube search URL with autoplay parameter
-            youtube_url = f"https://www.youtube.com/results?search_query={encoded_query}&autoplay=1"
-            
-            # Open the URL in the default browser
-            webbrowser.open(youtube_url)
-            
-            logger.info(f"Searching and playing: {query}")
+            s = Search(query.strip())
+            if not s.results:
+                logger.error("No results")
+                return False
+
+            url = s.results[0].watch_url + "&autoplay=1"
+            logger.info(f"Playing: {url}")
+            webbrowser.open(url)
             return True
-            
         except Exception as e:
-            logger.error(f"Play failed: {str(e)}")
+            logger.error(f"Play failed: {e}")
             return False
     
     def _youtube_send_key(self, key: str) -> bool:
@@ -226,7 +225,7 @@ youtube = YoutubeCommand()
 # youtube.execute("open")
 
 # # Play a video
-youtube.execute("play The True History Of GOD")
+youtube.execute("search bertrand russell")
 
 # # Control playback
 # youtube.execute("pause")  # Pause current videok
