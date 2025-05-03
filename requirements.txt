@@ -1,5 +1,48 @@
-# NumPy must be installed first to avoid incompatibilities
+# Core foundation packages - must be installed in this order
 numpy==1.26.4
+torch==2.1.2+cu121
+torchvision==0.16.2+cu121
+torchaudio==2.1.2+cu121
+
+# Core scientific packages
+scipy==1.12.0
+matplotlib==3.8.3
+pandas==2.2.0
+
+# Utilities
+filelock==3.12.2
+requests==2.31.0
+tqdm==4.66.1
+pyyaml==6.0.1
+typing-extensions==4.8.0
+packaging==23.1
+fsspec==2023.6.0
+psutil==5.9.5
+ninja==1.11.1
+
+# Hugging Face ecosystem - specific compatible versions
+safetensors==0.4.0
+huggingface-hub==0.18.1
+tokenizers==0.14.0
+transformers==4.36.2
+peft==0.6.0
+accelerate==0.25.0
+datasets==2.14.5
+trl==0.7.4
+einops==0.7.0
+
+# Optimization libraries
+bitsandbytes==0.41.0
+triton==2.1.0
+xformers==0.0.23.post1
+
+# Unsloth
+sentencepiece==0.1.99
+unsloth==2024.8
+
+# Additional utilities
+jupyterlab==3.6.5
+tensorboard==2.15.1
 
 # A100 GPU-optimized dependencies for Google Colab
 --find-links https://download.pytorch.org/whl/cu121/torch_stable.html
@@ -10,20 +53,6 @@ xformers==0.0.23.post1
 triton==2.1.0
 bitsandbytes==0.41.1
 flash-attn==2.3.4
-
-# Hugging Face Ecosystem
-transformers==4.36.2
-accelerate==0.27.0
-peft==0.6.0
-trl==0.7.10
-datasets==2.19.0
-huggingface-hub==0.19.4
-safetensors==0.4.1
-tokenizers==0.14.1
-
-# Unsloth & Optimization (older more stable version)
-unsloth==2023.12.17
-einops==0.7.0
 
 # NLP & Utilities
 spacy==3.7.4
@@ -36,8 +65,6 @@ pydantic==1.10.13
 # Storage & Cloud Integration
 boto3==1.34.86
 gdown==5.1.0
-fsspec==2024.3.1
-psutil==5.9.8
 
 # Development Tools
 jupyterlab==4.4.1
@@ -46,7 +73,6 @@ packaging==23.2
 ninja==1.11.1
 
 # Additional A100-specific optimizations
-matplotlib==3.7.3
 cloudpathlib==0.16.0
 
 # Language model
