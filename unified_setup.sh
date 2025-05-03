@@ -298,20 +298,24 @@ setup_storage_dirs() {
 install_core_deps() {
     echo "Installing core dependencies with correct versioning..."
     
+    # Aggressively clean the environment
+    echo "Performing deep cleanup of conflicting packages..."
+    pip uninstall -y numpy scipy matplotlib pywavelets cupy-cuda12x bitsandbytes peft accelerate xformers unsloth unsloth_zoo flash-attn protobuf tensorflow tensorflow-estimator tensorflow-io-gcs-filesystem tensorboard huggingface-hub transformers tokenizers
+
     # EMERGENCY FIX: Extremely aggressive cleanup - forcefully remove corrupted installations
     echo "Performing emergency cleanup of potentially corrupted installations..."
-    rm -rf /usr/local/lib/python3.11/dist-packages/numpy*
-    rm -rf /usr/local/lib/python3.11/dist-packages/numpy-*
-    rm -rf /usr/local/lib/python3.11/dist-packages/torch*
-    rm -rf /usr/local/lib/python3.11/dist-packages/transformers*
-    rm -rf /usr/local/lib/python3.11/dist-packages/huggingface_hub*
-    rm -rf /usr/local/lib/python3.11/dist-packages/tokenizers*
-    rm -rf /usr/local/lib/python3.11/dist-packages/accelerate*
-    rm -rf /usr/local/lib/python3.11/dist-packages/peft*
-    rm -rf /usr/local/lib/python3.11/dist-packages/unsloth*
+    sudo rm -rf /usr/local/lib/python3.11/dist-packages/numpy*
+    sudo rm -rf /usr/local/lib/python3.11/dist-packages/numpy-*
+    sudo rm -rf /usr/local/lib/python3.11/dist-packages/torch*
+    sudo rm -rf /usr/local/lib/python3.11/dist-packages/transformers*
+    sudo rm -rf /usr/local/lib/python3.11/dist-packages/huggingface_hub*
+    sudo rm -rf /usr/local/lib/python3.11/dist-packages/tokenizers*
+    sudo rm -rf /usr/local/lib/python3.11/dist-packages/accelerate*
+    sudo rm -rf /usr/local/lib/python3.11/dist-packages/peft*
+    sudo rm -rf /usr/local/lib/python3.11/dist-packages/unsloth*
     rm -rf /tmp/pip-*
     pip cache purge
-    
+
     # Then use pip to clean out any remaining package references
     echo "Removing all potentially conflicting packages..."
     pip uninstall -y flash-attn bitsandbytes unsloth peft accelerate xformers unsloth_zoo 
@@ -330,17 +334,17 @@ install_core_deps() {
     # Install NumPy 1.26.4 with maximum force to ensure correct version
     echo "Installing NumPy 1.26.4 (compatible with PyTorch 2.1.2)..."
     pip install numpy==1.26.4 --no-deps --force-reinstall --no-cache-dir
+
     # Second install to confirm NumPy 1.x is properly installed
-    pip install numpy==1.26.4
-    
+    pip install numpy==1.26.4 --force-reinstall
+
     # Verify NumPy installation is 1.x
     if ! python -c "import numpy; print(f'NumPy version: {numpy.__version__}'); exit(0 if numpy.__version__.startswith('1.') else 1)"; then
         echo "⚠️ CRITICAL ERROR: NumPy is still not correctly installed at version 1.x."
         echo "This is a common issue with Paperspace environments."
         echo "Will attempt one more aggressive fix..."
         
-        # Try one more aggressive approach
-        sudo rm -rf /usr/local/lib/python3.11/dist-packages/numpy*
+        # Try one more aggressive approach with sudo
         sudo pip install numpy==1.26.4 --force-reinstall --no-deps
         
         # Check again
@@ -349,6 +353,7 @@ install_core_deps() {
             echo "Please run fix_numpy_errors.sh after this script completes or manually fix:"
             echo "sudo rm -rf /usr/local/lib/python3.11/dist-packages/numpy*"
             echo "sudo pip install numpy==1.26.4 --force-reinstall --no-deps"
+            exit 1
         else
             echo "✅ NumPy 1.26.4 successfully installed on second attempt!"
         fi
@@ -369,7 +374,7 @@ install_core_deps() {
     echo "Installing HuggingFace ecosystem in the correct order..."
     # First install huggingface hub at a version that works with everything
     pip install huggingface-hub==0.19.4 --no-deps
-    pip install filelock requests tqdm pyyaml typing-extensions packaging fsspec
+    pip install filelock requests tqdm pyyaml typing-extensions packaging==23.2 fsspec
     
     # Install tokenizers at a compatible version
     pip install tokenizers==0.14.1
@@ -388,20 +393,23 @@ install_core_deps() {
     pip install einops==0.7.0
     
     # Install bitsandbytes
-    pip install bitsandbytes==0.41.0
+    echo "Installing bitsandbytes..."
+    pip install --no-cache-dir bitsandbytes==0.41.0
     
     # Install xformers compatible with PyTorch 2.1.2
+    echo "Installing xformers..."
     pip install -U xformers==0.0.23.post1 --index-url https://download.pytorch.org/whl/cu121 --no-deps
     pip install -U xformers==0.0.23.post1 --index-url https://download.pytorch.org/whl/cu121
     
     # Install unsloth dependencies
     pip install sentencepiece==0.2.0 wheel>=0.38.0
     
-    # Install unsloth with a compatible version that's available
-    # Updated to use the newer version that works with current environments
-    pip install unsloth==2025.3.3 --no-deps
+    # Install unsloth with a compatible older version that's known to work with this setup
+    echo "Installing older compatible version of unsloth..."
+    pip install unsloth==2023.12.17 --no-deps
     
     # Install utility packages
+    echo "Installing utility packages..."
     pip install ninja==1.11.1 packaging==23.2 psutil==5.9.8
     pip install gdown==5.1.0 fsspec==2024.3.1 boto3==1.28.51
     pip install jupyterlab tensorboard

@@ -1,3 +1,6 @@
+# NumPy must be installed first to avoid incompatibilities
+numpy==1.26.4
+
 # A100 GPU-optimized dependencies for Google Colab
 --find-links https://download.pytorch.org/whl/cu121/torch_stable.html
 torch==2.1.2+cu121
@@ -10,16 +13,16 @@ flash-attn==2.3.4
 
 # Hugging Face Ecosystem
 transformers==4.36.2
-accelerate==0.30.0
-peft==0.7.0
+accelerate==0.27.0
+peft==0.6.0
 trl==0.7.10
 datasets==2.19.0
 huggingface-hub==0.19.4
 safetensors==0.4.1
-tokenizers==0.19.1
+tokenizers==0.14.1
 
-# Unsloth & Optimization
-unsloth==2025.4.4
+# Unsloth & Optimization (older more stable version)
+unsloth==2023.12.17
 einops==0.7.0
 
 # NLP & Utilities
@@ -28,7 +31,6 @@ nltk==3.8.1
 tqdm==4.66.2
 pandas==2.2.2
 scikit-learn==1.4.2
-numpy==1.26.4
 pydantic==1.10.13
 
 # Storage & Cloud Integration
