@@ -16,10 +16,17 @@ which pip
 # Fix NumPy version first (critical foundation)
 echo "Installing NumPy 1.26.4 (compatible with PyTorch 2.1.x and SciPy)..."
 pip install numpy==1.26.4 --no-deps
-pip install numpy==1.26.4 # Second install to verify
+pip install numpy==1.26.4 --force-reinstall # Force reinstall to fix conflicts
 
 # Test NumPy installation
 python -c "import numpy; print(f'NumPy version: {numpy.__version__}')"
+
+# Install other numpy-dependent packages right away
+echo "Installing numpy-dependent packages..."
+pip install scipy==1.12.0 --no-deps --ignore-installed
+pip install scipy==1.12.0 --ignore-installed
+pip install matplotlib==3.8.3 --no-deps --ignore-installed
+pip install matplotlib==3.8.3 --ignore-installed
 
 # Install PyTorch matching components
 echo "Installing PyTorch with matched components..."
@@ -30,12 +37,7 @@ echo "Installing compatible protobuf version..."
 pip install protobuf==3.20.3 --no-deps
 pip install protobuf==3.20.3
 
-# Install core scientific packages with fixed versions
-echo "Installing scientific packages..."
-pip install scipy==1.12.0 --no-deps
-pip install scipy==1.12.0
-pip install matplotlib==3.8.3 --no-deps
-pip install matplotlib==3.8.3
+# Skip scientific packages (already installed above)
 
 # Install in very specific order - avoid pulling in incompatible dependencies
 echo "Installing core dependencies in correct order..."
@@ -72,8 +74,12 @@ pip install xformers==0.0.23.post1 --extra-index-url https://download.pytorch.or
 # Install unsloth with compatible version
 echo "Installing compatible unsloth version..."
 pip install sentencepiece==0.2.0
-# Install a specific version that works with our setup
-pip install unsloth==2025.3.3 --no-deps
+# Try installing a specific older version of unsloth that's compatible with our environment
+pip install unsloth==2023.12.17 --no-deps
+
+# Install additional required dependencies
+echo "Installing additional dependencies for unsloth..."
+pip install hf-transfer wheel>=0.38.0
 
 # Install utility packages
 echo "Installing utility packages..."
@@ -86,12 +92,57 @@ pip install -q pydrive2
 
 # Create Google Drive mount script
 cat > ~/mount_google_drive.py << 'EOF'
-from google.colab import drive
 import os
+import sys
 
-print("Mounting Google Drive...")
+# Try both methods of importing drive
 try:
-    drive.mount('/content/drive')
+    # Method 1: Google Colab
+    from google.colab import drive
+    
+    print("Mounting Google Drive via Colab...")
+    try:
+        drive.mount('/content/drive')
+        drive_mounted = True
+    except Exception as e:
+        print(f"Error mounting via Colab: {e}")
+        drive_mounted = False
+except ImportError:
+    # Method 2: Try paperspace-specific method
+    try:
+        import subprocess
+        print("Attempting Paperspace-specific Google Drive mount...")
+        # Install required packages if needed
+        subprocess.run(["pip", "install", "-q", "gdown", "pydrive2"], check=True)
+        
+        # Check if drive is already mounted
+        if os.path.exists('/content/drive/MyDrive'):
+            print("Google Drive appears to be already mounted")
+            drive_mounted = True
+        else:
+            # Create mount directory
+            os.makedirs('/content/drive', exist_ok=True)
+            
+            # Try to mount using system rclone if available
+            result = subprocess.run(
+                ["rclone", "listremotes"], 
+                capture_output=True, 
+                text=True
+            )
+            
+            if "gdrive:" in result.stdout:
+                subprocess.run(["rclone", "mount", "gdrive:", "/content/drive", "--daemon"])
+                print("Mounted Google Drive via rclone")
+                drive_mounted = True
+            else:
+                print("Cannot find Google Drive remote in rclone")
+                drive_mounted = False
+    except Exception as e:
+        print(f"Error mounting Google Drive: {e}")
+        drive_mounted = False
+
+# Set up folders
+if 'drive_mounted' in locals() and drive_mounted:
     print("Google Drive mounted successfully at /content/drive")
     
     # Create directories for Jarvis AI Assistant
@@ -114,10 +165,26 @@ try:
         bashrc.write('export JARVIS_DATA_PATH="/content/drive/MyDrive/Jarvis_AI_Assistant/datasets"\n')
     
     print("Environment variables added to .bashrc")
+else:
+    print("\nWARNING: Google Drive mounting failed. Setting up local storage instead.")
     
-except Exception as e:
-    print(f"Error mounting Google Drive: {e}")
-    print("You may need to run this script manually and authorize access.")
+    # Create local directories as fallback
+    os.makedirs('/notebooks/Jarvis_AI_Assistant/models', exist_ok=True)
+    os.makedirs('/notebooks/Jarvis_AI_Assistant/datasets', exist_ok=True)
+    os.makedirs('/notebooks/Jarvis_AI_Assistant/checkpoints', exist_ok=True)
+    os.makedirs('/notebooks/Jarvis_AI_Assistant/metrics', exist_ok=True)
+    
+    print("Created local Jarvis AI Assistant directories")
+    
+    # Set environment variables to local paths
+    with open(os.path.expanduser("~/.bashrc"), "a") as bashrc:
+        bashrc.write('\n# Jarvis AI Assistant local paths\n')
+        bashrc.write('export JARVIS_STORAGE_PATH="/notebooks/Jarvis_AI_Assistant"\n')
+        bashrc.write('export JARVIS_MODELS_PATH="/notebooks/Jarvis_AI_Assistant/models"\n')
+        bashrc.write('export JARVIS_DATA_PATH="/notebooks/Jarvis_AI_Assistant/datasets"\n')
+    
+    print("Environment variables added to .bashrc (using local paths)")
+    print("To use Google Drive, please run the mount_google_drive.py script manually and authorize")
 EOF
 
 # Try to mount Google Drive
