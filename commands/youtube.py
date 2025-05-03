@@ -10,7 +10,6 @@ import platform
 import logging
 import webbrowser
 import urllib.parse
-from youtubesearchpython import VideosSearch
 from pathlib import Path
 import sys
 
@@ -180,42 +179,20 @@ class YoutubeCommand(Command):
             return False
             
         try:
-            # Initialize VideosSearch with query and handle proxies
-            search = VideosSearch(query.strip(), limit=1, language='en', region='US')
-            results = search.result(mode='json')
+            # URL encode the query
+            encoded_query = urllib.parse.quote(query.strip())
             
-            if not results:
-                logger.error("Failed to get search results")
-                return False
-                
-            if not results.get('result'):
-                logger.error("No videos found for the query")
-                return False
-
-            video = results['result'][0]
-            if not video:
-                logger.error("Failed to get video details")
-                return False
-                
-            video_link = video.get('link')
-            if not video_link or not video_link.startswith('https://www.youtube.com/'):
-                logger.error("Invalid video URL received")
-                return False
-
-            # Use the direct video link with autoplay parameter
-            video_url = f"{video_link}&autoplay=1"
+            # Create the YouTube search URL with autoplay parameter
+            youtube_url = f"https://www.youtube.com/results?search_query={encoded_query}&autoplay=1"
             
-            # Log video details before playing
-            logger.info(f"Found video: {video.get('title')} ({video.get('duration')})") 
-            logger.info(f"Channel: {video.get('channel', {}).get('name', 'Unknown channel')}")
+            # Open the URL in the default browser
+            webbrowser.open(youtube_url)
             
-            # Open video in browser
-            webbrowser.open(video_url)
-            logger.info(f"Now playing: {video.get('title', 'Unknown title')}")
+            logger.info(f"Searching and playing: {query}")
             return True
-
+            
         except Exception as e:
-            logger.error(f"Play failed: {str(e)}", exc_info=True)
+            logger.error(f"Play failed: {str(e)}")
             return False
     
     def _youtube_send_key(self, key: str) -> bool:
@@ -249,9 +226,9 @@ youtube = YoutubeCommand()
 # youtube.execute("open")
 
 # # Play a video
-# youtube.execute("search The True History Of GOD")
+youtube.execute("play The True History Of GOD")
 
 # # Control playback
 # youtube.execute("pause")  # Pause current videok
 # youtube.execute("Resume") # Resume playback
-youtube.execute("fullscreen") # Toggle fullscreen
+# youtube.execute("fullscreen") # Toggle fullscreen
