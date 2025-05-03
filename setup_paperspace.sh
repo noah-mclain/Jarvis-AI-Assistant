@@ -49,6 +49,11 @@ if ! grep -q "source $VENV_PATH/bin/activate" ~/.bashrc; then
     echo "source $VENV_PATH/bin/activate" >> ~/.bashrc
 fi
 
+# Install core Python packages first
+echo "Installing core Python dependencies..."
+pip install wheel setuptools
+pip install numpy==1.26.4  # Install NumPy 1.x explicitly before torch
+
 # Check for GPU using PyTorch
 echo "Checking for GPU..."
 GPU_AVAILABLE=0
@@ -103,6 +108,11 @@ export CUDA_LAUNCH_BLOCKING=0
 export TOKENIZERS_PARALLELISM=true
 export LD_LIBRARY_PATH=\$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/lib64-nvidia
 EOF
+
+# Install scientific dependencies
+echo "Installing scientific dependencies..."
+pip install scipy==1.12.0
+pip install matplotlib==3.8.3
 
 # Install Google Drive integration tools
 echo "Installing Google Drive integration tools..."
@@ -170,19 +180,6 @@ export JARVIS_CHECKPOINTS_PATH="/content/drive/MyDrive/Jarvis_AI_Assistant/check
 EOF
 
 chmod +x ~/mount_google_drive.sh
-
-# Add mount script to bashrc 
-if ! grep -q "mount_google_drive.sh" ~/.bashrc; then
-    echo '
-# Google Drive integration
-echo "Would you like to mount Google Drive? [y/N]"
-read -n 1 -r
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    ~/mount_google_drive.sh
-fi
-' >> ~/.bashrc
-    echo "Added Google Drive mount prompt to ~/.bashrc"
-fi
 
 # Ask user if they want to configure Google Drive now
 echo ""
@@ -264,7 +261,8 @@ echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/lib64-n
 echo "Installing core dependencies in correct order to avoid conflicts..."
 
 # First, install HuggingFace Hub to a version compatible with multiple libraries
-pip install -U huggingface-hub==0.19.4
+pip install -U huggingface-hub==0.19.4 --no-deps
+pip install filelock requests tqdm pyyaml typing-extensions packaging fsspec
 
 # Install bitsandbytes with direct installation
 echo "Installing bitsandbytes..."
@@ -272,37 +270,40 @@ pip install bitsandbytes==0.41.0
 
 # Install accelerate 
 echo "Installing accelerate..."
-pip install accelerate==0.27.0
+pip install accelerate==0.27.0 --no-deps
+pip install accelerate==0.27.0  # Second install to get dependencies
 
 # Install tokenizers to match transformers version
 pip install tokenizers==0.14.1
 
 # Install transformers (which will respect our hub version)
 echo "Installing transformers..."
-pip install transformers==4.36.2
+pip install transformers==4.36.2 --no-deps
+pip install transformers==4.36.2  # Second install to get dependencies
 
 # Install TRL after transformers
-pip install trl==0.7.10
+pip install trl==0.7.10 --no-deps
+pip install trl==0.7.10  # Second install to get dependencies
 
 # Install peft after transformers
-pip install peft==0.6.0
+pip install peft==0.6.0 --no-deps
+pip install peft==0.6.0  # Second install to get dependencies
 
 # Install other core dependencies
 pip install safetensors==0.4.1
-pip install datasets==2.19.0
+pip install datasets==2.19.0 --ignore-installed
 pip install einops==0.7.0
 
 # Install xformers compatible with PyTorch 2.1.2
+pip install -U xformers==0.0.23.post1 --index-url https://download.pytorch.org/whl/cu121 --no-deps
 pip install -U xformers==0.0.23.post1 --index-url https://download.pytorch.org/whl/cu121
+
+# Install an older unsloth to avoid version conflicts
+echo "Installing Unsloth (older compatible version)..."
+pip install "unsloth==2023.12.17" --no-deps
 
 # Skip installing flash-attn in the setup script to avoid compilation errors
 # The fix_flash_attn.sh script will handle this later if needed
-
-# Install unsloth with needed zoo extension
-echo "Installing unsloth and required extensions..."
-pip install "unsloth>=2025.3.0,<2025.4.5" --no-deps
-pip install unsloth_zoo>=2025.4.4 --no-deps
-pip install hf_transfer --no-deps
 
 # Create RTX-optimized config file
 mkdir -p ~/.config/accelerate
@@ -327,7 +328,7 @@ echo "Installing additional dependencies..."
 pip install ninja==1.11.1 packaging==23.2 psutil==5.9.8
 pip install jupyterlab==3.6.5 tensorboard==2.15.1
 pip install gdown==5.1.0 fsspec==2024.3.1 boto3==1.28.51
-pip install sentencepiece>=0.2.0 protobuf<4.0.0
+pip install sentencepiece==0.2.0 protobuf==3.20.3
 
 # Create the fix_dependencies.sh script to repair any future issues
 cat > fix_dependencies.sh << 'EOF'
@@ -337,64 +338,97 @@ echo "===================================================================="
 echo "Fixing dependency issues for Jarvis AI Assistant on Paperspace..."
 echo "===================================================================="
 
-# Clean environment first
-pip uninstall -y flash-attn bitsandbytes unsloth peft accelerate xformers unsloth_zoo protobuf
+# Clean environment first 
+echo "Uninstalling conflicting packages..."
+pip uninstall -y flash-attn bitsandbytes unsloth peft accelerate xformers unsloth_zoo protobuf tokenizers huggingface-hub numpy
 
 # Fix LD_LIBRARY_PATH for CUDA compatibility
+echo "Setting up CUDA library paths..."
 echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/lib64-nvidia' >> ~/.bashrc
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/lib64-nvidia
+
+# Install NumPy 1.x first (PyTorch 2.1.2 is not compatible with NumPy 2.x)
+echo "Installing NumPy 1.x (compatible with PyTorch 2.1.2)..."
+pip install numpy==1.26.4
 
 # Fix torch version to ensure compatibility
 echo "Installing PyTorch 2.1.2 with CUDA 12.1..."
 pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --extra-index-url https://download.pytorch.org/whl/cu121
 
-# Set up compatible core libraries - using a specific order to avoid conflicts
+# Installing core scientific packages
+echo "Installing scientific packages..."
+pip install scipy==1.12.0
+pip install matplotlib==3.8.3
+
+# Installing packages in a very specific order to avoid version conflicts
 echo "Installing compatible core dependencies..."
-# First install the hub to prevent conflicts
-pip install -U huggingface-hub==0.19.4
-# Then install other dependencies in the right order
-pip install -U bitsandbytes==0.41.0
-pip install -U accelerate==0.27.0
-pip install -U peft==0.6.0
-pip install -U tokenizers==0.14.1
-pip install -U transformers==4.36.2
-pip install -U trl==0.7.10
-pip install -U datasets==2.19.0
-pip install -U einops==0.7.0
-pip install -U protobuf<4.0.0
-pip install -U sentencepiece>=0.2.0
+
+# First install huggingface hub at a version that works with everything
+echo "Installing huggingface-hub..."
+pip install huggingface-hub==0.19.4 --no-deps
+pip install filelock requests tqdm pyyaml typing-extensions packaging fsspec
+
+# Next install tokenizers at a compatible version
+echo "Installing tokenizers..."
+pip install tokenizers==0.14.1
+
+# Then install core components in order
+echo "Installing transformers ecosystem..."
+pip install transformers==4.36.2 --no-deps
+pip install transformers==4.36.2 
+pip install peft==0.6.0 --no-deps
+pip install peft==0.6.0
+pip install accelerate==0.27.0 --no-deps
+pip install accelerate==0.27.0
+pip install safetensors==0.4.1
+pip install datasets==2.19.0 --ignore-installed
+pip install trl==0.7.10 --no-deps
+pip install trl==0.7.10
+pip install einops==0.7.0
+
+# Install bitsandbytes
+echo "Installing bitsandbytes..."
+pip install --no-cache-dir bitsandbytes==0.41.0
 
 # Install xformers compatible with PyTorch 2.1.2
 echo "Installing xformers..."
-pip install -U xformers==0.0.23.post1 --index-url https://download.pytorch.org/whl/cu121
+pip install -U "xformers==0.0.23.post1" --index-url https://download.pytorch.org/whl/cu121 --no-deps
+pip install -U "xformers==0.0.23.post1" --index-url https://download.pytorch.org/whl/cu121
 
-# Skip flash-attention for RTX4000, install for RTX5000 - without building from source
-echo "Checking GPU for flash-attention compatibility..."
-if python -c "import torch; print('RTX 5000' in torch.cuda.get_device_name(0))" | grep -q "True"; then
-  echo "RTX 5000 GPU detected - installing pre-built flash-attention wheel..."
-  pip install "flash-attn<2.3.5" --prefer-binary --no-build-isolation || echo "Skipping flash-attention installation"
-else
-  echo "RTX 4000 or other GPU detected - flash-attention not recommended for this GPU"
-  echo "Skipping flash-attention installation"
-fi
+# Install dependencies for unsloth
+echo "Installing unsloth dependencies..."
+pip install protobuf==3.20.3
+pip install sentencepiece==0.2.0
+pip install wheel>=0.38.0
 
-# Install unsloth with appropriate flags to avoid compilation issues
-echo "Installing Unsloth..."
-pip install "unsloth>=2025.3.0,<2025.4.5" --no-deps
-pip install unsloth_zoo>=2025.4.4 --no-deps
-pip install hf_transfer --no-deps
-pip install safetensors==0.4.1
+# Install an older unsloth version compatible with our dependencies
+echo "Installing Unsloth with compatible version..."
+pip install "unsloth==2023.12.17" --no-deps
 
-# Install other compatible packages
+# We'll skip unsloth_zoo since it's not compatible with older unsloth versions
+echo "Skipping unsloth_zoo installation to avoid compatibility issues"
+
+# Install remaining packages
 echo "Installing utility packages..."
 pip install ninja==1.11.1 packaging==23.2 psutil==5.9.8
 pip install gdown==5.1.0 fsspec==2024.3.1 boto3==1.28.51
+pip install jupyter jupyterlab
+
+# Skip flash-attention installation in this script to avoid build issues
+echo "Note: Flash-attention installation is skipped to avoid build errors."
+echo "If you need flash-attention, please run fix_flash_attn.sh separately."
 
 # Verify installations
 echo "Verifying installations..."
 python -c "
 import sys
 print(f'Python version: {sys.version}')
+
+try:
+    import numpy
+    print(f'NumPy version: {numpy.__version__}')
+except Exception as e:
+    print(f'NumPy error: {e}')
 
 try:
     import torch
@@ -406,8 +440,14 @@ except Exception as e:
     print(f'PyTorch error: {e}')
 
 try:
+    import scipy
+    print(f'SciPy version: {scipy.__version__}')
+except Exception as e:
+    print(f'SciPy error: {e}')
+
+try:
     import bitsandbytes as bnb
-    print(f'bitsandbytes version: {bnb.__version__}')
+    print(f'bitsandbytes version: {bnb.__version__ if hasattr(bnb, \"__version__\") else \"(version unknown)\"}'  )
     try:
         lin8bit = bnb.nn.Linear8bitLt(10, 10, has_fp16_weights=False)
         print('bitsandbytes working correctly!')
@@ -417,9 +457,8 @@ except Exception as e:
     print(f'bitsandbytes import error: {e}')
 
 try:
-    # Import unsloth first
     import unsloth
-    print(f'unsloth version: {unsloth.__version__}')
+    print(f'unsloth version: {unsloth.__version__ if hasattr(unsloth, \"__version__\") else \"(version unknown)\"}')
     
     import transformers
     print(f'transformers version: {transformers.__version__}')
@@ -437,20 +476,15 @@ try:
     print(f'accelerate version: {accelerate.__version__}')
 except Exception as e:
     print(f'accelerate error: {e}')
-
-try:
-    import unsloth_zoo
-    print('unsloth_zoo installed successfully')
-except Exception as e:
-    print(f'unsloth_zoo error: {e}')
 "
 
 echo "===================================================================="
 echo "Dependency fixes complete!"
 echo ""
-echo "If you still have issues with unsloth, try running:"
-echo "pip install unsloth==2025.3.0 --no-deps"
-echo "pip install unsloth_zoo==2025.4.4 --no-deps"
+echo "Important notes:"
+echo "1. We've installed an older but compatible version of unsloth"
+echo "2. unsloth_zoo is not installed to prevent conflicts"
+echo "3. NumPy has been downgraded to 1.26.x to be compatible with PyTorch 2.1.2"
 echo ""
 echo "You can now run Jarvis AI Assistant with lower-demand parameters:"
 echo "python src/generative_ai_module/jarvis_unified.py \\"
@@ -474,6 +508,9 @@ echo "===================================================================="
 echo "Flash-Attention Fix for Paperspace"
 echo "===================================================================="
 
+# Ensure we have numpy installed
+pip install numpy==1.26.4
+
 # Uninstall any existing flash-attn
 echo "Removing any existing flash-attn installations..."
 pip uninstall -y flash-attn
@@ -481,21 +518,38 @@ pip uninstall -y flash-attn
 # Check GPU type
 echo "Checking GPU type..."
 if python -c "import torch; print('RTX 5000' in torch.cuda.get_device_name(0))" | grep -q "True"; then
-  echo "RTX 5000 GPU detected - installing pre-built flash-attention wheel..."
+  echo "RTX 5000 GPU detected - attempting to install pre-built flash-attention wheel..."
   
-  # Try multiple approaches to install flash-attn
-  echo "Attempt 1: Using pre-built wheel with prefer-binary..."
-  pip install "flash-attn<2.3.5" --prefer-binary --no-build-isolation || \
+  # First, try downloading a pre-built wheel to avoid compilation
+  echo "Attempting to download pre-built wheel..."
+  mkdir -p ~/flash_attn_wheels
+  cd ~/flash_attn_wheels
   
-  echo "Attempt 2: Using specific version 2.3.3..."
-  pip install flash-attn==2.3.3 --prefer-binary --no-build-isolation || \
+  # Try to download for CUDA 12.1, Python 3.11
+  echo "Downloading pre-built wheel for CUDA 12.1 + PyTorch 2.1.x..."
+  wget https://github.com/Dao-AILab/flash-attention/releases/download/v2.3.3/flash_attn-2.3.3+cu121torch2.1cxx11abiFALSE-cp311-cp311-linux_x86_64.whl -O flash_attn-2.3.3-cp311-cp311-linux_x86_64.whl || \
+  wget https://github.com/Dao-AILab/flash-attention/releases/download/v2.3.2/flash_attn-2.3.2+cu121torch2.1cxx11abiFALSE-cp311-cp311-linux_x86_64.whl -O flash_attn-2.3.2-cp311-cp311-linux_x86_64.whl || \
+  echo "Failed to download pre-built wheel directly"
   
-  echo "Attempt 3: Trying explicit CUDA installation..."
-  pip install "flash-attn<2.3.5" --prefer-binary --extra-index-url https://download.pytorch.org/whl/cu121 || \
+  # Try to install the downloaded wheel
+  if ls flash_attn*.whl 1> /dev/null 2>&1; then
+    echo "Installing downloaded wheel..."
+    pip install flash_attn*.whl
+    if python -c "import flash_attn" 2>/dev/null; then
+      echo "Successfully installed flash-attention from pre-built wheel!"
+      cd - > /dev/null
+      echo "Flash-attention is now available!"
+      exit 0
+    fi
+  fi
   
-  echo "Skipping flash-attention installation - this is fine, other optimizations will still work"
+  cd - > /dev/null
+  
+  # Extremely simplified attempt
+  echo "Attempting simplified installation method..."
+  pip install 'flash-attn<2.1.0' --prefer-binary || echo "Flash-attention installation failed"
 else
-  echo "RTX 4000 or other GPU detected - flash-attention not recommended for this GPU"
+  echo "RTX 4000 or other GPU detected - flash-attention is not recommended for this GPU"
   echo "Skipping flash-attention installation"
 fi
 
@@ -503,9 +557,20 @@ fi
 echo "Installing alternative memory optimizations..."
 pip install -U xformers==0.0.23.post1 --index-url https://download.pytorch.org/whl/cu121
 
+# Verify installation
+echo "Verifying flash-attention installation..."
+if python -c "import flash_attn" 2>/dev/null; then
+  echo "flash-attention is successfully installed and importable!"
+  python -c "import flash_attn; print(f'flash-attention version: {flash_attn.__version__}' if hasattr(flash_attn, '__version__') else 'version unknown')"
+else
+  echo "flash-attention is not installed or not importable."
+  echo "This is expected - the system will use xformers optimizations instead."
+fi
+
 echo "===================================================================="
-echo "Flash-attention fix complete! If installation failed, this is okay,"
-echo "as the system will fall back to using xformers optimizations instead."
+echo "Flash-attention setup complete!"
+echo "NOTE: If flash-attention installation failed, that's completely fine."
+echo "Jarvis will automatically fall back to using xformers optimizations."
 echo "===================================================================="
 EOF
 
@@ -519,6 +584,12 @@ import sys
 print(f'Python version: {sys.version}')
 
 try:
+    import numpy
+    print(f'NumPy version: {numpy.__version__}')
+except Exception as e:
+    print(f'NumPy error: {e}')
+
+try:
     import torch
     print(f'PyTorch version: {torch.__version__}')
     print('CUDA available:', torch.cuda.is_available())
@@ -529,6 +600,12 @@ try:
         print('BF16 support:', torch.cuda.is_bf16_supported())
 except Exception as e:
     print(f'PyTorch error: {e}')
+
+try:
+    import scipy
+    print(f'SciPy version: {scipy.__version__}')
+except Exception as e:
+    print(f'SciPy error: {e}')
 
 try:
     import bitsandbytes as bnb
@@ -544,7 +621,7 @@ except Exception as e:
 try:
     # Import unsloth first
     import unsloth
-    print(f'unsloth version: {unsloth.__version__}')
+    print(f'unsloth version: {unsloth.__version__ if hasattr(unsloth, \"__version__\") else \"(version unknown)\"}')
     
     import transformers
     print(f'transformers version: {transformers.__version__}')
@@ -556,12 +633,6 @@ try:
     print(f'peft version: {peft.__version__}')
 except Exception as e:
     print(f'peft error: {e}')
-
-try:
-    import unsloth_zoo
-    print('unsloth_zoo installed successfully')
-except Exception as e:
-    print(f'unsloth_zoo error: {e}')
 
 try:
     import xformers
@@ -590,9 +661,6 @@ if [ "$RTX4000_GPU" = true ]; then
     echo "- Batch size: 1-2"
     echo "- Gradient accumulation steps: 8+"
     echo "- Sequence length: 512 (max 1024)"
-    echo ""
-    echo "Run the memory analyzer to find suitable models:"
-    echo "python analyze_gpu_memory.py"
     echo "==================================================================="
 elif [ "$RTX5000_GPU" = true ]; then
     echo "==================================================================="
@@ -604,16 +672,10 @@ elif [ "$RTX5000_GPU" = true ]; then
     echo "- Batch size: 2-4"
     echo "- Gradient accumulation steps: 4+"
     echo "- Sequence length: 1024 (max 2048)"
-    echo ""
-    echo "Run the memory analyzer to find suitable models:"
-    echo "python analyze_gpu_memory.py"
     echo "==================================================================="
 else
     echo "==================================================================="
     echo "Setup complete for GPU!"
-    echo ""
-    echo "Run the memory analyzer to find suitable models:"
-    echo "python analyze_gpu_memory.py"
     echo "==================================================================="
 fi
 

@@ -6,16 +6,29 @@ echo "===================================================================="
 
 # Clean environment first 
 echo "Uninstalling conflicting packages..."
-pip uninstall -y flash-attn bitsandbytes unsloth peft accelerate xformers unsloth_zoo protobuf tokenizers huggingface-hub
+pip uninstall -y flash-attn bitsandbytes unsloth peft accelerate xformers unsloth_zoo protobuf tokenizers huggingface-hub numpy tensorflow tensorflow-estimator tensorflow-io-gcs-filesystem tensorboard
 
 # Fix LD_LIBRARY_PATH for CUDA compatibility
 echo "Setting up CUDA library paths..."
 echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/lib64-nvidia' >> ~/.bashrc
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/lib64-nvidia
 
+# Install NumPy 1.x first (PyTorch 2.1.2 is not compatible with NumPy 2.x)
+echo "Installing NumPy 1.x (compatible with PyTorch 2.1.2)..."
+pip install numpy==1.26.4
+
+# Fix protobuf version first - critical dependency
+echo "Installing compatible protobuf version..."
+pip install protobuf==3.20.3
+
 # Fix torch version to ensure compatibility
 echo "Installing PyTorch 2.1.2 with CUDA 12.1..."
 pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --extra-index-url https://download.pytorch.org/whl/cu121
+
+# Installing core scientific packages
+echo "Installing scientific packages..."
+pip install scipy==1.12.0
+pip install matplotlib==3.8.3
 
 # Installing packages in a very specific order to avoid version conflicts
 echo "Installing compatible core dependencies..."
@@ -54,19 +67,21 @@ pip install -U "xformers==0.0.23.post1" --index-url https://download.pytorch.org
 
 # Install dependencies for unsloth
 echo "Installing unsloth dependencies..."
-pip install protobuf==3.20.3
 pip install sentencepiece==0.2.0
+pip install wheel>=0.38.0
 
-# Install unsloth with appropriate flags to avoid compilation issues
-echo "Installing Unsloth..."
-pip install "unsloth>=2025.3.0,<2025.4.5" --no-deps
-pip install unsloth_zoo==2025.4.4 --no-deps
-pip install hf_transfer --no-deps
+# Install an older unsloth version compatible with our dependencies
+echo "Installing Unsloth with compatible version..."
+pip install "unsloth==2023.12.17" --no-deps
+
+# We'll skip unsloth_zoo since it's not compatible with older unsloth versions
+echo "Skipping unsloth_zoo installation to avoid compatibility issues"
 
 # Install remaining packages
 echo "Installing utility packages..."
 pip install ninja==1.11.1 packaging==23.2 psutil==5.9.8
 pip install gdown==5.1.0 fsspec==2024.3.1 boto3==1.28.51
+pip install jupyter jupyterlab
 
 # Skip flash-attention installation in this script to avoid build issues
 echo "Note: Flash-attention installation is skipped to avoid build errors."
@@ -79,6 +94,24 @@ import sys
 print(f'Python version: {sys.version}')
 
 try:
+    import protobuf
+    print(f'Protobuf package found')
+except Exception as e:
+    print(f'Protobuf error: {e}')
+    
+try:
+    from google import protobuf
+    print(f'Google protobuf successfully imported')
+except Exception as e:
+    print(f'Google protobuf error: {e}')
+
+try:
+    import numpy
+    print(f'NumPy version: {numpy.__version__}')
+except Exception as e:
+    print(f'NumPy error: {e}')
+
+try:
     import torch
     print(f'PyTorch version: {torch.__version__}')
     print('CUDA available:', torch.cuda.is_available())
@@ -86,6 +119,12 @@ try:
         print('GPU:', torch.cuda.get_device_name(0))
 except Exception as e:
     print(f'PyTorch error: {e}')
+
+try:
+    import scipy
+    print(f'SciPy version: {scipy.__version__}')
+except Exception as e:
+    print(f'SciPy error: {e}')
 
 try:
     import bitsandbytes as bnb
@@ -118,20 +157,16 @@ try:
     print(f'accelerate version: {accelerate.__version__}')
 except Exception as e:
     print(f'accelerate error: {e}')
-
-try:
-    import unsloth_zoo
-    print('unsloth_zoo installed successfully')
-except Exception as e:
-    print(f'unsloth_zoo error: {e}')
 "
 
 echo "===================================================================="
 echo "Dependency fixes complete!"
 echo ""
-echo "If you still have issues with unsloth, try running:"
-echo "pip install unsloth==2025.3.0 --no-deps"
-echo "pip install unsloth_zoo==2025.4.4 --no-deps"
+echo "Important notes:"
+echo "1. We've installed an older but compatible version of unsloth"
+echo "2. unsloth_zoo is not installed to prevent conflicts"
+echo "3. NumPy has been downgraded to 1.26.x to be compatible with PyTorch 2.1.2"
+echo "4. Protobuf has been fixed to a compatible version 3.20.3"
 echo ""
 echo "You can now run Jarvis AI Assistant with lower-demand parameters:"
 echo "python src/generative_ai_module/jarvis_unified.py \\"
