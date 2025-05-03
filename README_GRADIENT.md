@@ -128,6 +128,26 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 ## Troubleshooting
 
+### NumPy Version Conflicts
+
+If you encounter NumPy version conflicts (common in Paperspace environments):
+
+1. Run the emergency NumPy fix script:
+   ```bash
+   ./fix_numpy_errors.sh
+   ```
+2. If that doesn't work, run the more comprehensive dependency fix:
+
+   ```bash
+   ./fix_numpy.sh
+   ```
+
+3. If you still have issues, manually remove NumPy and reinstall:
+   ```bash
+   sudo rm -rf /usr/local/lib/python3.11/dist-packages/numpy*
+   pip install numpy==1.26.4 --no-deps --force-reinstall
+   ```
+
 ### Google Drive Authentication Issues
 
 If you encounter authentication issues:

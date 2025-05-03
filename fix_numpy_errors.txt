@@ -1,0 +1,108 @@
+Installing collected packages: mpmath, urllib3, typing-extensions, sympy, pillow, numpy, networkx, MarkupSafe, idna, fsspec, filelock, charset-normalizer, certifi, triton, requests, jinja2, torch, torchvision, torchaudio
+  Attempting uninstall: mpmath
+    Found existing installation: mpmath 1.3.0
+    Uninstalling mpmath-1.3.0:
+      Successfully uninstalled mpmath-1.3.0
+  Attempting uninstall: urllib3
+    Found existing installation: urllib3 2.4.0
+    Uninstalling urllib3-2.4.0:
+      Successfully uninstalled urllib3-2.4.0
+  Attempting uninstall: typing-extensions
+    Found existing installation: typing_extensions 4.13.2
+    Uninstalling typing_extensions-4.13.2:
+      Successfully uninstalled typing_extensions-4.13.2
+  Attempting uninstall: sympy
+    Found existing installation: sympy 1.14.0
+    Uninstalling sympy-1.14.0:
+      Successfully uninstalled sympy-1.14.0
+  Attempting uninstall: pillow
+    Found existing installation: pillow 11.2.1
+    Uninstalling pillow-11.2.1:
+      Successfully uninstalled pillow-11.2.1
+  Attempting uninstall: numpy
+    Found existing installation: numpy 2.0.0
+   ━━━━━━━━╺━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  4/19 [pillow]error: uninstall-no-record-file
+
+× Cannot uninstall numpy 2.0.0
+╰─> The package's contents are unknown: no RECORD file was found for numpy.
+
+hint: You might be able to recover from this via: pip install --force-reinstall --no-deps numpy==2.0.0
+Installing SciPy with explicit NumPy dependency...
+Collecting scipy==1.12.0
+  Using cached scipy-1.12.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (60 kB)
+Using cached scipy-1.12.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (38.4 MB)
+Installing collected packages: scipy
+Successfully installed scipy-1.12.0
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+Requirement already satisfied: scipy==1.12.0 in /usr/local/lib/python3.11/dist-packages (1.12.0)
+Collecting numpy<1.29.0,>=1.22.4 (from scipy==1.12.0)
+  Using cached numpy-1.26.4-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (61 kB)
+Using cached numpy-1.26.4-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (18.3 MB)
+Installing collected packages: numpy
+  Attempting uninstall: numpy
+    Found existing installation: numpy 2.0.0
+error: uninstall-no-record-file
+
+× Cannot uninstall numpy 2.0.0
+╰─> The package's contents are unknown: no RECORD file was found for numpy.
+
+hint: You might be able to recover from this via: pip install --force-reinstall --no-deps numpy==2.0.0
+Installing transformers ecosystem...
+Collecting huggingface-hub==0.17.3
+  Using cached huggingface_hub-0.17.3-py3-none-any.whl.metadata (13 kB)
+Using cached huggingface_hub-0.17.3-py3-none-any.whl (295 kB)
+Installing collected packages: huggingface-hub
+Successfully installed huggingface-hub-0.17.3
+Installing collected packages: typing-extensions, tqdm, requests, pyyaml, packaging, fsspec, filelock
+  Attempting uninstall: typing-extensions
+    Found existing installation: typing_extensions 4.13.2
+    Uninstalling typing_extensions-4.13.2:
+      Successfully uninstalled typing_extensions-4.13.2
+  Attempting uninstall: tqdm
+    Found existing installation: tqdm 4.67.1
+    Uninstalling tqdm-4.67.1:
+      Successfully uninstalled tqdm-4.67.1
+  Attempting uninstall: requests
+    Found existing installation: requests 2.32.3
+    Uninstalling requests-2.32.3:
+      Successfully uninstalled requests-2.32.3
+  Attempting uninstall: pyyaml
+    Found existing installation: PyYAML 6.0.2
+    Uninstalling PyYAML-6.0.2:
+      Successfully uninstalled PyYAML-6.0.2
+  Attempting uninstall: packaging
+    Found existing installation: packaging 25.0
+    Uninstalling packaging-25.0:
+      Successfully uninstalled packaging-25.0
+  Attempting uninstall: fsspec
+    Found existing installation: fsspec 2025.3.2
+    Uninstalling fsspec-2025.3.2:
+      Successfully uninstalled fsspec-2025.3.2
+  Attempting uninstall: filelock
+    Found existing installation: filelock 3.18.0
+    Uninstalling filelock-3.18.0:
+      Successfully uninstalled filelock-3.18.0
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of the following dependency conflicts.
+unsloth 2025.3.3 requires hf_transfer, which is not installed.
+unsloth 2025.3.3 requires trl!=0.15.0,!=0.9.0,!=0.9.1,!=0.9.2,!=0.9.3,>=0.7.9, which is not installed.
+unsloth 2025.3.3 requires tyro, which is not installed.
+unsloth 2025.3.3 requires unsloth_zoo>=2025.3.1, which is not installed.
+unsloth 2025.3.3 requires xformers>=0.0.27.post2, which is not installed.
+sentence-transformers 2.2.2 requires scikit-learn, which is not installed.
+seaborn 0.12.2 requires pandas>=0.25, which is not installed.
+datasets 2.14.5 requires pandas, which is not installed.
+unsloth 2025.3.3 requires accelerate>=0.34.1, but you have accelerate 0.27.0 which is incompatible.
+unsloth 2025.3.3 requires datasets>=2.16.0, but you have datasets 2.14.5 which is incompatible.
+unsloth 2025.3.3 requires peft!=0.11.0,>=0.7.1, but you have peft 0.6.0 which is incompatible.
+unsloth 2025.3.3 requires protobuf<4.0.0, but you have protobuf 4.23.4 which is incompatible.
+unsloth 2025.3.3 requires sentencepiece>=0.2.0, but you have sentencepiece 0.1.99 which is incompatible.
+unsloth 2025.3.3 requires torch>=2.4.0, but you have torch 2.1.2+cu121 which is incompatible.
+unsloth 2025.3.3 requires transformers!=4.47.0,>=4.46.1, but you have transformers 4.36.2 which is incompatible.
+unsloth 2025.3.3 requires wheel>=0.42.0, but you have wheel 0.35.1 which is incompatible.
+transformers 4.36.2 requires huggingface-hub<1.0,>=0.19.3, but you have huggingface-hub 0.17.3 which is incompatible.
+torch 2.1.2+cu121 requires triton==2.1.0; platform_system == "Linux" and platform_machine == "x86_64", but you have triton 3.3.0 which is incompatible.
+gradient 2.0.6 requires attrs<=19, but you have attrs 23.1.0 which is incompatible.
+gradient 2.0.6 requires PyYAML==5.*, but you have pyyaml 6.0.1 which is incompatible.
+matplotlib 3.7.3 requires numpy<2,>=1.20, but you have numpy 2.0.0 which is incompatible.
+tensorflow 2.15.0 requires numpy<2.0.0,>=1.23.5, but you have numpy 2.0.0 which is incompatible.
+Successfully installed filelock-3.12.2 fsspec-2023.6.0 packaging-23.1 pyyaml-6.0.1 requests-2.31.0 tqdm-4.66.1 typing-extensions-4.8.0

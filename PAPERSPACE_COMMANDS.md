@@ -403,6 +403,26 @@ print(f'BF16 support: {torch.cuda.is_bf16_supported()}')
 
 ## Troubleshooting
 
+### Fix NumPy Version Conflicts (Critical Issue)
+
+NumPy version conflicts are one of the most common issues on Paperspace. If you see errors about NumPy 2.x versus NumPy 1.x compatibility, run:
+
+```bash
+# The emergency NumPy fix script
+./fix_numpy_errors.sh
+
+# If that doesn't work, run the comprehensive dependency fix
+./fix_numpy.sh
+```
+
+If you see an error like `Cannot uninstall numpy 2.0.0: no RECORD file was found for numpy`, this indicates a corrupted NumPy installation. Use the more aggressive fix:
+
+```bash
+# Forcefully remove corrupted NumPy
+sudo rm -rf /usr/local/lib/python3.11/dist-packages/numpy*
+pip install numpy==1.26.4 --no-deps --force-reinstall
+```
+
 ### Fix CUDA and Library Issues
 
 ```python

@@ -298,20 +298,36 @@ setup_storage_dirs() {
 install_core_deps() {
     echo "Installing core dependencies with correct versioning..."
     
-    # Clean up any conflicting packages first
-    echo "Removing potentially conflicting packages..."
-    pip uninstall -y flash-attn bitsandbytes unsloth peft accelerate xformers unsloth_zoo protobuf tokenizers huggingface-hub numpy tensorflow tensorflow-estimator tensorflow-io-gcs-filesystem tensorboard
+    # CRITICAL FIX: First, forcefully remove any potentially corrupted installations
+    echo "Forcefully removing corrupted package installations..."
+    rm -rf /usr/local/lib/python3.11/dist-packages/numpy*
+    rm -rf /usr/local/lib/python3.11/dist-packages/torch*
+    rm -rf /usr/local/lib/python3.11/dist-packages/transformers*
+    rm -rf /usr/local/lib/python3.11/dist-packages/huggingface_hub*
+    rm -rf /usr/local/lib/python3.11/dist-packages/tokenizers*
+    rm -rf /usr/local/lib/python3.11/dist-packages/accelerate*
+    rm -rf /usr/local/lib/python3.11/dist-packages/peft*
+    rm -rf /usr/local/lib/python3.11/dist-packages/unsloth*
+    
+    # Then use pip to clean out any remaining package references
+    echo "Removing all potentially conflicting packages..."
+    pip uninstall -y flash-attn bitsandbytes unsloth peft accelerate xformers unsloth_zoo 
+    pip uninstall -y protobuf tokenizers huggingface-hub numpy tensorflow tensorflow-estimator 
+    pip uninstall -y tensorflow-io-gcs-filesystem tensorboard triton tqdm scipy
 
     # Fix LD_LIBRARY_PATH for CUDA
     echo "Setting up CUDA library paths..."
     export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/lib64-nvidia
     echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/lib64-nvidia' >> ~/.bashrc
     
-    # Install key dependencies in the correct order
+    # Install NumPy 1.26.4 with maximum force to ensure correct version
     echo "Installing NumPy 1.26.4 (compatible with PyTorch 2.1.2)..."
+    pip install numpy==1.26.4 --no-deps --force-reinstall
+    # Second install to confirm NumPy 1.x is properly installed
     pip install numpy==1.26.4
     
     echo "Installing protobuf 3.20.3 (compatible with TensorFlow and transformers)..."
+    pip install protobuf==3.20.3 --no-deps
     pip install protobuf==3.20.3
     
     echo "Installing PyTorch 2.1.2 with CUDA 12.1 support..."
