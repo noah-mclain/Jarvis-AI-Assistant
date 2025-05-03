@@ -12,6 +12,7 @@ import webbrowser
 import urllib.parse
 from pytube import Search
 from pathlib import Path
+import time
 import keyboard
 import sys
 
@@ -152,9 +153,9 @@ youtube = YoutubeCommand()
 # youtube.execute("open")
 
 # # Play a video
-# youtube.execute("search bertrand russell")
+youtube.execute("play bertrand russell")
 
 # # Control playback
 # youtube.execute("pause")  # Pause current videok
-youtube.execute("mute") # Resume playback
-youtube.execute("fullscreen") # Toggle fullscreen
+# youtube.execute("mute") # Resume playback
+# youtube.execute("fullscreen") # Toggle fullscreen

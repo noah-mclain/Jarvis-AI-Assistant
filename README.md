@@ -1,19 +1,68 @@
-# Personal Assistant Application
+# PC Assistant
 
-A command-line based personal assistant that can execute various commands like opening/closing applications, setting alarms, controlling Spotify, and searching YouTube.
+A comprehensive command-line based personal assistant for controlling your PC. This assistant can perform various tasks including system control, media playback, file operations, web searches, and more.
 
 ## Features
 
-- **App Control**: Open and close applications on your system
-- **Alarms**: Set alarms with custom messages and get notifications when they trigger
-- **Spotify Integration**: Control Spotify playback, search for songs, and adjust volume
-- **YouTube Search**: Quickly search for videos on YouTube
+### System Control
+- **Volume Control**: Adjust system volume, mute/unmute
+- **Brightness Control**: Adjust screen brightness
+- **Power Management**: Shutdown, restart, logout, sleep, hibernate
+- **Screenshots**: Take and save screenshots
+
+### Application Management
+- **Open Applications**: Launch any installed application
+- **Close Applications**: Close running applications
+
+### Media Control
+- **Spotify**: Search and play music, control playback
+- **YouTube**: Search and play videos, control playback
+- **Netflix**: Basic Netflix controls
+
+### File Operations
+- **Search Files**: Find files and folders on your system
+- **Open Files**: Open files with their default applications
+- **Explore Directories**: Open file explorer in specific locations
+
+### Web Interaction
+- **Google Search**: Search the web directly
+- **Open Websites**: Open any website in your default browser
+- **Maps Search**: Search locations on Google Maps
+
+### Time Management
+- **Set Alarms**: Schedule alarms with custom messages
+
+## Project Structure
+
+```
+Commands/
+├── assistant.py          # Core assistant framework
+├── requirements.txt     # Dependencies
+├── assistant/           # Assistant core modules
+│   └── __init__.py
+├── commands/            # Command implementations
+│   ├── __init__.py
+│   ├── alarm.py         # Alarm commands
+│   ├── app_control.py   # Application control commands
+│   ├── file_operations.py # File management commands
+│   ├── media.py         # Media module (imports media controls)
+│   ├── netflix.py       # Netflix control commands
+│   ├── spotify.py       # Spotify control commands
+│   ├── system_control.py # System control commands
+│   ├── web_search.py    # Web search commands
+│   └── youtube.py       # YouTube control commands
+└── tests/               # Test modules
+    └── test_spotify.py
+```
 
 ## Installation
 
 1. Clone this repository or download the source code
 2. Make sure you have Python 3.6+ installed
-3. No additional dependencies are required for basic functionality
+3. Install the required dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
 
 ## Usage
 
