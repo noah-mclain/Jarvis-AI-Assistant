@@ -1,2 +1,4 @@
 pytube==15.0.0
 keyboard==0.13.5
+spotipy==2.25.1
+pywinauto==0.6.9
