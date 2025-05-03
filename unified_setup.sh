@@ -155,8 +155,8 @@ install_core_dependencies() {
     # 5. Hugging Face ecosystem - in exact order for compatibility
     echo "Installing Hugging Face ecosystem..."
     pip install safetensors==0.4.0
-    pip install huggingface-hub==0.18.1 --no-deps
-    pip install huggingface-hub==0.18.1  # Second install pulls in compatible dependencies
+    pip install huggingface-hub==0.19.4 --no-deps
+    pip install huggingface-hub==0.19.4  # Second install pulls in compatible dependencies
     
     pip install tokenizers==0.14.0 --no-deps
     pip install tokenizers==0.14.0
