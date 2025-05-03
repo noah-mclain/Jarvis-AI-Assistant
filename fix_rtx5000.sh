@@ -43,14 +43,14 @@ echo "Installing core dependencies in correct order..."
 # Install base requirements
 pip install packaging==23.2 wheel>=0.38.0 ninja==1.11.1 
 
-# HuggingFace ecosystem core
-pip install huggingface-hub==0.19.4 --no-deps
-pip install filelock requests tqdm pyyaml typing-extensions fsspec
+# HuggingFace ecosystem core - install with compatible versions
+pip install filelock requests tqdm pyyaml typing-extensions fsspec scipy==1.12.0
+pip install huggingface-hub==0.17.3 --no-deps
 pip install tokenizers==0.14.1
 
 # Transformers ecosystem (fixed versions)
 pip install transformers==4.36.2 --no-deps
-pip install transformers==4.36.2
+pip install transformers==4.36.2 --ignore-installed
 pip install peft==0.6.0 --no-deps
 pip install peft==0.6.0
 pip install accelerate==0.27.0 --no-deps
@@ -69,15 +69,60 @@ pip install --no-cache-dir bitsandbytes==0.41.0
 echo "Installing xformers..."
 pip install xformers==0.0.23.post1 --extra-index-url https://download.pytorch.org/whl/cu121
 
-# Install unsloth with compatible version (2023 version, not 2025)
+# Install unsloth with compatible version
 echo "Installing compatible unsloth version..."
 pip install sentencepiece==0.2.0
-pip install "unsloth<2024.0.0" --no-deps
+# Install a specific version that works with our setup
+pip install unsloth==2025.3.3 --no-deps
 
 # Install utility packages
 echo "Installing utility packages..."
-pip install psutil==5.9.8 gdown==5.1.0 boto3==1.28.51
+pip install psutil==5.9.8 gdown==5.1.0 boto3==1.28.51 
 pip install jupyterlab tensorboard
+
+# Setup Google Drive integration
+echo "Setting up Google Drive integration for Paperspace..."
+pip install -q pydrive2
+
+# Create Google Drive mount script
+cat > ~/mount_google_drive.py << 'EOF'
+from google.colab import drive
+import os
+
+print("Mounting Google Drive...")
+try:
+    drive.mount('/content/drive')
+    print("Google Drive mounted successfully at /content/drive")
+    
+    # Create directories for Jarvis AI Assistant
+    os.makedirs('/content/drive/MyDrive/Jarvis_AI_Assistant/models', exist_ok=True)
+    os.makedirs('/content/drive/MyDrive/Jarvis_AI_Assistant/datasets', exist_ok=True)
+    os.makedirs('/content/drive/MyDrive/Jarvis_AI_Assistant/checkpoints', exist_ok=True)
+    os.makedirs('/content/drive/MyDrive/Jarvis_AI_Assistant/metrics', exist_ok=True)
+    
+    print("Created Jarvis AI Assistant directories in Google Drive")
+    
+    # Create symlink for easier access
+    os.system('ln -sf /content/drive/MyDrive/Jarvis_AI_Assistant /notebooks/google_drive_jarvis')
+    print("Created symlink to Google Drive at /notebooks/google_drive_jarvis")
+    
+    # Set environment variables for the project
+    with open(os.path.expanduser("~/.bashrc"), "a") as bashrc:
+        bashrc.write('\n# Jarvis AI Assistant paths\n')
+        bashrc.write('export JARVIS_STORAGE_PATH="/content/drive/MyDrive/Jarvis_AI_Assistant"\n')
+        bashrc.write('export JARVIS_MODELS_PATH="/content/drive/MyDrive/Jarvis_AI_Assistant/models"\n')
+        bashrc.write('export JARVIS_DATA_PATH="/content/drive/MyDrive/Jarvis_AI_Assistant/datasets"\n')
+    
+    print("Environment variables added to .bashrc")
+    
+except Exception as e:
+    print(f"Error mounting Google Drive: {e}")
+    print("You may need to run this script manually and authorize access.")
+EOF
+
+# Try to mount Google Drive
+echo "Attempting to mount Google Drive..."
+python ~/mount_google_drive.py
 
 # Configure GPU-specific optimizations for RTX5000
 echo "Setting up RTX 5000 optimizations..."
