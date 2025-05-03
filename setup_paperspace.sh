@@ -57,45 +57,117 @@ fi
 echo "Installing Google Drive integration tools..."
 pip install -q gdown pydrive2 google-auth google-auth-oauthlib google-auth-httplib2
 
-# Create function to check if Google Drive is mounted
-check_drive_mounted() {
-    python -c "import os; print(os.path.exists('/content/drive/MyDrive'))" | grep -q "True"
-    return $?
-}
+# Set up Google Drive integration using rclone
+echo "Setting up rclone for Google Drive integration..."
+sudo apt-get update && sudo apt-get install -y rclone
 
-# Mount Google Drive
-echo "Attempting to mount Google Drive in Paperspace..."
-cat > mount_drive.py << EOF
-from google.colab import drive
-try:
-    drive.mount('/content/drive')
-    print("Google Drive successfully mounted at /content/drive")
-except:
-    print("Failed to mount Google Drive")
+# Create necessary directories
+mkdir -p ~/.config/rclone
+mkdir -p /content/drive/MyDrive
+
+# Create rclone config for Google Drive
+cat > ~/.config/rclone/rclone.conf << EOF
+[gdrive]
+type = drive
+scope = drive
 EOF
 
-python mount_drive.py
+# Create Google Drive mount script
+cat > ~/mount_google_drive.sh << 'EOF'
+#!/bin/bash
 
-# Check if Google Drive mounted successfully
-if check_drive_mounted; then
-    echo "Google Drive mounted successfully. Using Google Drive for storage."
-    DRIVE_MOUNTED=true
-    # Create directories in Google Drive (same structure as Colab)
-    mkdir -p /content/drive/MyDrive/Jarvis_AI_Assistant
-    mkdir -p /content/drive/MyDrive/Jarvis_AI_Assistant/models
-    mkdir -p /content/drive/MyDrive/Jarvis_AI_Assistant/datasets
-    mkdir -p /content/drive/MyDrive/Jarvis_AI_Assistant/checkpoints
-    
-    # Create symlinks from Paperspace storage to Google Drive
-    ln -sf /content/drive/MyDrive/Jarvis_AI_Assistant /notebooks/google_drive_storage
-    echo "Created symlink to Google Drive storage in /notebooks/google_drive_storage"
-    
-    # Set primary storage path to Google Drive
-    STORAGE_BASE_PATH="/content/drive/MyDrive/Jarvis_AI_Assistant"
+# Configure rclone if needed
+if ! grep -q "\[gdrive\]" ~/.config/rclone/rclone.conf; then
+    echo "Setting up rclone configuration..."
+    rclone config create gdrive drive scope=drive
+fi
+
+# Check if already mounted
+if mountpoint -q /content/drive/MyDrive; then
+    echo "Google Drive is already mounted at /content/drive/MyDrive"
 else
-    echo "Google Drive mount failed. Using Paperspace persistent storage instead."
+    # Mount Google Drive in the background
+    echo "Mounting Google Drive at /content/drive/MyDrive..."
+    mkdir -p /content/drive/MyDrive
+    rclone mount gdrive: /content/drive/MyDrive --daemon --vfs-cache-mode writes
+
+    # Wait for mount to be available
+    echo "Waiting for mount to be ready..."
+    sleep 3
+
+    if mountpoint -q /content/drive/MyDrive; then
+        echo "Google Drive successfully mounted at /content/drive/MyDrive"
+        
+        # Create Jarvis directories (same as Colab would)
+        mkdir -p /content/drive/MyDrive/Jarvis_AI_Assistant
+        mkdir -p /content/drive/MyDrive/Jarvis_AI_Assistant/models
+        mkdir -p /content/drive/MyDrive/Jarvis_AI_Assistant/datasets
+        mkdir -p /content/drive/MyDrive/Jarvis_AI_Assistant/checkpoints
+        
+        # Create symlink for compatibility
+        ln -sf /content/drive/MyDrive/Jarvis_AI_Assistant /notebooks/google_drive_storage
+    else
+        echo "Failed to mount Google Drive. Please run 'rclone config' manually to set up Google Drive."
+    fi
+fi
+
+# Set environment variables
+export JARVIS_STORAGE_PATH="/content/drive/MyDrive/Jarvis_AI_Assistant"
+export JARVIS_MODELS_PATH="/content/drive/MyDrive/Jarvis_AI_Assistant/models"
+export JARVIS_DATASETS_PATH="/content/drive/MyDrive/Jarvis_AI_Assistant/datasets"
+export JARVIS_CHECKPOINTS_PATH="/content/drive/MyDrive/Jarvis_AI_Assistant/checkpoints"
+EOF
+
+chmod +x ~/mount_google_drive.sh
+
+# Add mount script to bashrc 
+if ! grep -q "mount_google_drive.sh" ~/.bashrc; then
+    echo '
+# Google Drive integration
+echo "Would you like to mount Google Drive? [y/N]"
+read -n 1 -r
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    ~/mount_google_drive.sh
+fi
+' >> ~/.bashrc
+    echo "Added Google Drive mount prompt to ~/.bashrc"
+fi
+
+# Ask user if they want to configure Google Drive now
+echo ""
+echo "Do you want to configure Google Drive now? This will let you use the same directory structure as Google Colab. [y/N]"
+read -n 1 -r
+echo ""
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo "Setting up rclone configuration. Please follow the prompts in your browser..."
+    rclone config create gdrive drive scope=drive
+    ~/mount_google_drive.sh
+    if mountpoint -q /content/drive/MyDrive; then
+        echo "Google Drive successfully mounted. Using Google Drive for storage."
+        DRIVE_MOUNTED=true
+        # Create directories in Google Drive (same structure as Colab)
+        mkdir -p /content/drive/MyDrive/Jarvis_AI_Assistant
+        mkdir -p /content/drive/MyDrive/Jarvis_AI_Assistant/models
+        mkdir -p /content/drive/MyDrive/Jarvis_AI_Assistant/datasets
+        mkdir -p /content/drive/MyDrive/Jarvis_AI_Assistant/checkpoints
+        
+        # Create symlinks from Paperspace storage to Google Drive
+        ln -sf /content/drive/MyDrive/Jarvis_AI_Assistant /notebooks/google_drive_storage
+        echo "Created symlink to Google Drive storage in /notebooks/google_drive_storage"
+        
+        # Set primary storage path to Google Drive
+        STORAGE_BASE_PATH="/content/drive/MyDrive/Jarvis_AI_Assistant"
+    else
+        echo "Google Drive mount failed. Using Paperspace persistent storage instead."
+        DRIVE_MOUNTED=false
+        # Continue with Paperspace storage setup
+    fi
+else
     DRIVE_MOUNTED=false
-    
+    echo "Skipping Google Drive setup. Using Paperspace persistent storage instead."
+fi
+
+if [ "$DRIVE_MOUNTED" != true ]; then
     # Set up persistent storage directory structure in Paperspace
     echo "Setting up persistent storage in /storage..."
     if [ -d "/storage" ]; then
