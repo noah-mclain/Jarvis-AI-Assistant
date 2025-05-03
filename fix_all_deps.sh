@@ -18,6 +18,18 @@ rm -rf /usr/local/lib/python3.11/dist-packages/tokenizers*
 rm -rf /usr/local/lib/python3.11/dist-packages/peft*
 rm -rf /usr/local/lib/python3.11/dist-packages/accelerate*
 
+# Remove corrupt installations
+echo "Cleaning package directories..."
+rm -rf /usr/local/lib/python3.11/dist-packages/{numpy*,transformers*,tokenizers*,peft*,accelerate*}
+
+# Clear caches
+echo "Clearing all relevant caches..."
+rm -rf ~/.cache/{pip,huggingface}
+find /usr/local/lib/python3.11/ -name "__pycache__" -exec rm -rf {} +
+find /usr/local/lib/python3.11/ -name "*.pyc" -exec rm -f {} +
+find . -type d -name "__pycache__" -exec rm -rf {} +
+find . -name "*.pyc" -exec rm -f {} +
+
 # Install packages in the correct sequence with pinned compatible versions
 echo "Installing foundational NumPy first (correct version)..."
 pip install numpy==1.26.4 --no-deps
