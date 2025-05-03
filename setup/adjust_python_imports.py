@@ -26,8 +26,9 @@ def adjust_file(file_path, custom_unsloth_path):
     with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()
     
-    # Check if file imports unsloth
-    if not re.search(r'import\s+unsloth|from\s+unsloth\s+import', content):
+    # Improved regex to catch more unsloth import patterns
+    # This will match even within try/except blocks and with different spacing
+    if not re.search(r'[^\w]unsloth\b|from\s+unsloth\b', content):
         print(f"No unsloth imports found in {file_path}")
         return False
 
@@ -65,12 +66,21 @@ if "{custom_unsloth_path}" not in sys.path:
         else:
             content = unsloth_path_insertion + content
     
-    # Add comment about using minimal unsloth
-    content = re.sub(
-        r'(from\s+unsloth\s+import|import\s+unsloth)',
-        r'# Using minimal unsloth implementation\n\1',
-        content
-    )
+    # Add comment about using minimal unsloth - being careful with try/except blocks
+    # First identify all import lines with unsloth
+    unsloth_imports = re.finditer(r'(^|\n)(\s*)(from\s+unsloth\s+import|import\s+unsloth\b)', content, re.MULTILINE)
+    
+    # Collect all the positions where we need to add our comment
+    positions = []
+    for match in unsloth_imports:
+        start_pos = match.start(3)  # Start of the actual import statement
+        indentation = match.group(2)  # Capture the indentation
+        positions.append((start_pos, indentation))
+    
+    # Apply changes from end to beginning to avoid position shifts
+    for start_pos, indentation in sorted(positions, reverse=True):
+        # Add the comment with the same indentation as the import
+        content = content[:start_pos] + f"# Using minimal unsloth implementation\n{indentation}" + content[start_pos:]
     
     # Write the modified content back to the file
     with open(file_path, 'w', encoding='utf-8') as f:
