@@ -146,6 +146,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Tuple, Optional, Union
 from tqdm import tqdm
+from .utils import is_paperspace_environment
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -157,7 +158,7 @@ if not __name__ == "__main__":
     from .text_generator import TextGenerator
     from .unified_dataset_handler import UnifiedDatasetHandler
     from .evaluation_metrics import EvaluationMetrics
-    from .utils import get_storage_path, sync_to_gdrive, sync_logs, setup_logging, ensure_directory_exists, sync_from_gdrive, is_paperspace_environment
+    from .utils import get_storage_path, sync_to_gdrive, sync_logs, setup_logging, ensure_directory_exists, sync_from_gdrive
 
 class TrainingVisualizer:
     """Class to handle visualization of training metrics"""
