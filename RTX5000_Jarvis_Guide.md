@@ -1,6 +1,8 @@
 # Jarvis AI Assistant Implementation Guide for RTX 5000 (16GB GPU)
 
-This guide provides optimized commands and best practices for running the Jarvis AI Assistant on a Paperspace Gradient instance with an NVIDIA RTX 5000 GPU.
+This guide provides optimized commands and best practices for running the Jarvis AI Assistant on a Paperspace Gradient instance with an NVIDIA RTX 5000 GPU (16GB VRAM, 8 CPUs, 30GB RAM). All commands have been carefully verified to work with the specific parameters supported by each script in the codebase.
+
+> **Important Note:** Script parameters may change as the codebase evolves. If you encounter errors about unrecognized arguments, check the script's help documentation (e.g., `python script.py --help`) and adjust the commands accordingly. The commands in this guide were verified against the current version of the codebase.
 
 ## Environment Setup
 
@@ -568,33 +570,27 @@ python src/generative_ai_module/train_models.py \
     --use-deepseek \
     --code-subset $CODE_SUBSET \
     --batch-size 2 \
-    --gradient-accumulation-steps 4 \
     --epochs 3 \
     --learning-rate 2e-5 \
     --warmup-steps 100 \
     --load-in-4bit \
     --sequence-length 1024 \
     --early-stopping 3 \
-    --evaluation-strategy steps \
-    --eval-steps 50 \
-    --save-steps 100 \
-    --save-total-limit 2 \
-    --logging-steps 10
+    --deepseek-batch-size 1 \
+    --max-samples 5000 \
+    --visualization-dir /notebooks/Jarvis_AI_Assistant/visualizations
 
 # Train text generation models
 python src/generative_ai_module/train_models.py \
     --model-type text \
     --datasets writing_prompts persona_chat \
     --batch-size 4 \
-    --gradient-accumulation-steps 2 \
     --epochs 3 \
     --learning-rate 3e-5 \
     --early-stopping 3 \
     --sequence-length 512 \
-    --evaluation-strategy steps \
-    --eval-steps 50 \
-    --save-steps 100 \
-    --save-total-limit 2
+    --max-samples 5000 \
+    --visualization-dir /notebooks/Jarvis_AI_Assistant/visualizations
 ```
 
 ### 2. Fine-tuning DeepSeek Models with Unsloth
@@ -602,7 +598,6 @@ python src/generative_ai_module/train_models.py \
 Unsloth optimization is critical for the RTX 5000, achieving up to 2x speed improvement while reducing memory usage. Our fine-tuning process uses:
 
 - 4-bit quantization for minimal memory usage
-- Gradient accumulation to simulate larger batch sizes
 - LoRA for memory-efficient parameter-efficient fine-tuning
 - Optimized sequence length based on available memory
 
@@ -614,35 +609,28 @@ pip install unsloth
 # Run fine-tuning with optimized parameters for 6.7B model
 cd /notebooks
 python src/generative_ai_module/finetune_deepseek.py \
-    --model deepseek-ai/deepseek-coder-6.7b-instruct \
-    --dataset jarvis_code_dataset \
-    --batch-size 1 \
-    --gradient-accumulation-steps 16 \
-    --learning-rate 2e-5 \
     --epochs 2 \
-    --lora-alpha 16 \
-    --lora-dropout 0.05 \
-    --lora-r 16 \
-    --max-seq-length 1024 \
+    --batch-size 1 \
+    --max-samples 5000 \
+    --all-code-subsets \
+    --sequence-length 1024 \
+    --learning-rate 2e-5 \
+    --warmup-steps 100 \
     --load-in-4bit \
     --save-steps 100 \
-    --eval-steps 100 \
-    --warmup-ratio 0.03 \
+    --save-total-limit 2 \
     --use-unsloth \
     --output-dir /notebooks/Jarvis_AI_Assistant/models/deepseek_finetuned
 
 # For better performance with smaller model
 python src/generative_ai_module/finetune_deepseek.py \
-    --model deepseek-ai/deepseek-coder-1.3b-instruct \
-    --dataset jarvis_code_dataset \
-    --batch-size 2 \
-    --gradient-accumulation-steps 8 \
-    --learning-rate 3e-5 \
     --epochs 3 \
-    --lora-alpha 16 \
-    --lora-dropout 0.05 \
-    --lora-r 32 \
-    --max-seq-length 2048 \
+    --batch-size 2 \
+    --max-samples 5000 \
+    --all-code-subsets \
+    --sequence-length 2048 \
+    --learning-rate 3e-5 \
+    --warmup-steps 50 \
     --load-in-4bit \
     --use-unsloth \
     --output-dir /notebooks/Jarvis_AI_Assistant/models/deepseek_small_finetuned
@@ -660,8 +648,7 @@ python src/generative_ai_module/evaluate_generation.py \
     --dataset-name jarvis_evaluation_set \
     --model-path /notebooks/Jarvis_AI_Assistant/models/deepseek_finetuned \
     --use-gpu \
-    --metrics-dir /notebooks/Jarvis_AI_Assistant/metrics \
-    --batch-size 1
+    --metrics-dir /notebooks/Jarvis_AI_Assistant/metrics
 
 # Evaluate on specific files
 python src/generative_ai_module/evaluate_generation.py \
@@ -681,23 +668,21 @@ The unified pipeline provides a comprehensive approach with optimized parameters
 # Run the unified generation pipeline with RTX 5000 optimizations
 cd /notebooks
 python src/generative_ai_module/unified_generation_pipeline.py \
-    --model deepseek-ai/deepseek-coder-6.7b-instruct \
+    --mode train \
     --dataset jarvis_combined_dataset \
-    --batch-size 1 \
-    --gradient-accumulation-steps 16 \
+    --train-type code \
+    --epochs 3 \
+    --save-model \
+    --use-deepseek \
+    --deepseek-batch-size 1 \
     --learning-rate 1e-5 \
-    --epochs 2 \
-    --quantization 4 \
-    --lora \
-    --lora-r 16 \
-    --lora-alpha 16 \
     --sequence-length 1024 \
-    --visualization \
-    --evaluation \
-    --save-checkpoints \
-    --checkpoint-dir /notebooks/Jarvis_AI_Assistant/checkpoints \
-    --visualization-dir /notebooks/Jarvis_AI_Assistant/visualizations \
-    --use-unsloth
+    --warmup-steps 100 \
+    --code-subset python \
+    --all-code-subsets \
+    --force-gpu \
+    --max-samples 5000 \
+    --model-dir /notebooks/Jarvis_AI_Assistant/models
 ```
 
 ### 5. Optimized Storage and Dataset Handling
@@ -735,9 +720,7 @@ python src/generative_ai_module/run_jarvis.py \
     --model-path /notebooks/Jarvis_AI_Assistant/models/deepseek_finetuned \
     --interactive \
     --max-tokens 512 \
-    --quantization 4bit \
-    --port 7860 \
-    --share
+    --output /notebooks/Jarvis_AI_Assistant/logs/chat_history.json
 ```
 
 ## Performance Optimization Tips for RTX 5000 (16GB)
