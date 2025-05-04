@@ -729,7 +729,7 @@ def parse_args():
                       help="Number of warmup steps for deepseek")
     parser.add_argument("--code-subset", default="python",
                       help="Language subset for code dataset (for deepseek)")
-    parser.add_argument("--all-code-subsets", type=lambda x: (str(x).lower() == 'true'), default=True,
+    parser.add_argument("--all-subsets", type=lambda x: (str(x).lower() == 'true'), default=True,
                       help="Whether to use all language subsets for code (default: True)")
     parser.add_argument("--force-gpu", action="store_true", default=True,
                       help="Force the use of GPU (MPS for Apple Silicon, CUDA for NVIDIA)")
@@ -1427,7 +1427,7 @@ def train_on_datasets(args: argparse.Namespace, datasets: Dict[str, Dict[str, An
                 max_samples=args.max_samples,
                 sequence_length=args.sequence_length,
                 subset=args.code_subset,
-                all_subsets=args.all_code_subsets
+                all_subsets=args.all_subsets
             )
 
         if train_dataset is None or eval_dataset is None:
@@ -1450,7 +1450,7 @@ def train_on_datasets(args: argparse.Namespace, datasets: Dict[str, Dict[str, An
                 learning_rate=args.learning_rate,
                 warmup_steps=args.warmup_steps,
                 subset=args.code_subset,
-                all_subsets=args.all_code_subsets
+                all_subsets=args.all_subsets
             )
 
             print(f"Deepseek training completed with metrics: {training_metrics}")

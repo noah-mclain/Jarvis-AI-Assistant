@@ -626,7 +626,7 @@ python src/generative_ai_module/finetune_deepseek.py \
     --epochs 2 \
     --batch-size 1 \
     --max-samples 5000 \
-    --all-code-subsets \
+    --all-subsets \
     --sequence-length 1024 \
     --learning-rate 2e-5 \
     --warmup-steps 100 \
@@ -641,7 +641,7 @@ python src/generative_ai_module/finetune_deepseek.py \
     --epochs 3 \
     --batch-size 2 \
     --max-samples 5000 \
-    --all-code-subsets \
+    --all-subsets \
     --sequence-length 2048 \
     --learning-rate 3e-5 \
     --warmup-steps 50 \
@@ -693,7 +693,7 @@ python src/generative_ai_module/unified_generation_pipeline.py \
     --sequence-length 1024 \
     --warmup-steps 100 \
     --code-subset python \
-    --all-code-subsets \
+    --all-subsets \
     --force-gpu \
     --max-samples 5000 \
     --model-dir /notebooks/Jarvis_AI_Assistant/models

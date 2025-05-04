@@ -440,7 +440,7 @@ def train_text_model(dataset_name: str, args, force_gpu: bool = True):
 
     # Create text generator and dataset handler
     generator = TextGenerator(force_gpu=force_gpu)
-    dataset_handler = UnifiedDatasetHandler(force_gpu=force_gpu)
+    dataset_handler = UnifiedDatasetHandler()
     visualizer = TrainingVisualizer(args.visualization_dir)
 
     # Get device
