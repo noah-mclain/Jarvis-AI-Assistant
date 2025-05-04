@@ -9,9 +9,10 @@ including text generation, code generation, and fine-tuning.
 from .jarvis_unified import JarvisAI as UnifiedModel
 from .text_generator import TextGenerator
 from .code_generator import CodeGenerator
-from .evaluation_metrics import calculate_metrics, evaluate_generation
+from .evaluation_metrics import EvaluationMetrics, save_metrics
 from .dataset_processor import DatasetProcessor
 from .prompt_enhancer import PromptEnhancer, analyze_prompt
+from .train_models import calculate_metrics
 
 # Import Google Drive sync functionality
 from .utils import (
@@ -30,6 +31,22 @@ try:
 except ImportError:
     pass  # Not critical if missing
 
+# Import additional functionality
+try:
+    from .unified_dataset_handler import UnifiedDatasetHandler, ConversationContext
+except ImportError:
+    pass  # Not critical if missing
+
+try:
+    from .improved_preprocessing import ImprovedPreprocessor
+except ImportError:
+    pass  # Not critical if missing
+
+try:
+    from .unified_generation_pipeline import TrainingVisualizer, train_text_generator
+except ImportError:
+    pass  # Not critical if missing
+
 # Define public API
 __all__ = [
     # Core components
@@ -38,9 +55,17 @@ __all__ = [
     'CodeGenerator',
     'DatasetProcessor',
     'PromptEnhancer',
+    'EvaluationMetrics',
+    'save_metrics',
     'calculate_metrics',
-    'evaluate_generation',
     'analyze_prompt',
+    
+    # Additional components
+    'UnifiedDatasetHandler',
+    'ConversationContext',
+    'ImprovedPreprocessor',
+    'TrainingVisualizer',
+    'train_text_generator',
     
     # Google Drive sync functionality
     'sync_to_gdrive',

@@ -86,16 +86,18 @@ else:
     is_paperspace = False
     logger.warning("CUDA not available, using CPU")
 
-# Try to import Unsloth for optimized training
-try:
-    from unsloth import FastLanguageModel
-    from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-    import bitsandbytes as bnb
-    has_unsloth = True
-    logger.info("Unsloth optimizations available")
-except ImportError:
-    has_unsloth = False
-    logger.warning("Unsloth not available. For optimal performance, install Unsloth with: pip install unsloth")
+# Conditionally import FastLanguageModel from unsloth only when CUDA is available
+unsloth_available = False
+if torch.cuda.is_available():
+    try:
+        from unsloth import FastLanguageModel
+        from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+        import bitsandbytes as bnb
+        unsloth_available = True
+        logger.info("Unsloth optimizations available")
+    except (ImportError, NotImplementedError):
+        logger.warning("Unsloth not available or CUDA not found. Using standard transformers.")
+        unsloth_available = False
 
 class ConversationMemory:
     """
@@ -288,8 +290,8 @@ class JarvisAI:
         self.models = {}
         self.tokenizers = {}
         self.memory = ConversationMemory(memory_file=memory_file)
-        self.load_in_4bit = load_in_4bit and has_unsloth  # Only use 4-bit if Unsloth is available
-        self.use_unsloth = use_unsloth and has_unsloth    # Only use Unsloth if available
+        self.load_in_4bit = load_in_4bit and unsloth_available  # Only use 4-bit if Unsloth is available
+        self.use_unsloth = use_unsloth and unsloth_available    # Only use Unsloth if available
         self.max_new_tokens = max_new_tokens
         self.gradient_accumulation_steps = gradient_accumulation_steps
         
@@ -394,7 +396,7 @@ class JarvisAI:
             tokenizer.pad_token = tokenizer.eos_token
             
         # Load model with optimizations based on hardware
-        if self.use_unsloth and "deepseek" in str(model_path) and has_unsloth:
+        if self.use_unsloth and "deepseek" in str(model_path) and unsloth_available:
             # Use Unsloth optimizations for DeepSeek models
             logger.info(f"Loading {model_path} with Unsloth optimizations")
             model, tokenizer = FastLanguageModel.from_pretrained(
@@ -687,7 +689,7 @@ class JarvisAI:
             model, tokenizer = self.load_model(dataset)
             
             # Apply LoRA if using Unsloth
-            if use_lora and self.use_unsloth and has_unsloth and "deepseek" in str(model):
+            if use_lora and self.use_unsloth and unsloth_available and "deepseek" in str(model):
                 try:
                     logger.info(f"Applying LoRA for efficient fine-tuning (r={lora_r}, alpha={lora_alpha})")
                     # Setup LoRA config

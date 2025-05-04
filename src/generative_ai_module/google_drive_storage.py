@@ -545,11 +545,25 @@ class GoogleDriveSync:
     
     @classmethod
     def ensure_local_dirs(cls):
-        """Ensures all local directories exist."""
-        for folder in cls.SYNC_FOLDERS.keys():
-            local_path = os.path.join(cls.LOCAL_BASE, folder)
-            os.makedirs(local_path, exist_ok=True)
-            logger.info(f"Ensured local directory exists: {local_path}")
+        """Ensure that all local directories needed for syncing exist."""
+        directories = [
+            cls.LOCAL_MODELS_DIR,
+            cls.LOCAL_DATASETS_DIR,
+            cls.LOCAL_METRICS_DIR,
+            cls.LOCAL_EVALS_DIR,
+            cls.LOCAL_LOGS_DIR,
+            cls.LOCAL_CHECKPOINTS_DIR,
+            cls.LOCAL_VISUALIZATIONS_DIR
+        ]
+        
+        for local_path in directories:
+            try:
+                os.makedirs(local_path, exist_ok=True)
+                logger.info(f"Ensured directory exists: {local_path}")
+            except (OSError, PermissionError) as e:
+                # Handle read-only filesystem errors gracefully
+                logger.warning(f"Could not create directory {local_path}: {e}")
+                logger.warning("Continuing without this directory. Some functionality may be limited.")
     
     @classmethod
     def sync_to_gdrive(cls, folder_type=None):
