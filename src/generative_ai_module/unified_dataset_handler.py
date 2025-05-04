@@ -38,7 +38,7 @@ except ImportError:
 from .dataset_processor import DatasetProcessor
 from .improved_preprocessing import ImprovedPreprocessor
 from .prompt_enhancer import analyze_prompt
-from .utils import get_storage_path, sync_to_gdrive, sync_from_gdrive
+from .utils import get_storage_path, sync_to_gdrive, sync_from_gdrive, ensure_directory_exists, is_paperspace_environment
 
 # Configure logging
 logging.basicConfig(
@@ -151,19 +151,15 @@ class UnifiedDatasetHandler:
         self.dataset_name = dataset_name
         self.dataset_path = dataset_path
         
-        # Use the storage path utility for consistent paths
-        self.output_dir = output_dir or get_storage_path("datasets", "processed")
-        self.cache_dir = cache_dir or get_storage_path("datasets", "cache")
-        
-        # Create directories if they don't exist
-        os.makedirs(self.output_dir, exist_ok=True)
-        os.makedirs(self.cache_dir, exist_ok=True)
+        # Use the storage path utility for consistent paths and ensure directories exist
+        self.output_dir = output_dir or ensure_directory_exists("datasets", "processed")
+        self.cache_dir = cache_dir or ensure_directory_exists("datasets", "cache")
         
         self.dataset = None
         self.tokenizer = None
         
         # Try to sync from Google Drive on initialization to get latest datasets
-        if dataset_path is None and dataset_name is None:
+        if dataset_path is None and dataset_name is None and is_paperspace_environment():
             try:
                 sync_from_gdrive("datasets")
                 logger.info("Synced latest datasets from Google Drive")
@@ -799,13 +795,17 @@ class UnifiedDatasetHandler:
             dataset_name = dataset_name or f"processed_dataset_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             output_path = os.path.join(self.output_dir, dataset_name)
         
+        # Ensure parent directory exists
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
         # Save the dataset
         logger.info(f"Saving processed dataset to {output_path}")
         dataset.save_to_disk(output_path)
         
-        # Sync to Google Drive
-        sync_to_gdrive("datasets")
-        logger.info("Synced datasets to Google Drive")
+        # Sync to Google Drive if in Paperspace
+        if is_paperspace_environment():
+            sync_to_gdrive("datasets")
+            logger.info("Synced datasets to Google Drive")
         
         return output_path
 
@@ -820,18 +820,16 @@ class UnifiedDatasetHandler:
         Returns:
             list: List of dataset paths
         """
-        # Try to sync from Google Drive first to get the latest datasets
-        try:
-            sync_from_gdrive("datasets")
-            logger.info("Synced latest datasets from Google Drive")
-        except Exception as e:
-            logger.warning(f"Failed to sync datasets from Google Drive: {str(e)}")
+        # Try to sync from Google Drive first to get the latest datasets if in Paperspace
+        if is_paperspace_environment():
+            try:
+                sync_from_gdrive("datasets")
+                logger.info("Synced latest datasets from Google Drive")
+            except Exception as e:
+                logger.warning(f"Failed to sync datasets from Google Drive: {str(e)}")
         
-        directory = directory or get_storage_path("datasets")
-        
-        if not os.path.exists(directory):
-            logger.warning(f"Dataset directory {directory} does not exist")
-            return []
+        # Get and ensure the directory exists
+        directory = directory or ensure_directory_exists("datasets")
         
         # Find directories that contain dataset files
         dataset_dirs = []

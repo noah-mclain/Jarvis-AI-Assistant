@@ -21,26 +21,31 @@ Features:
 
 import os
 import sys
-import time
-import torch
 import argparse
+import torch
+import json
+import logging
+import time
 import subprocess
 import numpy as np
 import matplotlib.pyplot as plt
-import json
-from typing import Dict, List, Any, Tuple, Optional, Union
-from tqdm import tqdm
+from transformers import TrainerCallback
 from datetime import datetime
 from pathlib import Path
-from .utils import get_storage_path, sync_to_gdrive
+from typing import Dict, List, Any, Tuple, Optional, Union
+from tqdm import tqdm
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Add the parent directory to the Python path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-
-# Import from the generative_ai_module
-from src.generative_ai_module.text_generator import TextGenerator
-from src.generative_ai_module.unified_dataset_handler import UnifiedDatasetHandler
-from src.generative_ai_module.evaluation_metrics import EvaluationMetrics
+if not __name__ == "__main__":
+    # When imported as a module, use relative imports
+    from .text_generator import TextGenerator
+    from .unified_dataset_handler import UnifiedDatasetHandler
+    from .evaluation_metrics import EvaluationMetrics
+    from .utils import get_storage_path, sync_to_gdrive, sync_logs, setup_logging, ensure_directory_exists, sync_from_gdrive
 
 class TrainingVisualizer:
     """Class to handle visualization of training metrics"""
@@ -607,18 +612,30 @@ class CustomCallback(TrainerCallback):
 
 
 def main():
-    """Main function to train selected models"""
+    """
+    Main function to run the training process.
+    """
+    # Set up logging to file
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = f"training_{timestamp}.log"
+    setup_logging(log_file)
+    
+    logger.info("Starting training process")
+    
     args = parse_args()
-
-    print("==================================================")
-    print("Jarvis AI Assistant - Consolidated Training")
-    print("==================================================")
-
-    # Create output directories
-    os.makedirs(args.model_dir, exist_ok=True)
-    os.makedirs(args.visualization_dir, exist_ok=True)
-    os.makedirs(args.evaluation_dir, exist_ok=True)
-
+    
+    # If we're in Paperspace, sync from Google Drive first
+    if is_paperspace_environment():
+        logger.info("Running in Paperspace environment, syncing from Google Drive...")
+        sync_from_gdrive("datasets")
+        sync_from_gdrive("models")
+        sync_from_gdrive("metrics")
+        logger.info("Synced latest data from Google Drive")
+    
+    # Create output directories - ensure they exist
+    ensure_directory_exists("models")
+    ensure_directory_exists("metrics")
+    
     # Check GPU availability
     force_gpu = not args.no_force_gpu
     if torch.cuda.is_available():
@@ -684,14 +701,21 @@ def main():
         print("Text Model Training Complete!")
         print(f"Total training time: {int(hours)}h {int(minutes)}m {int(seconds)}s")
 
-    # Final message
-    print("\n==================================================")
-    print("Training Complete!")
-    print("==================================================")
-    print(f"\nModels saved to: {args.model_dir}")
-    print(f"Visualizations saved to: {args.visualization_dir}")
-    print("\nYou can now use these models with your Jarvis AI Assistant!")
+    # After training, sync everything to Google Drive
+    if is_paperspace_environment():
+        sync_to_gdrive("models")
+        sync_to_gdrive("metrics")
+        sync_logs()
+        logger.info("Training complete! Model and metrics synced to Google Drive.")
+    else:
+        logger.info("Training complete!")
 
 
 if __name__ == "__main__":
+    # Add the parent directory to the path to make the module importable
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
+    from src.generative_ai_module.text_generator import TextGenerator
+    from src.generative_ai_module.unified_dataset_handler import UnifiedDatasetHandler
+    from src.generative_ai_module.evaluation_metrics import EvaluationMetrics
+    from src.generative_ai_module.utils import get_storage_path, sync_to_gdrive, sync_logs, setup_logging
     main() 

@@ -14,11 +14,14 @@ from datetime import datetime
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Add the parent directory to the Python path if running as a script
+# Fix the import path
 if __name__ == "__main__":
+    # Add the parent directory to the path to make the module importable
     sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
-
-from src.generative_ai_module.utils import sync_to_gdrive, sync_from_gdrive, is_paperspace_environment
+    from src.generative_ai_module.utils import sync_to_gdrive, sync_from_gdrive, is_paperspace_environment
+else:
+    # When imported as a module, use relative imports
+    from .utils import sync_to_gdrive, sync_from_gdrive, is_paperspace_environment
 
 def sync_all_to_gdrive():
     """Sync all data folders to Google Drive."""
@@ -51,12 +54,12 @@ def main():
     
     # To Google Drive command
     to_gdrive_parser = subparsers.add_parser("to-gdrive", help="Sync data to Google Drive")
-    to_gdrive_parser.add_argument("--folder", choices=["models", "datasets", "metrics", "checkpoints", "preprocessed_data"],
+    to_gdrive_parser.add_argument("--folder", choices=["models", "datasets", "metrics", "checkpoints", "preprocessed_data", "logs"],
                                 help="Specific folder to sync (all folders if not specified)")
     
     # From Google Drive command
     from_gdrive_parser = subparsers.add_parser("from-gdrive", help="Sync data from Google Drive")
-    from_gdrive_parser.add_argument("--folder", choices=["models", "datasets", "metrics", "checkpoints", "preprocessed_data"],
+    from_gdrive_parser.add_argument("--folder", choices=["models", "datasets", "metrics", "checkpoints", "preprocessed_data", "logs"],
                                   help="Specific folder to sync (all folders if not specified)")
     
     # All command (syncs in both directions)

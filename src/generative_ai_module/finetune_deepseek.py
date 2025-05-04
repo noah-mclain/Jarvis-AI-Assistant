@@ -1,14 +1,6 @@
+#!/usr/bin/env python3
 """
-DeepSeek-Coder Fine-tuning Script
-
-This script provides a convenient way to fine-tune the deepseek-coder model
-on code datasets for improved code generation capabilities.
-
-Usage:
-    python finetune_deepseek.py --epochs 3 --batch-size 4 --max-samples 1000
-    
-By default, this will use data from all programming languages in the code_search_net dataset.
-To use just a specific language, use the --subset option with --all-subsets=False.
+Module for fine-tuning DeepSeek Coder models on custom code datasets.
 """
 
 import argparse
@@ -16,18 +8,27 @@ import os
 import sys
 import time
 import datetime
+import logging
 import torch
 from datasets import Dataset
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, TrainingArguments
+from peft import LoraConfig
 
-# Add parent directory to path if needed
-script_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(os.path.dirname(script_dir))
-sys.path.insert(0, parent_dir)
+# Fix imports - If running as a script, use absolute imports, otherwise use relative
+if __name__ == "__main__":
+    # Add the parent directory to the path to make the module importable
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
+    from src.generative_ai_module.code_generator import CodeGenerator
+    from src.generative_ai_module.code_preprocessing import load_and_preprocess_dataset
+    from src.generative_ai_module.utils import setup_logging, sync_logs, sync_to_gdrive, sync_from_gdrive, ensure_directory_exists
+else:
+    # When imported as a module, use relative imports
+    from .code_generator import CodeGenerator
+    from .code_preprocessing import load_and_preprocess_dataset
+    from .utils import setup_logging, sync_logs, sync_to_gdrive, sync_from_gdrive, ensure_directory_exists
 
-# Import after adjusting path
-from src.generative_ai_module.code_generator import CodeGenerator
-from src.generative_ai_module.code_preprocessing import load_and_preprocess_dataset
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Add this near the top of the file after imports
 __all__ = ['main', 'parse_args', 'create_mini_dataset', 'setup_environment']
@@ -214,6 +215,14 @@ def create_mini_dataset(sequence_length=512):
     return train_dataset, eval_dataset
 
 def main(args=None):
+    """Main entry point for fine-tuning"""
+    # Set up logging to file
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = f"finetune_deepseek_{timestamp}.log"
+    setup_logging(log_file)
+    
+    logger.info("Starting DeepSeek fine-tuning process")
+    
     start_time = time.time()
 
     # Parse command line arguments
@@ -222,6 +231,14 @@ def main(args=None):
 
     # Setup environment
     device = setup_environment(args)
+
+    # Ensure we have access to necessary data from Google Drive
+    try:
+        sync_from_gdrive("datasets")
+        sync_from_gdrive("models")
+        logger.info("Synced latest datasets and models from Google Drive")
+    except Exception as e:
+        logger.warning(f"Error syncing from Google Drive: {str(e)}")
 
     print("\n" + "="*80)
     print("DeepSeek-Coder Fine-tuning Script")
@@ -305,6 +322,17 @@ def main(args=None):
     print("-" * 40)
 
     print("\nFine-tuning process complete. You can now use the model for code generation!")
+
+    # Sync to Google Drive after training
+    try:
+        sync_to_gdrive("models")
+        sync_to_gdrive("metrics")
+        sync_logs()
+        logger.info("Synced models, metrics, and logs to Google Drive")
+    except Exception as e:
+        logger.warning(f"Error syncing to Google Drive: {str(e)}")
+    
+    logger.info("Fine-tuning complete!")
 
 if __name__ == "__main__":
     main() 

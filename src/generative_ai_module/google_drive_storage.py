@@ -539,7 +539,8 @@ class GoogleDriveSync:
         "models": f"{GDRIVE_BASE}/models",
         "datasets": f"{GDRIVE_BASE}/datasets",
         "checkpoints": f"{GDRIVE_BASE}/checkpoints",
-        "preprocessed_data": f"{GDRIVE_BASE}/preprocessed_data"
+        "preprocessed_data": f"{GDRIVE_BASE}/preprocessed_data",
+        "logs": f"{GDRIVE_BASE}/logs"
     }
     
     @classmethod
@@ -568,10 +569,9 @@ class GoogleDriveSync:
             local_path = os.path.join(cls.LOCAL_BASE, folder)
             gdrive_path = cls.SYNC_FOLDERS[folder]
             
-            if not os.path.exists(local_path):
-                logger.warning(f"Local path does not exist: {local_path}")
-                continue
-                
+            # Always ensure local directory exists
+            os.makedirs(local_path, exist_ok=True)
+            
             logger.info(f"Syncing {local_path} to {gdrive_path}")
             try:
                 cmd = ["rclone", "sync", local_path, gdrive_path]
@@ -588,6 +588,7 @@ class GoogleDriveSync:
     def sync_from_gdrive(cls, folder_type=None):
         """
         Syncs the specified folder type (or all folders if None) from Google Drive to local storage.
+        Creates local directories if they don't exist.
         
         Args:
             folder_type (str, optional): One of "metrics", "models", "datasets", "checkpoints"
@@ -621,6 +622,7 @@ class GoogleDriveSync:
     def get_local_path(cls, folder_type, relative_path=""):
         """
         Get the local path for a specific folder type.
+        Also ensures the directory exists.
         
         Args:
             folder_type (str): One of "metrics", "models", "datasets", "checkpoints"
@@ -632,7 +634,12 @@ class GoogleDriveSync:
         if folder_type not in cls.SYNC_FOLDERS:
             raise ValueError(f"Invalid folder_type: {folder_type}. Must be one of {list(cls.SYNC_FOLDERS.keys())}")
         
-        return os.path.join(cls.LOCAL_BASE, folder_type, relative_path)
+        path = os.path.join(cls.LOCAL_BASE, folder_type, relative_path)
+        
+        # Ensure the parent directory exists
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        
+        return path
     
     @classmethod
     def get_gdrive_path(cls, folder_type, relative_path=""):

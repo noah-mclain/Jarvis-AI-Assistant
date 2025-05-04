@@ -14,6 +14,7 @@ The Jarvis AI Assistant now has automatic synchronization built into many operat
 - When training models, checkpoints and metrics are automatically synced to Google Drive
 - When saving processed datasets, they are automatically synced to Google Drive
 - When saving evaluation metrics, they are automatically synced to Google Drive
+- When saving log files, they are automatically synced to Google Drive
 
 ## Manual Sync Operations
 
@@ -22,13 +23,16 @@ The Jarvis AI Assistant now has automatic synchronization built into many operat
 You can manually trigger sync operations from your Python code:
 
 ```python
-from generative_ai_module import sync_to_gdrive, sync_from_gdrive
+from generative_ai_module import sync_to_gdrive, sync_from_gdrive, sync_logs
 
 # Sync all models to Google Drive
 sync_to_gdrive("models")
 
 # Sync all datasets from Google Drive
 sync_from_gdrive("datasets")
+
+# Sync all logs to Google Drive
+sync_logs()
 
 # Sync everything to Google Drive
 sync_to_gdrive()  # None means sync all folders
@@ -47,6 +51,9 @@ python -m src.generative_ai_module.sync_gdrive to-gdrive --folder models
 
 # Sync all datasets from Google Drive
 python -m src.generative_ai_module.sync_gdrive from-gdrive --folder datasets
+
+# Sync all logs to Google Drive
+python -m src.generative_ai_module.sync_gdrive to-gdrive --folder logs
 
 # Sync everything in both directions
 python -m src.generative_ai_module.sync_gdrive all
@@ -67,9 +74,26 @@ dataset_path = get_storage_path("datasets", "my_dataset_name")
 
 # Get the path to save metrics
 metrics_path = get_storage_path("metrics", "my_evaluation_metrics.json")
+
+# Get the path to save logs
+logs_path = get_storage_path("logs", "my_log_file.log")
 ```
 
-This will return the correct path regardless of whether you're running in Paperspace or in a local development environment.
+## Logging Setup
+
+The module provides a dedicated logging setup function that creates logs in the synced directory:
+
+```python
+from generative_ai_module import setup_logging
+
+# Set up logging with automatic file name
+log_path = setup_logging()
+
+# Set up logging with custom file name
+log_path = setup_logging("my_custom_log.log")
+```
+
+This will configure logging to both console and a log file in the logs directory, which will be automatically synced to Google Drive.
 
 ## Managing Large Files
 

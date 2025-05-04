@@ -14,11 +14,15 @@ These metrics help ensure the quality of generated text across different dataset
 import os
 import json
 import torch
+import logging
 import numpy as np
 from typing import Dict, List, Union, Optional, Any, Tuple
 from datetime import datetime
 from collections import defaultdict, Counter
-from .utils import get_storage_path, sync_to_gdrive
+from .utils import get_storage_path, sync_to_gdrive, ensure_directory_exists, sync_from_gdrive, is_paperspace_environment
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Try to import optional dependencies, with graceful fallbacks
 try:
@@ -582,9 +586,8 @@ def save_metrics(metrics, model_name, dataset_name, timestamp=None):
     if timestamp is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
-    # Use storage path utility to get correct path
-    metrics_dir = get_storage_path("metrics")
-    os.makedirs(metrics_dir, exist_ok=True)
+    # Use storage path utility to get correct path and ensure it exists
+    metrics_dir = ensure_directory_exists("metrics")
     
     # Create a clean filename
     model_name_clean = model_name.replace('/', '_')
@@ -605,10 +608,13 @@ def save_metrics(metrics, model_name, dataset_name, timestamp=None):
     with open(filepath, 'w') as f:
         json.dump(metrics_with_meta, f, indent=2)
     
-    # Sync to Google Drive
-    sync_to_gdrive("metrics")
+    # Sync to Google Drive if in Paperspace
+    if is_paperspace_environment():
+        sync_to_gdrive("metrics")
+        logger.info(f"Saved metrics to {filepath} and synced to Google Drive")
+    else:
+        logger.info(f"Saved metrics to {filepath}")
     
-    logger.info(f"Saved metrics to {filepath} and synced to Google Drive")
     return filepath
 
 class MetricLogger:
@@ -632,9 +638,8 @@ class MetricLogger:
         # Create timestamp for this evaluation run
         self.timestamp = self.start_time.strftime("%Y%m%d_%H%M%S")
         
-        # Use storage path utility to get metrics directory
-        self.metrics_dir = get_storage_path("metrics")
-        os.makedirs(self.metrics_dir, exist_ok=True)
+        # Use storage path utility to get metrics directory and ensure it exists
+        self.metrics_dir = ensure_directory_exists("metrics")
     
     def log_metric(self, metric_name, value, step=None):
         """Log a single metric value."""
@@ -677,8 +682,10 @@ class MetricLogger:
         # Save the metrics
         filepath = self.save()
         
-        # Sync to Google Drive
-        sync_to_gdrive("metrics")
+        # Sync to Google Drive if in Paperspace
+        if is_paperspace_environment():
+            sync_to_gdrive("metrics")
+            logger.info(f"Metrics synced to Google Drive: {filepath}")
         
         return filepath
 

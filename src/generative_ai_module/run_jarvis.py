@@ -15,6 +15,8 @@ import argparse
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Any
 import logging
+from datetime import datetime
+from .utils import setup_logging, sync_logs, sync_from_gdrive, is_paperspace_environment
 
 # Configure logging
 logging.basicConfig(
@@ -266,7 +268,26 @@ def interactive_mode(assistant: JarvisAssistant, output_file: Optional[str] = No
             print(f"Chat history saved to {output_file}")
 
 def main():
-    """Main entry point"""
+    """
+    Main entry point for running the Jarvis AI Assistant.
+    This configures and starts the assistant with the specified settings.
+    """
+    # Set up logging to file
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = f"jarvis_run_{timestamp}.log"
+    setup_logging(log_file)
+    
+    logger.info("Starting Jarvis AI Assistant")
+    
+    # If we're in Paperspace, sync models from Google Drive
+    if is_paperspace_environment():
+        try:
+            logger.info("Running in Paperspace environment, syncing models from Google Drive...")
+            sync_from_gdrive("models")
+            logger.info("Synced latest models from Google Drive")
+        except Exception as e:
+            logger.warning(f"Error syncing models from Google Drive: {str(e)}")
+    
     args = parse_arguments()
     
     # Initialize the assistant
@@ -291,6 +312,14 @@ def main():
     else:
         # No mode specified, default to interactive
         interactive_mode(assistant, args.output)
+
+    # Sync logs at the end of the run
+    try:
+        sync_logs()
+    except Exception as e:
+        logger.warning(f"Failed to sync logs to Google Drive: {str(e)}")
+    
+    logger.info("Jarvis AI Assistant run completed")
 
 if __name__ == "__main__":
     main() 

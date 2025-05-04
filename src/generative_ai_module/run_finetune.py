@@ -17,7 +17,7 @@ from pathlib import Path
 import time
 import json
 from datetime import datetime
-from .utils import get_storage_path, sync_to_gdrive, sync_from_gdrive, is_paperspace_environment
+from .utils import get_storage_path, ensure_directory_exists, sync_to_gdrive, sync_from_gdrive, is_paperspace_environment, setup_logging, sync_logs
 
 # Set up logging
 logging.basicConfig(
@@ -276,11 +276,21 @@ def main():
     # Parse arguments
     args = parser.parse_args()
     
+    # Set up logging to file
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = f"finetune_{timestamp}.log"
+    setup_logging(log_file)
+    
+    logger.info("Starting fine-tuning process")
+    
     # First, sync from Google Drive to get latest datasets and checkpoints if we're in Paperspace
     if is_paperspace_environment():
+        logger.info("Running in Paperspace environment, syncing from Google Drive...")
+        # Ensure our directories exist by syncing from Google Drive first
         sync_from_gdrive("datasets")
         sync_from_gdrive("checkpoints")
-        logger.info("Synced latest datasets and checkpoints from Google Drive")
+        sync_from_gdrive("models")
+        logger.info("Synced latest datasets, checkpoints, and models from Google Drive")
     
     # If output_dir is not specified, use the storage path utility
     if args.output_dir is None:
@@ -289,7 +299,7 @@ def main():
         args.output_dir = get_storage_path("models", f"{model_name_short}_finetuned_{timestamp}")
     
     # Ensure output directory exists
-    os.makedirs(args.output_dir, exist_ok=True)
+    ensure_directory_exists("models", os.path.basename(args.output_dir))
     
     # Check for A100 GPU and set optimal parameters
     is_a100 = False
@@ -513,6 +523,7 @@ def main():
         sync_to_gdrive("models")
         sync_to_gdrive("metrics")
         sync_to_gdrive("checkpoints")
+        sync_logs()  # Sync log files
         logger.info("Sync complete!")
     
     logger.info(f"Finetuning complete! Model saved to {args.output_dir}")
