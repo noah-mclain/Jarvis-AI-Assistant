@@ -2,16 +2,32 @@ import io
 import os
 import logging
 from PIL import Image
-import spacy
 from typing import Union
 import zipfile
+import re
 
 from .utils import is_zipfile
 
+# Try to import spaCy, but provide fallback if not available
+try:
+    import spacy
+    SPACY_AVAILABLE = True
+except ImportError:
+    SPACY_AVAILABLE = False
+    logging.warning("spaCy not available, using basic text processing fallback")
+
 class PromptEnhancer:
     def __init__(self):
-        self.nlp = spacy.load("en_core_web_sm")
         self.logger = logging.getLogger("PromptEnhancer")
+        
+        # Try to load spaCy model if available
+        if SPACY_AVAILABLE:
+            try:
+                self.nlp = spacy.load("en_core_web_sm")
+                self.logger.info("Using spaCy for enhanced NLP processing")
+            except Exception as e:
+                self.logger.warning(f"Could not load spaCy model: {str(e)}")
+                SPACY_AVAILABLE = False
         
     def enhance_prompt(self, input_data: Union[str, bytes, os.PathLike]) -> str:
         """
@@ -43,14 +59,28 @@ class PromptEnhancer:
             return f"Original input could not be enhanced: {input_data}"
 
     def _enhance_text(self, text: str) -> str:
-        """Enhance text prompts using NLP techniques"""
-        doc = self.nlp(text)
+        """Enhance text prompts using NLP techniques or fallback method"""
+        if SPACY_AVAILABLE:
+            try:
+                doc = self.nlp(text)
+                
+                # Extract entities and syntactic features
+                entities = [ent.text for ent in doc.ents]
+                verbs = [token.lemma_ for token in doc if token.pos_ == "VERB"]
 
-        # Extract entities and syntactic features
-        entities = [ent.text for ent in doc.ents]
-        verbs = [token.lemma_ for token in doc if token.pos_ == "VERB"]
-
-        return f"Generate high-quality output based on these requirements:\nMain subject: {', '.join(entities) if entities else 'general request'}\nActions needed: {', '.join(verbs) if verbs else 'create content'}\nDetailed description: {text}\nInclude appropriate technical specifications and artistic style based on the context."
+                return f"Generate high-quality output based on these requirements:\nMain subject: {', '.join(entities) if entities else 'general request'}\nActions needed: {', '.join(verbs) if verbs else 'create content'}\nDetailed description: {text}\nInclude appropriate technical specifications and artistic style based on the context."
+            except Exception as e:
+                self.logger.warning(f"spaCy processing failed, using fallback: {str(e)}")
+                # Fall through to fallback method
+        
+        # Fallback method using basic text processing (no spaCy)
+        words = text.split()
+        # Extract potential subjects (nouns) using capitalization as a heuristic
+        potential_subjects = [word for word in words if word[0].isupper() and len(word) > 3]
+        # Extract potential verbs using simple regex
+        potential_verbs = re.findall(r'\b(create|make|generate|write|build|design|develop|implement|analyze|explain|describe)\b', text.lower())
+        
+        return f"Generate high-quality output based on these requirements:\nMain focus: {', '.join(potential_subjects[:3]) if potential_subjects else 'general request'}\nActions: {', '.join(potential_verbs) if potential_verbs else 'create content'}\nDetailed description: {text}\nInclude appropriate specifications based on the context."
 
     def _enhance_image(self, image_data: bytes) -> str:
         """Enhance prompts from image inputs"""
