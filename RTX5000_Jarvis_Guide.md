@@ -18,6 +18,50 @@ pip install gdown google-auth google-auth-oauthlib google-auth-httplib2
 mkdir -p /notebooks/Jarvis_AI_Assistant/{models,datasets,metrics,logs,checkpoints,evaluation_metrics,visualizations}
 ```
 
+## Refactored Module Structure
+
+The Jarvis AI Assistant codebase has been refactored to improve organization, eliminate duplication, and enhance robustness. Key modules you'll be working with:
+
+### Core Refactored Modules
+
+1. **evaluation_metrics.py**: Comprehensive framework for evaluating generative AI outputs
+
+   - Metrics include BERTScore, ROUGE, BLEU, perplexity, and hallucination detection
+   - Visualization and reporting capabilities
+   - Human feedback collection framework
+
+2. **nlp_utils.py**: Centralized natural language processing utilities
+
+   - Safe spaCy initialization with fallbacks for compatibility
+   - Text processing utilities that work across environments
+   - Paperspace-compatible minimal tokenizer implementation
+
+3. **import_utilities.py**: Solutions for import problems throughout the codebase
+
+   - Path fixing and monkey patching for missing modules
+   - Import verification and fixing tools
+   - Standalone implementations of critical functions
+
+4. **deepseek_handler.py**: Unified interface for DeepSeek model operations
+   - Fine-tuning with Unsloth optimization
+   - Storage optimization for different environments
+   - Google Drive integration for model persistence
+
+### Importing the Modules
+
+All modules can be imported directly from the `src.generative_ai_module` package:
+
+```python
+from src.generative_ai_module.evaluation_metrics import EvaluationMetrics
+from src.generative_ai_module.nlp_utils import tokenize_text, process_text_with_spacy_or_fallback
+from src.generative_ai_module.import_utilities import fix_imports, check_imports
+from src.generative_ai_module.deepseek_handler import DeepSeekHandler
+```
+
+### Module Usage Examples
+
+See the `REFACTORING.md` file for detailed usage examples of each module.
+
 ## Initial Import Setup
 
 Before running any training or fine-tuning scripts, it's crucial to set up the Python import paths and verify that all necessary modules and functions are properly accessible. This is especially important when running on a GPU with limited memory like the RTX 5000, as import errors during execution can waste valuable compute time.
@@ -1007,5 +1051,37 @@ When working with the codebase, if you encounter similar "undefined variable" er
 2. Define it at the appropriate scope
 3. Use default values where necessary
 4. Pass required parameters to functions that need them
+
+#### Fixing CUDA device-side assert Errors
+
+If you encounter a CUDA error like this:
+
+```
+CUDA error: device-side assert triggered
+nll_loss_forward_reduce_cuda_kernel_2d: block: [0,0,0], thread: [31,0,0] Assertion `t >= 0 && t < n_classes` failed.
+```
+
+This is due to target tensor indices exceeding the valid vocabulary size range. Fix it with these steps:
+
+```bash
+# 1. Make sure all target indices are clamped to the model's vocabulary size
+# In your training code, add this before the loss calculation:
+vocab_size = model.embedding.num_embeddings
+if target_batch.max() >= vocab_size:
+    target_batch = torch.clamp(target_batch, 0, vocab_size - 1)
+
+# 2. If the issue persists, explicitly set the CUDA to sync mode
+export CUDA_LAUNCH_BLOCKING=1
+
+# 3. Try training with a smaller batch to debug the exact problem:
+python src/generative_ai_module/train_models.py \
+    --model-type text \
+    --datasets writing_prompts \
+    --batch-size 2 \
+    --max-samples 100 \
+    --epochs 1
+```
+
+The core issue is that nll_loss requires target indices to be within the range [0, vocab_size-1]. The latest code includes safeguards to prevent this error by adding index validation and clamping throughout the training pipeline.
 ```
 ````

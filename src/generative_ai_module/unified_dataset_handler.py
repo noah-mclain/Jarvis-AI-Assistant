@@ -65,17 +65,48 @@ class ConversationContext:
         })
     
     def get_formatted_history(self, include_current: bool = False, current_input: str = None) -> str:
-        """Format conversation history for use in generation"""
-        formatted = ""
+        """
+        Format conversation history for use in generation with token management.
         
-        for exchange in self.history:
-            formatted += f"USER: {exchange['user']}\n"
-            formatted += f"ASSISTANT: {exchange['assistant']}\n\n"
+        Args:
+            include_current: Whether to include the current input
+            current_input: The current user input to include
+            
+        Returns:
+            Formatted conversation history
+        """
+        # Count tokens to ensure we're within max_tokens limit
+        total_tokens = 0
+        formatted_parts = []
+        
+        # Start from the most recent exchanges to prioritize recent context
+        for exchange in reversed(list(self.history)):
+            exchange_text = f"USER: {exchange['user']}\nASSISTANT: {exchange['assistant']}\n\n"
+            # Approximate token count (actual tokenization would be more accurate)
+            exchange_tokens = len(exchange_text.split())
+            
+            if total_tokens + exchange_tokens <= self.max_tokens:
+                formatted_parts.insert(0, exchange_text)  # Insert at beginning to maintain order
+                total_tokens += exchange_tokens
+            else:
+                # Too many tokens, break out of loop
+                break
+        
+        formatted = "".join(formatted_parts)
         
         if include_current and current_input:
-            formatted += f"USER: {current_input}\n"
-            formatted += "ASSISTANT: "
+            current_text = f"USER: {current_input}\nASSISTANT: "
+            # Check if adding current_input would exceed token limit
+            current_tokens = len(current_text.split())
             
+            # If adding current input would exceed limit, remove oldest exchanges
+            while formatted_parts and (total_tokens + current_tokens > self.max_tokens):
+                oldest_exchange = formatted_parts.pop(0)
+                total_tokens -= len(oldest_exchange.split())
+            
+            # Rebuild formatted text and append current input
+            formatted = "".join(formatted_parts) + current_text
+        
         return formatted
     
     def save_to_file(self, filepath: str) -> None:
@@ -84,7 +115,9 @@ class ConversationContext:
         with open(filepath, 'w') as f:
             json.dump({
                 'history': list(self.history),
-                'metadata': self.metadata
+                'metadata': self.metadata,
+                'max_tokens': self.max_tokens,
+                'max_history': self.history.maxlen
             }, f, indent=2)
     
     @classmethod
@@ -96,7 +129,12 @@ class ConversationContext:
         with open(filepath, 'r') as f:
             data = json.load(f)
         
-        context = cls()
+        # Get max_history and max_tokens if present, otherwise use defaults
+        max_history = data.get('max_history', 5)
+        max_tokens = data.get('max_tokens', 1000)
+        
+        context = cls(max_history=max_history, max_tokens=max_tokens)
+        
         for exchange in data.get('history', []):
             # Ensure we have the required fields
             if 'user' in exchange and 'assistant' in exchange:
@@ -113,6 +151,32 @@ class ConversationContext:
         """Clear the conversation history"""
         self.history.clear()
         self.metadata = {}
+        
+    def truncate_history(self, max_tokens: int = None) -> None:
+        """
+        Truncate history to fit within token limit
+        
+        Args:
+            max_tokens: Maximum number of tokens (defaults to self.max_tokens)
+        """
+        if max_tokens is None:
+            max_tokens = self.max_tokens
+            
+        total_tokens = 0
+        truncated_history = deque(maxlen=self.history.maxlen)
+        
+        # Start from most recent exchanges
+        for exchange in reversed(list(self.history)):
+            exchange_text = f"USER: {exchange['user']}\nASSISTANT: {exchange['assistant']}\n\n"
+            exchange_tokens = len(exchange_text.split())
+            
+            if total_tokens + exchange_tokens <= max_tokens:
+                truncated_history.appendleft(exchange)
+                total_tokens += exchange_tokens
+            else:
+                break
+        
+        self.history = truncated_history
 
 class UnifiedDatasetHandler:
     """
@@ -243,58 +307,71 @@ class UnifiedDatasetHandler:
 
         return data
     
-    def prepare_for_training(self, dataset: Dict[str, Any], batch_size: int = 64,
-                           validation_split: float = 0.1, test_split: float = 0.1,
-                           sequence_length: Optional[int] = None) -> Dict[str, Dict[str, Any]]:
+    def prepare_for_training(self, 
+                        dataset: Dict[str, Any], 
+                        batch_size: int = 32,
+                        validation_split: float = 0.2,
+                        test_split: float = 0.1,
+                        max_target_idx: int = 100) -> Dict[str, Dict[str, List]]:
         """
-        Prepare a dataset for training by creating train/validation/test splits and setting up batches.
+        Prepare dataset for training by creating train/validation/test splits
         
         Args:
-            dataset: Dataset dictionary from load_dataset
+            dataset: Dataset dictionary with batches
             batch_size: Batch size for training
             validation_split: Fraction of data to use for validation
             test_split: Fraction of data to use for testing
-            sequence_length: Sequence length for training examples
+            max_target_idx: Maximum allowed target index to prevent out-of-bounds errors
             
         Returns:
-            Dictionary with train, validation, and test splits
+            Dictionary of train/validation/test splits with batches
         """
-        if not dataset or 'batches' not in dataset or not dataset['batches']:
-            logger.error("Invalid dataset or no batches found")
-            return {}
-        
+        if 'batches' not in dataset or not dataset['batches']:
+            raise ValueError("No batches found in dataset")
+            
         # Get all batches
         all_batches = dataset['batches']
-        total_batches = len(all_batches)
         
-        # Calculate split indices
-        val_size = max(1, int(total_batches * validation_split))
-        test_size = max(1, int(total_batches * test_split))
+        # For safety, ensure all target indices are within bounds
+        # This prevents CUDA device-side assert errors when using CrossEntropyLoss
+        safe_batches = []
+        for input_batch, target_batch in all_batches:
+            # Check if target has any out-of-bounds indices
+            if hasattr(target_batch, 'max') and target_batch.max() > max_target_idx:
+                # Clamp target indices to prevent CUDA errors later
+                safe_target = torch.clamp(target_batch, 0, max_target_idx)
+                safe_batches.append((input_batch, safe_target))
+            else:
+                safe_batches.append((input_batch, target_batch))
+                
+        # Calculate splits
+        total_batches = len(safe_batches)
+        val_size = int(total_batches * validation_split)
+        test_size = int(total_batches * test_split)
         train_size = total_batches - val_size - test_size
         
         # Create splits
-        logger.info(f"Splitting dataset into {train_size} train, {val_size} validation, "
-                  f"and {test_size} test batches")
+        train_batches = safe_batches[:train_size]
+        val_batches = safe_batches[train_size:train_size+val_size] if val_size > 0 else []
+        test_batches = safe_batches[train_size+val_size:] if test_size > 0 else []
         
-        train_batches = all_batches[:train_size]
-        val_batches = all_batches[train_size:train_size + val_size]
-        test_batches = all_batches[train_size + val_size:]
+        logger.info(f"Splitting dataset into {len(train_batches)} train, {len(val_batches)} validation, and {len(test_batches)} test batches")
         
-        # Create dataset dictionaries for each split
-        train_data = dataset.copy()
-        train_data['batches'] = train_batches
-        
-        val_data = dataset.copy()
-        val_data['batches'] = val_batches
-        
-        test_data = dataset.copy()
-        test_data['batches'] = test_batches
-        
-        return {
-            "train": train_data,
-            "validation": val_data,
-            "test": test_data
+        # Create result dictionary
+        result = {
+            'train': {'batches': train_batches},
+            'validation': {'batches': val_batches},
+            'test': {'batches': test_batches}
         }
+        
+        # Add metadata
+        for split_name, split_data in result.items():
+            if dataset.get('vocab_size'):
+                split_data['vocab_size'] = dataset['vocab_size']
+            if dataset.get('metadata'):
+                split_data['metadata'] = dataset['metadata']
+                
+        return result
     
     def get_batch_statistics(self, dataset: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -538,27 +615,80 @@ class UnifiedDatasetHandler:
         
         return pairs
     
-    def _format_openassistant(self, raw_data: str, max_pairs: int) -> List[Dict[str, str]]:
-        """Format openassistant data into prompt-response pairs"""
-        if not raw_data:
-            return []
+    def _format_openassistant(self, raw_data: Union[str, List[Dict[str, Any]]], max_pairs: int) -> List[Dict[str, str]]:
+        """
+        Format openassistant data into prompt-response pairs
         
+        Args:
+            raw_data: Either a string of raw text or a list of dictionaries from the dataset
+            max_pairs: Maximum number of pairs to extract
+            
+        Returns:
+            List of dictionaries with prompt-response pairs
+        """
         pairs = []
-        # Split by obvious markers
-        parts = raw_data.split("USER: ")
         
-        for part in parts[1:]:  # Skip the first split which might be empty
-            if "ASSISTANT: " in part:
-                user_text, assistant_text = part.split("ASSISTANT: ", 1)
-                
-                # Handle multi-turn conversations by taking just the first response
-                if "USER: " in assistant_text:
-                    assistant_text = assistant_text.split("USER: ")[0]
-                
-                pairs.append({
-                    "prompt": user_text.strip(),
-                    "response": assistant_text.strip()
-                })
+        # Check if input is a string (old format) or list of dicts (HuggingFace format)
+        if isinstance(raw_data, str):
+            # Handle the old string format
+            parts = raw_data.split("USER: ")
+            
+            for part in parts[1:]:  # Skip the first split which might be empty
+                if "ASSISTANT: " in part:
+                    user_text, assistant_text = part.split("ASSISTANT: ", 1)
+                    
+                    # Handle multi-turn conversations by taking just the first response
+                    if "USER: " in assistant_text:
+                        assistant_text = assistant_text.split("USER: ")[0]
+                    
+                    pairs.append({
+                        "prompt": user_text.strip(),
+                        "response": assistant_text.strip()
+                    })
+                    
+                    if len(pairs) >= max_pairs:
+                        break
+        else:
+            # Handle the HuggingFace dataset format (list of dictionaries)
+            # Process the messages to pair prompter and assistant messages
+            message_tree = {}  # Dictionary to track parent-child relationships
+            
+            # First pass: organize messages by message_id and parent_id
+            for item in raw_data:
+                if isinstance(item, dict) and 'message_id' in item and 'role' in item and 'text' in item:
+                    message_tree[item['message_id']] = {
+                        'role': item['role'],
+                        'text': item['text'],
+                        'parent_id': item.get('parent_id'),
+                        'children': []
+                    }
+            
+            # Second pass: build the tree structure
+            root_messages = []
+            for msg_id, msg in message_tree.items():
+                parent_id = msg['parent_id']
+                if parent_id is None:
+                    # This is a root message
+                    root_messages.append(msg_id)
+                elif parent_id in message_tree:
+                    # Add this message as a child of its parent
+                    message_tree[parent_id]['children'].append(msg_id)
+            
+            # Third pass: extract conversation pairs (prompt-response)
+            for msg_id in message_tree:
+                msg = message_tree[msg_id]
+                # If this is a prompter message and it has children
+                if msg['role'] == 'prompter' and msg['children']:
+                    for child_id in msg['children']:
+                        child = message_tree[child_id]
+                        if child['role'] == 'assistant':
+                            pairs.append({
+                                "prompt": msg['text'].strip(),
+                                "response": child['text'].strip()
+                            })
+                            
+                            if len(pairs) >= max_pairs:
+                                break
                 
                 if len(pairs) >= max_pairs:
                     break
@@ -863,6 +993,272 @@ class UnifiedDatasetHandler:
                 dataset_dirs.append(root)
         
         return dataset_dirs
+
+    def determine_best_model(self, prompt: str) -> str:
+        """
+        Select the best model based on prompt analysis
+        
+        Args:
+            prompt: The user prompt
+            
+        Returns:
+            The name of the model to use
+        """
+        # Determine input type (code, text, conversation)
+        is_code_related = any(keyword in prompt.lower() for keyword in [
+            "code", "function", "program", "script", "algorithm",
+            "python", "javascript", "java", "c++", "html", "css",
+            "ruby", "php", "swift", "kotlin", "sql", "git", "function",
+            "class", "variable", "method", "api", "code snippet"
+        ])
+        
+        is_creative = any(keyword in prompt.lower() for keyword in [
+            "story", "write", "creative", "imagine", "fiction", "narrate",
+            "poem", "poetry", "novel", "tale", "fantasy", "create a scenario",
+            "describe a scene", "essay", "article", "blog post"
+        ])
+        
+        is_analytical = any(keyword in prompt.lower() for keyword in [
+            "analysis", "explain", "research", "compare", "contrast",
+            "pros and cons", "advantages", "disadvantages", "evaluate",
+            "examine", "investigate", "study", "review", "summarize"
+        ])
+        
+        is_conversation = len(self.conversation_context.history) > 0
+        
+        # If we have conversation context, check if it's specialized
+        if is_conversation:
+            # Analyze conversation history for context
+            history_text = " ".join([
+                f"{exchange['user']} {exchange['assistant']}" 
+                for exchange in self.conversation_context.history
+            ])
+            
+            # Check if history contains code-related content
+            history_is_code = any(keyword in history_text.lower() for keyword in [
+                "code", "function", "python", "javascript", "programming"
+            ])
+            
+            # Check if history contains creative content
+            history_is_creative = any(keyword in history_text.lower() for keyword in [
+                "story", "creative", "fiction", "imagine", "poem"
+            ])
+            
+            # Use history to influence decision
+            if history_is_code:
+                is_code_related = True
+            if history_is_creative:
+                is_creative = True
+        
+        # Select model based on analysis, with priorities
+        if is_code_related:
+            # Code-related prompts get highest priority
+            if "deepseek" in self.metadata.get("available_models", []):
+                return "deepseek_coder"
+            else:
+                return "code_generator"
+        elif is_creative:
+            # Creative tasks
+            return "text_generator_creative"
+        elif is_analytical:
+            # Analytical tasks
+            return "text_generator_analytical"
+        elif is_conversation:
+            # General conversation tasks
+            return "text_generator_chat"
+        else:
+            # Default model for general queries
+            return "text_generator_default"
+            
+    def get_best_dataset_for_model(self, model_name: str) -> str:
+        """
+        Get the best dataset to use for a specific model
+        
+        Args:
+            model_name: Name of the model
+            
+        Returns:
+            Name of the best dataset to use
+        """
+        dataset_mapping = {
+            "code_generator": "code_search_net",
+            "deepseek_coder": "code_search_net",
+            "text_generator_creative": "writing_prompts",
+            "text_generator_analytical": "pile",
+            "text_generator_chat": "persona_chat",
+            "text_generator_default": "openassistant"
+        }
+        
+        return dataset_mapping.get(model_name, "openassistant")
+
+    def load_dataset_with_pagination(self, dataset_name: str, batch_size: int = 1000, 
+                                max_samples: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Load a dataset with pagination to prevent memory issues
+        
+        Args:
+            dataset_name: Name of the dataset to load
+            batch_size: Number of samples to load in each batch
+            max_samples: Maximum number of samples to load in total
+            
+        Returns:
+            Dictionary with processed dataset
+        """
+        if dataset_name not in self.SUPPORTED_DATASETS:
+            logger.error(f"Unsupported dataset: {dataset_name}")
+            raise ValueError(f"Unsupported dataset: {dataset_name}. "
+                          f"Supported datasets: {', '.join(self.SUPPORTED_DATASETS)}")
+        
+        logger.info(f"Loading dataset with pagination: {dataset_name} "
+                  f"(batch_size: {batch_size}, max_samples: {max_samples})")
+        
+        # Initialize data collection
+        all_batches = []
+        total_samples = 0
+        metadata = {}
+        
+        # Determine which loader to use
+        if dataset_name in {"writing_prompts", "persona_chat"}:
+            # For these datasets, we can use the improved processor
+            # Modify the processors to support pagination
+            batches = []
+            
+            # Use a generator to paginate through the dataset
+            for i, batch in enumerate(self._paginated_dataset_generator(dataset_name, batch_size)):
+                batches.extend(batch)
+                total_samples += len(batch)
+                
+                logger.info(f"Loaded {total_samples} samples so far")
+                
+                # Check if we've reached the maximum samples
+                if max_samples and total_samples >= max_samples:
+                    batches = batches[:max_samples]
+                    break
+                    
+            # Create a data dictionary
+            data = {
+                'batches': batches,
+                'metadata': {
+                    'dataset_name': dataset_name,
+                    'total_samples': len(batches)
+                }
+            }
+            
+        else:
+            # For other datasets, load in batches
+            offset = 0
+            while True:
+                # Load a batch of data
+                batch_data = self._load_dataset_batch(dataset_name, offset, batch_size)
+                
+                if not batch_data or 'batches' not in batch_data or not batch_data['batches']:
+                    # No more data, break out of the loop
+                    break
+                
+                # Add to collection
+                all_batches.extend(batch_data['batches'])
+                total_samples += len(batch_data['batches'])
+                
+                # Get metadata from the first batch
+                if not metadata and 'metadata' in batch_data:
+                    metadata = batch_data['metadata']
+                
+                logger.info(f"Loaded {total_samples} samples from {dataset_name}")
+                
+                # Check if we've reached the maximum samples
+                if max_samples and total_samples >= max_samples:
+                    all_batches = all_batches[:max_samples]
+                    break
+                
+                # Update offset for next batch
+                offset += batch_size
+        
+            # Create the final dataset
+            data = {
+                'batches': all_batches,
+                'metadata': metadata
+            }
+            
+            # Add total samples to metadata
+            data['metadata']['total_samples'] = len(all_batches)
+        
+        # Validate dataset
+        if data:
+            if self._validate_dataset(dataset_name, data):
+                logger.info(f"Successfully loaded and validated {dataset_name} dataset with pagination")
+            else:
+                logger.warning(f"Dataset {dataset_name} loaded with pagination but failed validation")
+        else:
+            logger.error(f"Failed to load dataset with pagination: {dataset_name}")
+        
+        return data
+    
+    def _load_dataset_batch(self, dataset_name: str, offset: int, batch_size: int) -> Dict[str, Any]:
+        """
+        Load a batch of data from a dataset
+        
+        Args:
+            dataset_name: Name of the dataset
+            offset: Offset to start loading from
+            batch_size: Number of samples to load
+            
+        Returns:
+            Dictionary with batch data
+        """
+        # Different handling for different datasets
+        if dataset_name == "writing_prompts":
+            return self.processor.load_writing_prompts(max_samples=batch_size, offset=offset)
+        elif dataset_name == "persona_chat":
+            return self.processor.load_persona_chat(max_samples=batch_size, offset=offset)
+        elif dataset_name == "pile":
+            return self.processor.load_pile_dataset(max_samples=batch_size, offset=offset)
+        elif dataset_name == "openassistant":
+            return self.processor.load_openassistant_dataset(max_samples=batch_size, offset=offset)
+        elif dataset_name == "gpteacher":
+            return self.processor.load_gpteacher_dataset(max_samples=batch_size, offset=offset)
+        else:
+            logger.error(f"Unsupported dataset for batch loading: {dataset_name}")
+            return {}
+    
+    def _paginated_dataset_generator(self, dataset_name: str, batch_size: int):
+        """
+        Generator that yields batches of data from a dataset
+        
+        Args:
+            dataset_name: Name of the dataset
+            batch_size: Number of samples in each batch
+            
+        Yields:
+            Batches of data
+        """
+        if dataset_name == "writing_prompts":
+            processor_method = self.improved_processor.process_writing_prompts_dataset
+        elif dataset_name == "persona_chat":
+            processor_method = self.improved_processor.process_persona_chat_dataset
+        else:
+            logger.error(f"Unsupported dataset for pagination: {dataset_name}")
+            return
+        
+        # Use a generator to process the dataset in batches
+        offset = 0
+        while True:
+            try:
+                # Process a batch of data
+                batch_data = processor_method(max_samples=batch_size, offset=offset)
+                
+                if not batch_data or not batch_data.get('batches'):
+                    # No more data, stop the generator
+                    break
+                
+                # Yield the batch
+                yield batch_data['batches']
+                
+                # Update offset for next batch
+                offset += batch_size
+                
+            except Exception as e:
+                logger.error(f"Error processing batch at offset {offset}: {e}")
+                break
 
 # Example usage
 if __name__ == "__main__":

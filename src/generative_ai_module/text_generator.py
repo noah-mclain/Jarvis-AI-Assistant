@@ -36,6 +36,10 @@ class CombinedModel(nn.Module):
         if x.dim() == 1:
             x = x.unsqueeze(0)  # Add batch dimension [1, seq_len]
         
+        # Handle unexpected higher dimensions (> 3D)
+        if x.dim() > 3:
+            x = x.view(x.size(0), x.size(1), -1)  # Flatten extra dimensions to 3D
+        
         # Process input based on dimensionality and dtype
         if x.dim() == 2:
             if x.dtype in [torch.long, torch.int64]:
@@ -78,6 +82,12 @@ class CombinedModel(nn.Module):
             elif "expected hidden[0] size" in str(e):
                 error_msg = (f"LSTM hidden state size mismatch. Input shape: {x.shape}, "
                            f"hidden state shapes: {hidden[0].shape}, {hidden[1].shape} if hidden else 'None'")
+                raise RuntimeError(error_msg) from e
+            elif "CUDA out of memory" in str(e):
+                # Try to free memory and provide a helpful message
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                error_msg = "CUDA out of memory error. Try reducing batch size or sequence length."
                 raise RuntimeError(error_msg) from e
             else:
                 # Re-raise the original error
@@ -241,13 +251,14 @@ class TextGenerator:
         
         return predicted
                 
-    def train(self, data, epochs=10):
+    def train(self, data, epochs=10, gradient_accumulation_steps=1):
         """
         Train the model on batched data
         
         Args:
             data: List of (input_batch, target_batch) tuples
             epochs: Number of epochs to train
+            gradient_accumulation_steps: Number of steps to accumulate gradients before updating weights
             
         Returns:
             List of losses
@@ -262,10 +273,15 @@ class TextGenerator:
         
         # Otherwise, assume it's batched data
         try:
+            # Free up GPU memory before starting training
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                
             # Training loop
             for epoch in range(epochs):
                 epoch_loss = 0
                 batch_count = 0
+                steps_since_update = 0
                 
                 for input_batch, target_batch in data:
                     try:
@@ -273,22 +289,71 @@ class TextGenerator:
                         input_batch = input_batch.to(self.device)
                         target_batch = target_batch.to(self.device)
                         
-                        # Forward pass
-                        self.optimizer.zero_grad()
+                        # Get vocabulary size
+                        vocab_size = self.model.embedding.num_embeddings
+                        
+                        # Safety check: Ensure target indices are within valid range
+                        if target_batch.max() >= vocab_size:
+                            target_batch = torch.clamp(target_batch, 0, vocab_size - 1)
+                        
+                        # Forward pass - don't clear gradients yet for gradient accumulation
+                        if steps_since_update == 0:
+                            self.optimizer.zero_grad()
+                            
                         outputs, _ = self.model(input_batch)
                         
-                        # Calculate loss
-                        loss = criterion(outputs.view(-1, outputs.size(-1)), target_batch.view(-1))
+                        # Calculate loss based on target shape
+                        if target_batch.dim() == 1:
+                            # For 1D targets (batch of single tokens)
+                            loss = criterion(outputs, target_batch)
+                        else:
+                            # For 2D targets (batch of sequences)
+                            loss = criterion(outputs.view(-1, outputs.size(-1)), target_batch.view(-1))
                         
-                        # Backward pass and optimize
+                        # Scale loss by gradient accumulation steps to keep things balanced
+                        if gradient_accumulation_steps > 1:
+                            loss = loss / gradient_accumulation_steps
+                        
+                        # Backward pass
                         loss.backward()
-                        self.optimizer.step()
                         
-                        epoch_loss += loss.item()
+                        steps_since_update += 1
+                        
+                        # Only update weights after accumulating gradients for specified steps
+                        if steps_since_update >= gradient_accumulation_steps:
+                            # Add gradient clipping to prevent explosive gradients
+                            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                            self.optimizer.step()
+                            self.optimizer.zero_grad()
+                            steps_since_update = 0
+                        
+                        epoch_loss += loss.item() * (gradient_accumulation_steps if gradient_accumulation_steps > 1 else 1)
                         batch_count += 1
-                    except Exception as e:
-                        print(f"Error during batch training: {e}")
+                        
+                    except RuntimeError as e:
+                        if "device-side assert triggered" in str(e):
+                            print(f"CUDA Error in batch: {str(e)}")
+                            print(f"Input shape: {input_batch.shape}, Target shape: {target_batch.shape}")
+                            if hasattr(target_batch, 'min') and hasattr(target_batch, 'max'):
+                                print(f"Target range: min={target_batch.min().item()}, max={target_batch.max().item()}")
+                            # Free CUDA memory and continue
+                            if torch.cuda.is_available():
+                                torch.cuda.empty_cache()
+                            steps_since_update = 0  # Reset gradient accumulation counter
+                        elif "CUDA out of memory" in str(e):
+                            print(f"CUDA out of memory error. Clearing cache and continuing with next batch.")
+                            if torch.cuda.is_available():
+                                torch.cuda.empty_cache()
+                            steps_since_update = 0  # Reset gradient accumulation counter
+                        else:
+                            print(f"Error during batch training: {e}")
                         continue
+                
+                # Make sure to perform final optimization step if there are remaining gradients
+                if steps_since_update > 0:
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+                    self.optimizer.step()
+                    self.optimizer.zero_grad()
                 
                 if batch_count > 0:
                     avg_loss = epoch_loss / batch_count

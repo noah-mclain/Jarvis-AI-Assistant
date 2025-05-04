@@ -17,7 +17,28 @@ except ImportError:
     import torch
     import numpy as np
     
-    def calculate_metrics(model, data_batches, device):
+    def get_loss_function(task_type="generation"):
+        """
+        Return an appropriate loss function based on the task type.
+        
+        Args:
+            task_type (str): Type of task: 'classification', 'regression', or 'generation'
+            
+        Returns:
+            torch.nn.Module: The appropriate loss function
+        """
+        if task_type == "classification":
+            return torch.nn.CrossEntropyLoss()
+        elif task_type == "regression":
+            return torch.nn.MSELoss()
+        elif task_type == "generation":
+            # For text generation with possible padding tokens
+            return torch.nn.CrossEntropyLoss(ignore_index=-100)
+        else:
+            # Default to standard cross entropy
+            return torch.nn.CrossEntropyLoss()
+    
+    def calculate_metrics(model, data_batches, device, task_type="generation"):
         """Calculate metrics on a dataset (loss, perplexity, accuracy)"""
         model.eval()
         total_loss = 0.0
@@ -25,7 +46,8 @@ except ImportError:
         total_correct = 0
         total_samples = 0
         
-        criterion = torch.nn.CrossEntropyLoss()
+        # Get the appropriate loss function
+        criterion = get_loss_function(task_type)
         
         with torch.no_grad():
             for input_batch, target_batch in data_batches:
@@ -34,60 +56,52 @@ except ImportError:
                     input_batch = input_batch.to(device)
                     target_batch = target_batch.to(device)
                     
-                    # Handle different target shapes
-                    # If target is 1D (just indices), we need to reshape for the loss calculation
-                    target_is_1d = target_batch.dim() == 1
+                    # Get vocabulary size (for safety checks)
+                    vocab_size = model.embedding.num_embeddings
+                    
+                    # Safety check: Ensure target indices are within valid range
+                    if target_batch.max() >= vocab_size:
+                        target_batch = torch.clamp(target_batch, 0, vocab_size - 1)
                     
                     # Forward pass
                     output, _ = model(input_batch)
                     
-                    # Calculate loss - need to handle different shapes
-                    if target_is_1d:
-                        # For 1D targets, we need to match them with the output shape
-                        # The output is [batch_size, vocab_size]
+                    # Handle different target shapes
+                    if target_batch.dim() == 1:
+                        # For 1D targets (just indices)
                         loss = criterion(output, target_batch)
-                        # For accuracy, compare the max prediction directly with target
-                        predictions = output.argmax(dim=1)
+                        
+                        # Calculate accuracy
+                        pred = output.argmax(dim=1)
+                        total_correct += (pred == target_batch).sum().item()
+                        total_samples += target_batch.size(0)
                     else:
-                        # Regular case where target is [batch_size, sequence_length]
+                        # For 2D targets
                         loss = criterion(output.view(-1, output.size(-1)), target_batch.view(-1))
-                        # For accuracy, flatten both predictions and targets
-                        predictions = output.argmax(dim=-1).view(-1)
-                        target_batch = target_batch.view(-1)
+                        
+                        # Calculate accuracy
+                        pred = output.view(-1, output.size(-1)).argmax(dim=1)
+                        # Create mask to ignore padding tokens (value 0)
+                        mask = target_batch.view(-1) != 0  
+                        total_correct += ((pred == target_batch.view(-1)) & mask).sum().item()
+                        total_samples += mask.sum().item()
                     
                     total_loss += loss.item()
-                    
-                    # Calculate accuracy
-                    correct = (predictions == target_batch).sum().item()
-                    total_correct += correct
-                    total_samples += target_batch.numel()
-                    
                     total_batches += 1
-                    
-                except RuntimeError as e:
-                    print(f"Error processing batch: {e}")
-                    print(f"Input shape: {input_batch.shape}, Target shape: {target_batch.shape}")
-                    # Skip this batch but continue with others
+                
+                except Exception as e:
+                    print(f"Error calculating metrics for batch: {str(e)}")
                     continue
         
-        # Handle case where no batches were processed
-        if total_batches == 0:
-            print("WARNING: No batches were successfully processed")
-            return {
-                'loss': float('inf'),
-                'perplexity': float('inf'),
-                'accuracy': 0.0
-            }
-        
-        # Calculate metrics
-        avg_loss = total_loss / total_batches
-        perplexity = np.exp(avg_loss)
+        # Calculate average metrics
+        avg_loss = total_loss / max(1, total_batches)
+        perplexity = math.exp(min(avg_loss, 20))  # Cap perplexity to prevent overflow
         accuracy = total_correct / max(1, total_samples)
         
         return {
-            'loss': avg_loss,
-            'perplexity': perplexity,
-            'accuracy': accuracy
+            "loss": avg_loss,
+            "perplexity": perplexity,
+            "accuracy": accuracy
         }
     
     class EvaluationMetrics:
@@ -186,6 +200,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Tuple, Optional, Union
 from tqdm import tqdm
+import math
+import tempfile
 
 # Force Paperspace environment to be True
 # This replaces the is_paperspace_environment() function call with a hardcoded True
@@ -303,85 +319,92 @@ class TrainingVisualizer:
 
 
 def parse_args():
-    """Parse command line arguments"""
-    parser = argparse.ArgumentParser(description="Consolidated training script for Jarvis AI")
+    """Parse command-line arguments for training"""
+    parser = argparse.ArgumentParser(description="Train models for Jarvis AI")
     
-    # Model type selection
-    parser.add_argument('--model-type', type=str, default='all',
-                      choices=['all', 'text', 'code'],
-                      help='Type of model to train (all, text, or code)')
+    # Basic arguments
+    parser.add_argument("--model_type", type=str, choices=["text", "code"], default="text",
+                      help="Type of model to train (text or code)")
+    parser.add_argument("--dataset", type=str, default="writing_prompts",
+                      help="Dataset to use for training")
+    parser.add_argument("--dataset_path", type=str, default=None,
+                      help="Path to the dataset (if not in standard location)")
+    parser.add_argument("--output_dir", type=str, default=None,
+                      help="Directory to save the trained model")
     
-    # Dataset selection for text models
-    parser.add_argument('--datasets', type=str, nargs='+', 
-                      choices=['all', 'writing_prompts', 'persona_chat', 'pile', 'openassistant', 'gpteacher'],
-                      default=['all'],
-                      help='Datasets to train on (default: all)')
+    # Model configuration
+    parser.add_argument("--model_name", type=str, default=None,
+                      help="Name of pretrained model to fine-tune")
+    parser.add_argument("--model_size", type=str, 
+                      choices=["small", "medium", "large", "xl", "deepseek-small", "deepseek-medium"],
+                      default="small", help="Size of the model to train")
     
-    # For The Pile dataset
-    parser.add_argument('--pile-subset', type=str, default=None,
-                      help='Specific subset of The Pile (e.g., "pubmed", "github", "europarl")')
+    # Training parameters
+    parser.add_argument("--epochs", type=int, default=3,
+                      help="Number of training epochs")
+    parser.add_argument("--batch_size", type=int, default=4,
+                      help="Batch size for training")
+    parser.add_argument("--learning_rate", type=float, default=2e-5,
+                      help="Learning rate for training")
+    parser.add_argument("--max_length", type=int, default=512,
+                      help="Maximum sequence length")
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=1,
+                      help="Number of update steps to accumulate before performing a backward/update pass")
+    parser.add_argument("--no_fp16", action="store_true",
+                      help="Disable mixed-precision training")
     
-    # For code model
-    parser.add_argument('--code-subset', type=str, default=None,
-                      help='Specific subset of the code dataset (e.g., "python", "java")')
-    parser.add_argument('--subset', type=str, default=None,
-                      help='Alias for --code-subset for compatibility with finetune_deepseek.py')
-    parser.add_argument('--all-code-subsets', action='store_true',
-                      help='Use all code dataset subsets')
-    parser.add_argument('--use-deepseek', action='store_true',
-                      help='Use DeepSeek-Coder for code generation')
-    parser.add_argument('--deepseek-batch-size', type=int, default=4,
-                      help='Batch size for DeepSeek-Coder training')
+    # PEFT (Parameter-Efficient Fine-Tuning) options
+    parser.add_argument("--no_peft", action="store_true",
+                      help="Disable PEFT for fine-tuning")
+    parser.add_argument("--peft_type", type=str, choices=["lora", "prefix", "prompt"], 
+                      default="lora", help="Type of PEFT method to use")
+    parser.add_argument("--use_int8", action="store_true",
+                      help="Enable int8 quantization")
+    parser.add_argument("--lora_r", type=int, default=16,
+                      help="LoRA attention dimension")
+    parser.add_argument("--lora_alpha", type=int, default=32,
+                      help="LoRA alpha parameter")
+    parser.add_argument("--lora_dropout", type=float, default=0.05,
+                      help="Dropout probability for LoRA layers")
     
-    # General training options
-    parser.add_argument('--max-samples', type=int, default=500,
-                      help='Maximum number of samples to use per dataset')
-    parser.add_argument('--validation-split', type=float, default=0.2,
-                      help='Fraction of data to use for validation')
-    parser.add_argument('--test-split', type=float, default=0.1,
-                      help='Fraction of data to use for testing')
-    parser.add_argument('--epochs', type=int, default=10,
-                      help='Number of training epochs')
-    parser.add_argument('--batch-size', type=int, default=32,
-                      help='Batch size for training')
-    parser.add_argument('--learning-rate', type=float, default=0.002,
-                      help='Learning rate for training')
-    parser.add_argument('--early-stopping', type=int, default=3,
-                      help='Stop training if validation loss does not improve for this many epochs')
-    parser.add_argument('--sequence-length', type=int, default=100,
-                      help='Sequence length for training examples')
-    parser.add_argument('--warmup-steps', type=int, default=100,
-                      help='Warmup steps for learning rate scheduler')
-    
-    # Output options
-    parser.add_argument('--model-dir', type=str, default='models',
-                      help='Directory to save models')
-    parser.add_argument('--visualization-dir', type=str, default='visualizations',
-                      help='Directory to save visualizations')
-    parser.add_argument('--evaluation-dir', type=str, default='evaluation_metrics',
-                      help='Directory to save evaluation metrics')
+    # Training strategy parameters
+    parser.add_argument("--evaluation_strategy", type=str, 
+                      choices=["steps", "epoch", "no"], default="epoch",
+                      help="The evaluation strategy to use")
+    parser.add_argument("--save_strategy", type=str, 
+                      choices=["steps", "epoch", "no"], default="epoch",
+                      help="The checkpoint save strategy to use")
+    parser.add_argument("--logging_steps", type=int, default=10,
+                      help="Number of steps between logging")
+    parser.add_argument("--run_name", type=str, default=None,
+                      help="Name for this training run")
     
     # Hardware options
-    parser.add_argument('--no-force-gpu', action='store_true',
-                      help='Do not force GPU usage (by default, GPU is used if available)')
-    parser.add_argument('--load-in-4bit', action='store_true',
-                      help='Load models in 4-bit precision (for NVIDIA GPUs)')
+    parser.add_argument("--cpu_only", action="store_true",
+                      help="Use CPU only (no GPU)")
     
-    # Demo/testing options
-    parser.add_argument('--use-mini-dataset', action='store_true',
-                      help='Use mini dataset for quick testing')
+    # Dependency management
+    parser.add_argument("--install_dependencies", action="store_true",
+                      help="Automatically install required dependencies")
     
-    args = parser.parse_args()
+    # Enhanced evaluation options
+    parser.add_argument("--no_enhanced_eval", action="store_true",
+                      help="Disable enhanced evaluation metrics")
+    parser.add_argument("--eval_metrics_dir", type=str, default=None,
+                      help="Directory for saving evaluation metrics")
+    parser.add_argument("--visualize_metrics", action="store_true",
+                      help="Generate visualizations of evaluation metrics")
+    parser.add_argument("--eval_samples", type=int, default=5,
+                      help="Number of samples to use for enhanced evaluation")
+    parser.add_argument("--eval_bert_model", type=str, 
+                      default="microsoft/deberta-xlarge-mnli",
+                      help="Model to use for BERTScore computation")
+    parser.add_argument("--collect_human_feedback", action="store_true",
+                      help="Enable interactive collection of human feedback")
+    parser.add_argument("--report_name", type=str, default=None,
+                      help="Name for the evaluation report")
     
-    # For compatibility, if subset is specified but code_subset is not, use subset value
-    if args.subset is not None and args.code_subset is None:
-        args.code_subset = args.subset
-    
-    # Similarly, if code_subset is specified but subset is not, use code_subset value
-    if args.code_subset is not None and args.subset is None:
-        args.subset = args.code_subset
-    
-    return args
+    return parser.parse_args()
 
 
 def install_dependencies():
@@ -435,6 +458,17 @@ def train_text_model(dataset_name: str, args, force_gpu: bool = True):
     print(f"Training Text Model on {dataset_name.upper()} dataset")
     print(f"{'='*50}")
 
+    # Determine gradient accumulation steps based on available memory
+    # This allows simulation of larger batch sizes on limited GPU memory
+    gradient_accumulation_steps = getattr(args, 'gradient_accumulation_steps', 4)
+    effective_batch_size = args.batch_size * gradient_accumulation_steps
+    print(f"Using batch size {args.batch_size} with gradient accumulation steps {gradient_accumulation_steps}")
+    print(f"Effective batch size: {effective_batch_size}")
+
+    # Clear CUDA cache before starting
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
     # Create text generator and dataset handler
     generator = TextGenerator(force_gpu=force_gpu)
     dataset_handler = UnifiedDatasetHandler()
@@ -462,7 +496,8 @@ def train_text_model(dataset_name: str, args, force_gpu: bool = True):
         dataset=data,
         batch_size=args.batch_size,
         validation_split=args.validation_split,
-        test_split=args.test_split
+        test_split=args.test_split,
+        max_target_idx=generator.model.embedding.num_embeddings - 1  # Ensure target indices stay in range
     )
 
     train_data = splits.get("train", {})
@@ -482,6 +517,9 @@ def train_text_model(dataset_name: str, args, force_gpu: bool = True):
         'test_accuracy': []
     }
 
+    # Setup loss function
+    criterion = get_loss_function(task_type="generation")
+
     # Training loop
     print(f"Starting training for {args.epochs} epochs...")
 
@@ -489,43 +527,116 @@ def train_text_model(dataset_name: str, args, force_gpu: bool = True):
     epochs_without_improvement = 0
 
     for epoch in range(args.epochs):
+        # Clear CUDA cache before each epoch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            
         # Training phase
         generator.model.train()
         epoch_loss = 0.0
         epoch_batches = 0
+        steps_since_update = 0
 
         # Training progress bar
         train_progress = tqdm(train_data['batches'], desc=f"Epoch {epoch+1}/{args.epochs} [Train]")
-        for input_batch, target_batch in train_progress:
-            # Move data to the model's device
-            input_batch = input_batch.to(device)
-            target_batch = target_batch.to(device)
-
-            # Forward pass
-            generator.optimizer.zero_grad()
-            output, _ = generator.model(input_batch)
-
-            # Calculate loss
-            loss = torch.nn.functional.cross_entropy(output.view(-1, output.size(-1)), target_batch.view(-1))
-
-            # Backward pass and optimization
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(generator.model.parameters(), 5.0)  # Gradient clipping
+        for i, (input_batch, target_batch) in enumerate(train_progress):
+            try:
+                # Move data to the model's device
+                input_batch = input_batch.to(device)
+                target_batch = target_batch.to(device)
+                
+                # Get model vocabulary size (n_classes)
+                vocab_size = generator.model.embedding.num_embeddings
+                
+                # Safety check: Ensure target indices are within valid range
+                if target_batch.max() >= vocab_size:
+                    # Clip target indices to valid range
+                    target_batch = torch.clamp(target_batch, 0, vocab_size - 1)
+                
+                # Zero gradients only at the start of accumulation steps
+                if steps_since_update == 0:
+                    generator.optimizer.zero_grad()
+                
+                # Forward pass
+                output, _ = generator.model(input_batch)
+                
+                # Calculate loss - handle different shapes safely
+                if target_batch.dim() == 1:
+                    # For 1D targets, the shape should be [batch_size]
+                    # and output should be [batch_size, vocab_size]
+                    loss = criterion(output, target_batch)
+                else:
+                    # For 2D targets, the shape should be [batch_size, seq_len]
+                    # Reshape as needed
+                    loss = criterion(
+                        output.view(-1, output.size(-1)), 
+                        target_batch.view(-1)
+                    )
+                
+                # Scale loss by gradient accumulation steps
+                if gradient_accumulation_steps > 1:
+                    loss = loss / gradient_accumulation_steps
+                    
+                # Backward pass 
+                loss.backward()
+                
+                steps_since_update += 1
+                
+                # Update weights after accumulating gradients
+                if steps_since_update >= gradient_accumulation_steps:
+                    # Gradient clipping
+                    torch.nn.utils.clip_grad_norm_(generator.model.parameters(), 5.0)
+                    generator.optimizer.step()
+                    generator.optimizer.zero_grad()
+                    steps_since_update = 0
+                
+                # Track metrics (use unscaled loss for logging)
+                batch_loss = loss.item() * (gradient_accumulation_steps if gradient_accumulation_steps > 1 else 1)
+                epoch_loss += batch_loss
+                epoch_batches += 1
+                
+                # Update progress bar
+                train_progress.set_postfix(loss=epoch_loss/max(1, epoch_batches))
+                
+            except RuntimeError as e:
+                if "CUDA out of memory" in str(e):
+                    print("\nCUDA out of memory, clearing cache and continuing...")
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                    steps_since_update = 0  # Reset accumulation
+                    continue
+                elif "device-side assert triggered" in str(e):
+                    print(f"\nCUDA Error in batch: {str(e)}")
+                    print(f"Input shape: {input_batch.shape}, Target shape: {target_batch.shape}")
+                    print(f"Target range: min={target_batch.min().item()}, max={target_batch.max().item()}")
+                    steps_since_update = 0  # Reset accumulation
+                    continue
+                else:
+                    # Log the error and continue with the next batch
+                    print(f"\nError processing batch: {str(e)}")
+                    print(f"Input shape: {input_batch.shape}, Target shape: {target_batch.shape}")
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                    steps_since_update = 0  # Reset accumulation
+                    continue
+            
+            except Exception as e:
+                print(f"\nUnexpected error: {str(e)}")
+                steps_since_update = 0  # Reset accumulation
+                continue
+        
+        # Perform final optimization step if there are any remaining gradients
+        if steps_since_update > 0:
+            torch.nn.utils.clip_grad_norm_(generator.model.parameters(), 5.0)
             generator.optimizer.step()
-
-            # Update metrics
-            epoch_loss += loss.item()
-            epoch_batches += 1
-
-            # Update progress bar
-            train_progress.set_postfix(loss=epoch_loss/epoch_batches)
+            generator.optimizer.zero_grad()
 
         # Calculate average training loss
         train_loss = epoch_loss / max(1, epoch_batches)
 
         # Validation phase
         if val_data and val_data.get('batches'):
-            val_metrics = calculate_metrics(generator.model, val_data['batches'], device)
+            val_metrics = calculate_metrics(generator.model, val_data['batches'], device, task_type="generation")
             val_loss = val_metrics['loss']
             val_perplexity = val_metrics['perplexity']
             val_accuracy = val_metrics['accuracy']
@@ -554,7 +665,7 @@ def train_text_model(dataset_name: str, args, force_gpu: bool = True):
             print(f"Epoch {epoch+1}/{args.epochs} - Loss: {train_loss:.4f}")
 
         # Calculate and update training metrics
-        train_metrics = calculate_metrics(generator.model, train_data['batches'], device)
+        train_metrics = calculate_metrics(generator.model, train_data['batches'], device, task_type="generation")
         metrics['loss'].append(train_loss)
         metrics['perplexity'].append(train_metrics['perplexity'])
         metrics['accuracy'].append(train_metrics['accuracy'])
@@ -566,7 +677,16 @@ def train_text_model(dataset_name: str, args, force_gpu: bool = True):
 
     # Final test evaluation
     if test_data and test_data.get('batches'):
-        evaluating_train_text_model(generator, test_data, device, metrics)
+        print("\nEvaluating on test set...")
+        test_metrics = calculate_metrics(generator.model, test_data['batches'], device, task_type="generation")
+        metrics['test_loss'] = [test_metrics['loss']]
+        metrics['test_perplexity'] = [test_metrics['perplexity']]
+        metrics['test_accuracy'] = [test_metrics['accuracy']]
+
+        print(f"Test Loss: {test_metrics['loss']:.4f}")
+        print(f"Test Perplexity: {test_metrics['perplexity']:.2f}")
+        print(f"Test Accuracy: {test_metrics['accuracy']:.4f}")
+
     # Visualize training progress
     visualizer.visualize_training(dataset_name, metrics)
 
@@ -596,18 +716,6 @@ def train_text_model(dataset_name: str, args, force_gpu: bool = True):
     sync_to_gdrive("metrics")
 
     return metrics
-
-
-def evaluating_train_text_model(generator, test_data, device, metrics):
-    print("\nEvaluating on test set...")
-    test_metrics = calculate_metrics(generator.model, test_data['batches'], device)
-    metrics['test_loss'] = [test_metrics['loss']]
-    metrics['test_perplexity'] = [test_metrics['perplexity']]
-    metrics['test_accuracy'] = [test_metrics['accuracy']]
-
-    print(f"Test Loss: {test_metrics['loss']:.4f}")
-    print(f"Test Perplexity: {test_metrics['perplexity']:.2f}")
-    print(f"Test Accuracy: {test_metrics['accuracy']:.4f}")
 
 
 def train_code_model(args, force_gpu: bool = True):
@@ -720,163 +828,617 @@ def train_model(
     report_to='tensorboard',
     fp16=True,
     run_name=None,
-    save_total_limit=3
+    save_total_limit=3,
+    use_enhanced_eval=True,  # New parameter to control enhanced evaluation
+    eval_metrics_dir=None    # Directory for enhanced evaluation metrics
 ):
     """
-    Train a transformer model using the HuggingFace Transformers library.
+    Unified function to train models with enhanced evaluation metrics.
+    
+    Args:
+        model_name: Name of pretrained model to fine-tune
+        dataset_path: Path to dataset files
+        output_dir: Directory to save model and results
+        epochs: Number of training epochs
+        batch_size: Batch size for training
+        learning_rate: Learning rate
+        max_length: Maximum sequence length
+        use_peft: Whether to use PEFT for efficient fine-tuning
+        peft_type: Type of PEFT method ('lora', 'prefix', etc.)
+        use_int8: Whether to use int8 quantization
+        lora_r: LoRA attention dimension
+        lora_alpha: LoRA alpha parameter
+        lora_dropout: Dropout probability for LoRA layers
+        gradient_accumulation_steps: Number of steps to accumulate gradients
+        warmup_steps: Number of warmup steps for scheduler
+        evaluation_strategy: When to evaluate ('steps', 'epoch', or 'no')
+        save_strategy: When to save checkpoints ('steps', 'epoch', or 'no')
+        logging_steps: Number of steps between logging
+        seed: Random seed
+        push_to_hub: Whether to push to Hugging Face Hub
+        hub_model_id: Model ID for Hub (if pushing)
+        hub_private_repo: Whether Hub repo should be private
+        report_to: Where to report results ('tensorboard', 'wandb', etc.)
+        fp16: Whether to use mixed precision training
+        run_name: Name for this training run
+        save_total_limit: Maximum number of checkpoints to keep
+        use_enhanced_eval: Whether to use enhanced evaluation metrics
+        eval_metrics_dir: Directory for enhanced evaluation metrics
+    
+    Returns:
+        (Trainer, additional_results): Tuple with the trainer object and additional results dict
     """
-    if output_dir is None:
-        # Use the storage path utility to get the correct path
-        output_dir = get_storage_path("models", run_name or model_name.split('/')[-1])
+    from transformers import (
+        AutoModelForCausalLM,
+        AutoTokenizer,
+        Trainer,
+        TrainingArguments,
+        default_data_collator,
+    )
     
-    os.makedirs(output_dir, exist_ok=True)
+    try:
+        from datasets import load_from_disk, Dataset
+    except ImportError:
+        print("Datasets library not found. Installing...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "datasets"])
+        from datasets import load_from_disk, Dataset
     
-    # ... existing code ...
+    # Initialize enhanced evaluation metrics if requested
+    enhanced_eval_metrics = None
+    if use_enhanced_eval:
+        try:
+            from src.generative_ai_module.evaluation_metrics import EvaluationMetrics
+            metrics_dir = eval_metrics_dir or os.path.join(output_dir, "evaluation_metrics")
+            enhanced_eval_metrics = EvaluationMetrics(metrics_dir=metrics_dir)
+            print(f"Enhanced evaluation metrics initialized at {metrics_dir}")
+        except Exception as e:
+            print(f"Error initializing enhanced evaluation metrics: {e}")
+            use_enhanced_eval = False
     
-    # Add this at the end of the function, just before returning
-    # Sync models and checkpoints to Google Drive after training
-    sync_to_gdrive("models")
-    sync_to_gdrive("checkpoints")
+    # Load tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
     
-    return trainer, model
+    # Load model with appropriate quantization
+    if use_int8:
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            load_in_8bit=True,
+            device_map="auto",
+        )
+    else:
+        model = AutoModelForCausalLM.from_pretrained(model_name)
+    
+    # Set up PEFT if requested
+    if use_peft:
+        try:
+            from peft import LoraConfig, TaskType, get_peft_model
+            
+            if peft_type.lower() == 'lora':
+                peft_config = LoraConfig(
+                    task_type=TaskType.CAUSAL_LM,
+                    r=lora_r,
+                    lora_alpha=lora_alpha,
+                    lora_dropout=lora_dropout,
+                    bias="none",
+                    target_modules=["q_proj", "v_proj", "k_proj", "o_proj"]
+                )
+                
+                model = get_peft_model(model, peft_config)
+                model.print_trainable_parameters()
+            else:
+                print(f"PEFT type {peft_type} not implemented. Using base model.")
+        except ImportError:
+            print("PEFT library not found. Installing...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "peft"])
+            from peft import LoraConfig, TaskType, get_peft_model
+            
+            # Retry with installed library
+            if peft_type.lower() == 'lora':
+                peft_config = LoraConfig(
+                    task_type=TaskType.CAUSAL_LM,
+                    r=lora_r,
+                    lora_alpha=lora_alpha,
+                    lora_dropout=lora_dropout,
+                    bias="none"
+                )
+                
+                model = get_peft_model(model, peft_config)
+                model.print_trainable_parameters()
+            else:
+                print(f"PEFT type {peft_type} not implemented. Using base model.")
+    
+    # Load dataset
+    try:
+        # Try to load as a Hugging Face dataset
+        dataset = load_from_disk(dataset_path)
+    except Exception as e:
+        print(f"Error loading dataset from disk: {e}")
+        print("Trying to load as a regular file...")
+        
+        # Fallback to loading as a regular file
+        try:
+            with open(dataset_path, 'r') as f:
+                data = json.load(f)
+            
+            # Convert to dataset
+            dataset = Dataset.from_dict(data)
+        except Exception as e2:
+            print(f"Failed to load dataset: {e2}")
+            return None, {"error": f"Failed to load dataset: {e2}"}
+    
+    # Split dataset if not already split
+    if "train" not in dataset:
+        dataset = dataset.train_test_split(test_size=0.1, seed=seed)
+    
+    # Set up training arguments
+    training_args = TrainingArguments(
+        output_dir=output_dir,
+        num_train_epochs=epochs,
+        per_device_train_batch_size=batch_size,
+        per_device_eval_batch_size=batch_size,
+        gradient_accumulation_steps=gradient_accumulation_steps,
+        evaluation_strategy=evaluation_strategy,
+        save_strategy=save_strategy,
+        logging_steps=logging_steps,
+        learning_rate=learning_rate,
+        weight_decay=0.01,
+        fp16=fp16,
+        warmup_steps=warmup_steps,
+        save_total_limit=save_total_limit,
+        push_to_hub=push_to_hub,
+        hub_model_id=hub_model_id,
+        hub_private_repo=hub_private_repo,
+        report_to=report_to,
+        run_name=run_name,
+        seed=seed,
+        load_best_model_at_end=True,
+        metric_for_best_model="eval_loss",
+        greater_is_better=False,
+    )
+    
+    # Create callback with enhanced evaluation
+    callbacks = []
+    if use_enhanced_eval and enhanced_eval_metrics:
+        # Extract dataset name from path
+        dataset_name = os.path.basename(dataset_path).split('.')[0]
+        
+        callback = CustomCallback(
+            sync_interval=1,
+            evaluation_metrics=enhanced_eval_metrics,
+            eval_dataset=dataset["test"] if "test" in dataset else None,
+            model_name=model_name,
+            dataset_name=dataset_name
+        )
+        callbacks.append(callback)
+    else:
+        # Use basic callback for syncing
+        callback = CustomCallback(sync_interval=1)
+        callbacks.append(callback)
+    
+    # Create trainer
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=dataset["train"],
+        eval_dataset=dataset["test"] if "test" in dataset else None,
+        tokenizer=tokenizer,
+        data_collator=default_data_collator,
+        callbacks=callbacks
+    )
+    
+    # Train the model
+    train_result = trainer.train()
+    
+    # Save the fine-tuned model and tokenizer
+    trainer.save_model(output_dir)
+    tokenizer.save_pretrained(output_dir)
+    
+    # Get evaluation results if available
+    eval_results = {}
+    if use_enhanced_eval and enhanced_eval_metrics and hasattr(callback, "eval_results"):
+        # Create a report from the evaluation results
+        try:
+            eval_results = enhanced_eval_metrics.create_evaluation_report(
+                evaluation_results=callback.eval_results,
+                report_name=f"{os.path.basename(model_name)}_{dataset_name}_final_report",
+                include_samples=True
+            )
+            
+            # Generate visualizations
+            enhanced_eval_metrics.visualize_metrics(
+                eval_results, 
+                output_dir=os.path.join(output_dir, "evaluation_visualizations"),
+                plot_type="comprehensive"
+            )
+            
+            print(f"Created enhanced evaluation report with {len(callback.eval_results)} samples")
+        except Exception as e:
+            print(f"Error creating enhanced evaluation report: {e}")
+    
+    # Return the trainer and any additional results
+    return trainer, {
+        "train_result": train_result,
+        "enhanced_eval_results": eval_results
+    }
 
 
 class CustomCallback(TrainerCallback):
-    """Custom callback for syncing to Google Drive during training"""
+    """
+    Custom callback for training to sync checkpoints and log metrics.
+    Also performs enhanced evaluation with the new metrics module.
+    """
     
-    def __init__(self, sync_interval=1):
-        """Initialize with sync interval (in steps)"""
+    def __init__(self, sync_interval=1, evaluation_metrics=None, 
+                eval_dataset=None, model_name=None, dataset_name=None):
+        """
+        Initialize the callback.
+        
+        Args:
+            sync_interval: How often to sync to Google Drive (in epochs)
+            evaluation_metrics: EvaluationMetrics instance for enhanced evaluation
+            eval_dataset: Dataset to use for generating evaluation examples
+            model_name: Name of the model being trained
+            dataset_name: Name of the dataset being used
+        """
         self.sync_interval = sync_interval
-        self.last_sync_step = 0
+        self.last_sync_epoch = 0
+        self.evaluation_metrics = evaluation_metrics
+        self.eval_dataset = eval_dataset
+        self.model_name = model_name or "model"
+        self.dataset_name = dataset_name or "dataset"
+        self.eval_results = []
     
     def on_save(self, args, state, control, **kwargs):
-        """Sync when model is saved"""
-        try:
-            # kwargs["trainer"] contains the trainer instance, and kwargs["model"] contains the model
-            trainer = kwargs.get("trainer", None)
-            model = kwargs.get("model", None)
+        """Sync checkpoints to Google Drive when a model is saved"""
+        # Skip if not configured for Paperspace or sync not needed
+        if not is_paperspace_environment() or not args.output_dir:
+            return
+        
+        # Check if it's time to sync
+        current_epoch = state.epoch // self.sync_interval
+        if current_epoch > self.last_sync_epoch:
+            self.last_sync_epoch = current_epoch
             
-            # Sync to GDrive
-            sync_to_gdrive("models")
-            sync_to_gdrive("checkpoints")
-            sync_logs()
-            logger.info(f"Synced models, checkpoints, and logs to Google Drive at step {state.global_step}")
+            # Sync the output directory to Google Drive
+            try:
+                from src.generative_ai_module.utils import sync_to_gdrive
+                sync_to_gdrive(args.output_dir)
+                print(f"Synced checkpoints to Google Drive after epoch {state.epoch:.2f}")
+            except Exception as e:
+                print(f"Failed to sync checkpoints: {e}")
+    
+    def on_evaluate(self, args, state, control, metrics=None, **kwargs):
+        """Run enhanced evaluation when the model is evaluated"""
+        if not self.evaluation_metrics or not self.eval_dataset:
+            return
+        
+        # Get the model from kwargs
+        model = kwargs.get("model")
+        if not model:
+            return
+        
+        try:
+            # Generate text samples for evaluation
+            examples = self._generate_evaluation_examples(model, max_samples=5)
+            if not examples:
+                return
+            
+            # Evaluate each example with our enhanced metrics
+            step_results = []
+            for example in examples:
+                result = self.evaluation_metrics.evaluate_generation(
+                    prompt=example["prompt"],
+                    generated_text=example["generated_text"],
+                    reference_text=example["reference_text"],
+                    dataset_name=self.dataset_name,
+                    task_type="generation",
+                    save_results=False  # Don't save individual results
+                )
+                step_results.append(result)
+            
+            # Store the results for later reporting
+            self.eval_results.extend(step_results)
+            
+            # Log summary metrics
+            if metrics is not None and step_results:
+                # Extract BERTScore and add to metrics
+                bert_scores = []
+                for result in step_results:
+                    if "metrics" in result and "bert_score" in result["metrics"]:
+                        bert_score = result["metrics"]["bert_score"]
+                        if "aggregate" in bert_score and "f1_mean" in bert_score["aggregate"]:
+                            bert_scores.append(bert_score["aggregate"]["f1_mean"])
+                
+                if bert_scores:
+                    metrics["bert_score_f1"] = sum(bert_scores) / len(bert_scores)
+                
+                # Extract ROUGE scores
+                rouge_scores = []
+                for result in step_results:
+                    if "metrics" in result and "rouge" in result["metrics"]:
+                        rouge = result["metrics"]["rouge"]
+                        if "aggregate" in rouge and "rougeL_fmeasure_mean" in rouge["aggregate"]:
+                            rouge_scores.append(rouge["aggregate"]["rougeL_fmeasure_mean"])
+                
+                if rouge_scores:
+                    metrics["rouge_l"] = sum(rouge_scores) / len(rouge_scores)
+            
+            print(f"Completed enhanced evaluation at step {state.global_step}")
         except Exception as e:
-            logger.warning(f"Error syncing to Google Drive: {e}")
+            print(f"Error during enhanced evaluation: {e}")
+    
+    def on_train_end(self, args, state, control, **kwargs):
+        """Generate final evaluation report at the end of training"""
+        if not self.evaluation_metrics or not self.eval_results:
+            return
+        
+        try:
+            # Create comprehensive evaluation report
+            report = self.evaluation_metrics.create_evaluation_report(
+                evaluation_results=self.eval_results,
+                report_name=f"{self.model_name}_{self.dataset_name}_training_report",
+                include_samples=True
+            )
+            
+            # Generate visualizations
+            vis_files = self.evaluation_metrics.visualize_metrics(
+                report, 
+                output_dir=os.path.join(args.output_dir, "evaluation_visualizations"),
+                plot_type="comprehensive"
+            )
+            
+            print(f"Created final evaluation report and visualizations")
+            
+            # Sync to Google Drive if in Paperspace
+            if is_paperspace_environment():
+                try:
+                    from src.generative_ai_module.utils import sync_to_gdrive
+                    sync_to_gdrive(args.output_dir)
+                    print("Synced final evaluation report to Google Drive")
+                except Exception as e:
+                    print(f"Failed to sync final report: {e}")
+        except Exception as e:
+            print(f"Error creating final evaluation report: {e}")
+    
+    def _generate_evaluation_examples(self, model, max_samples=5):
+        """Generate text examples for evaluation"""
+        if not self.eval_dataset:
+            return []
+        
+        try:
+            from src.generative_ai_module.text_generator import TextGenerator
+            
+            # Initialize text generator with the current model
+            generator = TextGenerator(model=model)
+            
+            # Get samples from evaluation dataset
+            examples = []
+            
+            # Extract prompt-response pairs based on dataset format
+            if hasattr(self.eval_dataset, "get_prompt_response_pairs"):
+                # Use dataset helper method if available
+                pairs = self.eval_dataset.get_prompt_response_pairs(max_pairs=max_samples)
+            else:
+                # Try to extract directly from dataset features
+                pairs = []
+                features = self.eval_dataset.features if hasattr(self.eval_dataset, "features") else {}
+                
+                # Check for common feature names
+                prompt_keys = ["prompt", "input", "question", "instruction"]
+                response_keys = ["response", "output", "answer", "completion"]
+                
+                # Find matching keys
+                prompt_key = next((k for k in prompt_keys if k in features), None)
+                response_key = next((k for k in response_keys if k in features), None)
+                
+                # Extract pairs if keys found
+                if prompt_key and response_key:
+                    for i in range(min(max_samples, len(self.eval_dataset))):
+                        item = self.eval_dataset[i]
+                        if prompt_key in item and response_key in item:
+                            pairs.append({
+                                "prompt": item[prompt_key],
+                                "response": item[response_key]
+                            })
+                else:
+                    # Last resort - try to infer from structure
+                    for i in range(min(max_samples, len(self.eval_dataset))):
+                        item = self.eval_dataset[i]
+                        if len(item) >= 2:  # Assume first two items are prompt and response
+                            pairs.append({
+                                "prompt": str(item[0]),
+                                "response": str(item[1])
+                            })
+            
+            # Generate text for each prompt and prepare evaluation examples
+            for pair in pairs:
+                prompt = pair.get("prompt", "")
+                reference = pair.get("response", "")
+                
+                if not prompt:
+                    continue
+                
+                try:
+                    # Generate text
+                    generated = generator.generate_text(prompt, max_length=len(reference) + 50)
+                    
+                    # Add to examples
+                    examples.append({
+                        "prompt": prompt,
+                        "generated_text": generated,
+                        "reference_text": reference
+                    })
+                except Exception as e:
+                    print(f"Error generating text for evaluation: {e}")
+                    continue
+            
+            return examples
+        except Exception as e:
+            print(f"Error preparing evaluation examples: {e}")
+            return []
     
     def on_log(self, args, state, control, logs=None, **kwargs):
-        """Sync logs periodically"""
-        # Determine if we should sync based on interval
-        steps_since_last_sync = state.global_step - self.last_sync_step
-        if steps_since_last_sync >= self.sync_interval:
-            try:
-                sync_logs()
-                self.last_sync_step = state.global_step
-            except Exception as e:
-                logger.warning(f"Error syncing logs to Google Drive: {e}")
+        """Handle logging of metrics"""
+        if not logs:
+            return
+        
+        # Log the metrics
+        for k, v in logs.items():
+            if isinstance(v, (int, float)):
+                print(f"Step {state.global_step}: {k} = {v}")
+        
+        # Custom metric logging can be added here
+        # For example, writing to TensorBoard, etc.
 
 
 def main():
-    """
-    Main function to run the training process.
-    """
-    # Set up logging to file
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = f"training_{timestamp}.log"
-    setup_logging(log_file)
-    
-    logger.info("Starting training process")
-    
+    """Main entry point for the training script"""
     args = parse_args()
     
-    # Always assume we're in a Paperspace environment
-    logger.info("Assuming Paperspace environment, syncing from Google Drive...")
-    try:
-        sync_from_gdrive("datasets")
-        sync_from_gdrive("models")
-        sync_from_gdrive("metrics")
-        logger.info("Synced latest data from Google Drive")
-    except Exception as e:
-        logger.warning(f"Failed to sync from Google Drive: {e}")
+    # Install dependencies if requested
+    if args.install_dependencies:
+        install_dependencies()
     
-    # Create output directories - ensure they exist
-    ensure_directory_exists("models")
-    ensure_directory_exists("metrics")
+    # Initialize logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.FileHandler(f"training_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
     
-    # Check GPU availability
-    force_gpu = not args.no_force_gpu
-    if torch.cuda.is_available():
-        print(f"NVIDIA GPU detected: {torch.cuda.get_device_name(0)}")
-        print("Using CUDA for training")
-    elif hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-        print("Apple Silicon GPU detected")
-        print("Using MPS for training")
+    # Create output directory
+    if not args.output_dir:
+        args.output_dir = f"models/{args.model_type}_{args.dataset}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    os.makedirs(args.output_dir, exist_ok=True)
+    
+    # Set up evaluation metrics options
+    use_enhanced_eval = True
+    eval_metrics_dir = os.path.join(args.output_dir, "evaluation_metrics")
+    
+    # Handle specific model types
+    if args.model_type == "text":
+        # Train text generation model
+        print(f"Training text generation model on {args.dataset} dataset")
+        
+        # Set up dataset path
+        dataset_path = f"data/{args.dataset}"
+        if not os.path.exists(dataset_path):
+            print(f"Dataset not found at {dataset_path}")
+            print("Please provide the dataset path with --dataset_path")
+            if args.dataset_path:
+                dataset_path = args.dataset_path
+            else:
+                return 1
+        
+        # Determine model name based on size
+        model_name = args.model_name
+        if not model_name:
+            if args.model_size == "small":
+                model_name = "gpt2"
+            elif args.model_size == "medium":
+                model_name = "gpt2-medium"
+            elif args.model_size == "large":
+                model_name = "gpt2-large"
+            elif args.model_size == "xl":
+                model_name = "gpt2-xl"
+            elif args.model_size == "deepseek-small":
+                model_name = "deepseek-ai/deepseek-coder-1.3b-base"
+            elif args.model_size == "deepseek-medium":
+                model_name = "deepseek-ai/deepseek-coder-6.7b-base"
+            else:
+                model_name = "gpt2"
+        
+        # Train the model
+        trainer, results = train_model(
+            model_name=model_name,
+            dataset_path=dataset_path,
+            output_dir=args.output_dir,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            learning_rate=args.learning_rate,
+            max_length=args.max_length,
+            use_peft=not args.no_peft,
+            peft_type=args.peft_type,
+            use_int8=args.use_int8,
+            lora_r=args.lora_r,
+            lora_alpha=args.lora_alpha,
+            lora_dropout=args.lora_dropout,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
+            evaluation_strategy=args.evaluation_strategy,
+            save_strategy=args.save_strategy,
+            logging_steps=args.logging_steps,
+            fp16=not args.no_fp16,
+            run_name=args.run_name or f"{args.model_type}_{args.dataset}",
+            use_enhanced_eval=use_enhanced_eval,
+            eval_metrics_dir=eval_metrics_dir
+        )
+        
+        # Display results
+        if trainer and results:
+            train_result = results.get("train_result", {})
+            enhanced_eval = results.get("enhanced_eval_results", {})
+            
+            print("\n" + "="*40)
+            print("Training Complete!")
+            print("="*40)
+            
+            print(f"\nTraining metrics:")
+            if hasattr(train_result, "metrics"):
+                for key, value in train_result.metrics.items():
+                    print(f"  {key}: {value}")
+            
+            print(f"\nModel saved to: {args.output_dir}")
+            
+            # Report enhanced evaluation results if available
+            if enhanced_eval:
+                print("\nEnhanced Evaluation Results:")
+                
+                if "aggregated_metrics" in enhanced_eval:
+                    print("\nAggregated Metrics:")
+                    for metric, values in enhanced_eval["aggregated_metrics"].items():
+                        if isinstance(values, dict) and "mean" in values:
+                            print(f"  {metric}: {values['mean']:.4f} (±{values['std']:.4f})")
+                
+                if "metrics_by_dataset" in enhanced_eval:
+                    datasets = enhanced_eval["metrics_by_dataset"].keys()
+                    print(f"\nEvaluated on {len(datasets)} dataset(s): {', '.join(datasets)}")
+                
+                if "samples" in enhanced_eval:
+                    print(f"\nEvaluation included {len(enhanced_eval['samples'])} sample(s)")
+                
+                # Visualizations summary
+                vis_dir = os.path.join(args.output_dir, "evaluation_visualizations")
+                if os.path.exists(vis_dir) and os.listdir(vis_dir):
+                    print(f"\nVisualization plots available in: {vis_dir}")
+            
+            # Sync to Google Drive if in Paperspace
+            if is_paperspace_environment():
+                try:
+                    from src.generative_ai_module.utils import sync_to_gdrive
+                    sync_to_gdrive(args.output_dir)
+                    print(f"Model and evaluation results synced to Google Drive")
+                except Exception as e:
+                    print(f"Error syncing to Google Drive: {e}")
+        else:
+            print("Training failed. Check the logs for details.")
+    
+    elif args.model_type == "code":
+        # Train code generation model
+        print(f"Training code generation model")
+        
+        # Set up enhanced evaluation for code models
+        train_code_model(args, force_gpu=not args.cpu_only)
+    
     else:
-        print("WARNING: No GPU detected. Training will be very slow on CPU.")
-        proceed = input("Do you want to continue anyway? (y/n): ").strip().lower()
-        if proceed != 'y':
-            print("Training cancelled.")
-            return
-
-    # Install dependencies
-    install_dependencies()
-
-    # Use smaller values for quick testing with mini dataset
-    if args.use_mini_dataset:
-        args.max_samples = min(args.max_samples, 50)
-        args.epochs = min(args.epochs, 3)
-        print(f"\nUsing mini dataset settings: max_samples={args.max_samples}, epochs={args.epochs}")
-
-    # Determine which text datasets to train on
-    datasets_to_train = []
-    if 'all' in args.datasets:
-        datasets_to_train = ['writing_prompts', 'persona_chat', 'pile', 'openassistant', 'gpteacher']
-    else:
-        datasets_to_train = args.datasets
-
-    # Train code model if requested
-    if args.model_type in ['all', 'code'] and args.use_deepseek:
-        code_success = train_code_model(args, force_gpu=force_gpu)
-        print(f"DeepSeek-Coder training: {'SUCCESS' if code_success else 'FAILED'}")
-
-    # Train text models if requested
-    if args.model_type in ['all', 'text']:
-        print(f"\nWill train text models on the following datasets: {', '.join(datasets_to_train)}")
-
-        # Train on each dataset and collect metrics
-        all_metrics = {}
-        start_time = time.time()
-
-        for dataset_name in datasets_to_train:
-            if dataset_metrics := train_text_model(
-                dataset_name, args, force_gpu=force_gpu
-            ):
-                all_metrics[dataset_name] = dataset_metrics
-
-        # Create comparison visualizations if multiple datasets were trained
-        if len(all_metrics) > 1:
-            visualizer = TrainingVisualizer(args.visualization_dir)
-            for metric in ['loss', 'perplexity', 'accuracy']:
-                visualizer.create_comparison_plot(all_metrics, metric)
-
-        # Calculate total training time
-        total_time = time.time() - start_time
-        hours, remainder = divmod(total_time, 3600)
-        minutes, seconds = divmod(remainder, 60)
-
-        print("\n==================================================")
-        print("Text Model Training Complete!")
-        print(f"Total training time: {int(hours)}h {int(minutes)}m {int(seconds)}s")
-
-    # After training, always try to sync everything to Google Drive
-    try:
-        sync_to_gdrive("models")
-        sync_to_gdrive("metrics")
-        sync_logs()
-        logger.info("Training complete! Model and metrics synced to Google Drive.")
-    except Exception as e:
-        logger.warning(f"Failed to sync to Google Drive: {e}")
-        logger.info("Training complete!")
+        print(f"Unknown model type: {args.model_type}")
+        return 1
+    
+    return 0
 
 
 if __name__ == "__main__":
