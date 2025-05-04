@@ -338,8 +338,11 @@ def install_dependencies():
     
     # Try to import tensorboard, install if not available
     try:
-        import tensorboard
-        print("TensorBoard is already installed.")
+        import importlib.util
+        if importlib.util.find_spec("tensorboard") is not None:
+            print("TensorBoard is already installed.")
+        else:
+            raise ImportError("Tensorboard not found")
     except ImportError:
         print("Installing TensorBoard...")
         subprocess.run([sys.executable, "-m", "pip", "install", "tensorboard"])
@@ -347,11 +350,31 @@ def install_dependencies():
     
     # Try to import evaluation metric dependencies
     try:
-        from bert_score import BERTScorer
-        print("BERTScore is already installed.")
+        # Use importlib to check if bert_score is available without importing it directly
+        if importlib.util.find_spec("bert_score") is not None:
+            print("BERTScore is already installed.")
+        else:
+            raise ImportError("bert_score not found")
     except ImportError:
         print("Installing evaluation metric dependencies...")
-        EvaluationMetrics.install_dependencies()
+        # Install dependencies directly instead of using EvaluationMetrics.install_dependencies()
+        try:
+            subprocess.run([
+                sys.executable, "-m", "pip", "install", 
+                "bert-score", "rouge-score", "nltk", "transformers"
+            ])
+            # Initialize NLTK
+            try:
+                import nltk
+                nltk.download('punkt', quiet=True)
+                print("NLTK punkt downloaded successfully.")
+            except Exception as e:
+                print(f"Warning: Failed to download NLTK data: {e}")
+            
+            print("Successfully installed all dependencies for evaluation metrics")
+        except Exception as e:
+            print(f"Warning: Error installing dependencies: {e}")
+            print("You may need to install these packages manually: bert-score rouge-score nltk transformers")
 
 
 def calculate_metrics(model, data_batches, device):
@@ -834,8 +857,15 @@ def main():
 if __name__ == "__main__":
     # Add the parent directory to the path to make the module importable
     sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
+    # Import these directly rather than through relative imports
     from src.generative_ai_module.text_generator import TextGenerator
     from src.generative_ai_module.unified_dataset_handler import UnifiedDatasetHandler
     from src.generative_ai_module.evaluation_metrics import EvaluationMetrics
     from src.generative_ai_module.utils import get_storage_path, sync_to_gdrive, sync_logs, setup_logging, ensure_directory_exists, sync_from_gdrive
+    # Import install_dependencies from evaluation_metrics if needed
+    try:
+        from src.generative_ai_module.evaluation_metrics import install_dependencies as eval_install_dependencies
+    except ImportError:
+        # It's okay if this fails, we have our own implementation
+        pass
     main() 
