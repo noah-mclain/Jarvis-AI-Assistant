@@ -16,6 +16,98 @@ pip install gdown google-auth google-auth-oauthlib google-auth-httplib2
 mkdir -p /notebooks/Jarvis_AI_Assistant/{models,datasets,metrics,logs,checkpoints,evaluation_metrics,visualizations}
 ```
 
+## Initial Import Setup
+
+Before running any training or fine-tuning scripts, it's crucial to set up the Python import paths and verify that all necessary modules and functions are properly accessible. This is especially important when running on a GPU with limited memory like the RTX 5000, as import errors during execution can waste valuable compute time.
+
+````bash
+# Create a simple test script to verify imports
+cat > /notebooks/test_imports.py << 'EOL'
+#!/usr/bin/env python3
+"""
+Import Test Script for Jarvis AI Assistant
+
+This script checks if all essential imports are working correctly.
+If any of these imports fail, it will indicate which specific modules need fixing.
+"""
+
+import os
+import sys
+
+# Add project root to path
+project_root = os.path.abspath(os.path.dirname(__file__))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+def check_imports():
+    """Test all essential imports"""
+    print("Testing critical imports for Jarvis AI Assistant...")
+
+    import_tests = [
+        # Core ML libraries
+        ("torch", "PyTorch is required for all model operations"),
+        ("transformers", "HuggingFace Transformers is required for model loading and training"),
+        ("datasets", "HuggingFace Datasets is required for dataset handling"),
+
+        # Performance optimization
+        ("unsloth", "Unsloth is required for optimized training (optional but recommended)"),
+        ("peft", "PEFT is required for parameter-efficient fine-tuning"),
+        ("bitsandbytes", "BitsAndBytes is required for quantization"),
+
+        # Jarvis AI modules and sub-modules
+        ("src.generative_ai_module", "Main Jarvis module"),
+        ("src.generative_ai_module.import_fix", "Import fix utilities"),
+        ("src.generative_ai_module.text_generator", "Text generation module"),
+        ("src.generative_ai_module.code_generator", "Code generation module"),
+        ("src.generative_ai_module.evaluation_metrics", "Evaluation metrics module"),
+        ("src.generative_ai_module.utils", "Utility functions"),
+    ]
+
+    failed_imports = []
+    for module_name, description in import_tests:
+        try:
+            __import__(module_name)
+            print(f"✅ {module_name}: Successfully imported")
+        except ImportError as e:
+            failed_imports.append((module_name, description, str(e)))
+            print(f"❌ {module_name}: Failed to import - {e}")
+
+    # Test specific function imports
+    print("\nTesting specific function imports...")
+
+    try:
+        from src.generative_ai_module.import_fix import calculate_metrics, save_metrics, EvaluationMetrics
+        print("✅ Key functions from import_fix successfully imported")
+    except ImportError as e:
+        print(f"❌ Failed to import key functions from import_fix: {e}")
+        failed_imports.append(("import_fix functions", "Critical evaluation functions", str(e)))
+
+    # Summary
+    if failed_imports:
+        print("\n⚠️ Some imports failed. Please fix these before proceeding:")
+        for module, desc, error in failed_imports:
+            print(f"  - {module}: {desc}")
+            print(f"    Error: {error}")
+        return False
+    else:
+        print("\n✅ All imports successful! You can proceed with running the model.")
+        return True
+
+if __name__ == "__main__":
+    success = check_imports()
+    sys.exit(0 if success else 1)
+EOL
+
+# Make the test script executable
+chmod +x /notebooks/test_imports.py
+
+# Run the import test
+python /notebooks/test_imports.py
+
+# Set PYTHONPATH to include project root (add to ~/.bashrc for persistence)
+echo 'export PYTHONPATH=$PYTHONPATH:/notebooks' >> ~/.bashrc
+source ~/.bashrc
+
 ## Fix Import Issues
 
 ```bash
@@ -460,7 +552,7 @@ python src/generative_ai_module/fix_jarvis_imports.py --force src/generative_ai_
 
 ## Optimal Training Commands for RTX 5000 (16GB GPU)
 
-These commands are optimized for the RTX 5000 GPU with 16GB memory. They balance performance with memory constraints.
+These commands are specifically optimized for the RTX 5000 GPU with 16GB VRAM, 8 CPUs, and 30GB RAM. They balance performance with memory constraints to get the best results.
 
 ### 1. Training the Base Models
 
@@ -475,192 +567,330 @@ python src/generative_ai_module/train_models.py \
     --model-type code \
     --use-deepseek \
     --code-subset $CODE_SUBSET \
-    --batch-size 4 \
+    --batch-size 2 \
+    --gradient-accumulation-steps 4 \
     --epochs 3 \
     --learning-rate 2e-5 \
     --warmup-steps 100 \
     --load-in-4bit \
     --sequence-length 1024 \
-    --early-stopping 3
+    --early-stopping 3 \
+    --evaluation-strategy steps \
+    --eval-steps 50 \
+    --save-steps 100 \
+    --save-total-limit 2 \
+    --logging-steps 10
 
 # Train text generation models
 python src/generative_ai_module/train_models.py \
     --model-type text \
     --datasets writing_prompts persona_chat \
-    --batch-size 8 \
+    --batch-size 4 \
+    --gradient-accumulation-steps 2 \
     --epochs 3 \
     --learning-rate 3e-5 \
     --early-stopping 3 \
-    --sequence-length 512
+    --sequence-length 512 \
+    --evaluation-strategy steps \
+    --eval-steps 50 \
+    --save-steps 100 \
+    --save-total-limit 2
 ```
 
-### 2. Fine-tuning DeepSeek Models
+### 2. Fine-tuning DeepSeek Models with Unsloth
 
-The DeepSeek fine-tuning process is optimized for the RTX 5000. We use:
+Unsloth optimization is critical for the RTX 5000, achieving up to 2x speed improvement while reducing memory usage. Our fine-tuning process uses:
 
-- 4-bit quantization to minimize memory usage
+- 4-bit quantization for minimal memory usage
 - Gradient accumulation to simulate larger batch sizes
-- LoRA for efficient fine-tuning
-- Optimized sequence length
+- LoRA for memory-efficient parameter-efficient fine-tuning
+- Optimized sequence length based on available memory
 
 ```bash
-# Install dependencies for Unsloth (if not already installed)
+# Install dependencies for Unsloth optimization
 pip install ninja
 pip install unsloth
 
-# Run the fine-tuning process
+# Run fine-tuning with optimized parameters for 6.7B model
 cd /notebooks
 python src/generative_ai_module/finetune_deepseek.py \
-    --model deepseek-coder-6.7b-instruct \
+    --model deepseek-ai/deepseek-coder-6.7b-instruct \
     --dataset jarvis_code_dataset \
-    --batch-size 2 \
+    --batch-size 1 \
     --gradient-accumulation-steps 16 \
     --learning-rate 2e-5 \
-    --epochs 3 \
+    --epochs 2 \
     --lora-alpha 16 \
     --lora-dropout 0.05 \
     --lora-r 16 \
-    --max-seq-length 2048 \
-    --quantization 4bit \
-    --save-steps 200 \
-    --eval-steps 200 \
-    --warmup-ratio 0.03
+    --max-seq-length 1024 \
+    --load-in-4bit \
+    --save-steps 100 \
+    --eval-steps 100 \
+    --warmup-ratio 0.03 \
+    --use-unsloth \
+    --output-dir /notebooks/Jarvis_AI_Assistant/models/deepseek_finetuned
 
-# For smaller model (if memory is still an issue)
+# For better performance with smaller model
 python src/generative_ai_module/finetune_deepseek.py \
-    --model deepseek-coder-1.3b-instruct \
+    --model deepseek-ai/deepseek-coder-1.3b-instruct \
     --dataset jarvis_code_dataset \
-    --batch-size 4 \
+    --batch-size 2 \
     --gradient-accumulation-steps 8 \
     --learning-rate 3e-5 \
-    --epochs 5 \
+    --epochs 3 \
     --lora-alpha 16 \
     --lora-dropout 0.05 \
     --lora-r 32 \
     --max-seq-length 2048 \
-    --quantization 4bit
+    --load-in-4bit \
+    --use-unsloth \
+    --output-dir /notebooks/Jarvis_AI_Assistant/models/deepseek_small_finetuned
 ```
 
 ### 3. Evaluation and Metrics
 
-These commands evaluate model performance with comprehensive metrics on various datasets:
+These commands evaluate model performance with memory-optimized settings for the RTX 5000:
 
 ```bash
 # Evaluate on code generation tasks
 cd /notebooks
 python src/generative_ai_module/evaluate_generation.py \
-    --model deepseek-coder-6.7b-instruct \
-    --dataset jarvis_evaluation_set \
-    --num-examples 50 \
-    --batch-size 2 \
-    --save-results \
-    --metrics rouge bleu \
-    --visualization-dir /notebooks/Jarvis_AI_Assistant/visualizations \
-    --quantization 4bit
+    --batch-evaluate \
+    --dataset-name jarvis_evaluation_set \
+    --model-path /notebooks/Jarvis_AI_Assistant/models/deepseek_finetuned \
+    --use-gpu \
+    --metrics-dir /notebooks/Jarvis_AI_Assistant/metrics \
+    --batch-size 1
 
-# Evaluate on conversational tasks
+# Evaluate on specific files
 python src/generative_ai_module/evaluate_generation.py \
-    --model deepseek-coder-6.7b-instruct \
-    --dataset persona_chat \
-    --num-examples 30 \
-    --batch-size 2 \
-    --save-results \
-    --metrics rouge bleu \
-    --visualization-dir /notebooks/Jarvis_AI_Assistant/visualizations \
-    --quantization 4bit
+    --generated-file /notebooks/Jarvis_AI_Assistant/outputs/generated.txt \
+    --reference-file /notebooks/Jarvis_AI_Assistant/outputs/reference.txt \
+    --prompt-file /notebooks/Jarvis_AI_Assistant/outputs/prompt.txt \
+    --dataset-name code_test \
+    --use-gpu \
+    --metrics-dir /notebooks/Jarvis_AI_Assistant/metrics
 ```
 
-### 4. Advanced Training with UnifiedGenerationPipeline
+### 4. Using the Unified Generation Pipeline
 
-This pipeline combines multiple steps and provides comprehensive training and visualization:
+The unified pipeline provides a comprehensive approach with optimized parameters:
 
 ```bash
 # Run the unified generation pipeline with RTX 5000 optimizations
 cd /notebooks
 python src/generative_ai_module/unified_generation_pipeline.py \
-    --model deepseek-coder-6.7b-instruct \
+    --model deepseek-ai/deepseek-coder-6.7b-instruct \
     --dataset jarvis_combined_dataset \
-    --batch-size 2 \
+    --batch-size 1 \
     --gradient-accumulation-steps 16 \
-    --learning-rate 2e-5 \
-    --epochs 3 \
-    --quantization 4bit \
+    --learning-rate 1e-5 \
+    --epochs 2 \
+    --quantization 4 \
     --lora \
     --lora-r 16 \
     --lora-alpha 16 \
-    --sequence-length 2048 \
+    --sequence-length 1024 \
     --visualization \
     --evaluation \
     --save-checkpoints \
     --checkpoint-dir /notebooks/Jarvis_AI_Assistant/checkpoints \
-    --visualization-dir /notebooks/Jarvis_AI_Assistant/visualizations
+    --visualization-dir /notebooks/Jarvis_AI_Assistant/visualizations \
+    --use-unsloth
 ```
 
-### 5. Run Jarvis AI Assistant
+### 5. Optimized Storage and Dataset Handling
 
-Run the Jarvis AI Assistant in a production-like environment:
+For better performance with large datasets on limited storage:
 
 ```bash
-# Run the Jarvis AI Assistant with web UI
+# Use storage optimization for models and datasets
+cd /notebooks
+python src/generative_ai_module/storage_optimization.py \
+    --optimize-models \
+    --model-dir /notebooks/Jarvis_AI_Assistant/models \
+    --compress-datasets \
+    --dataset-dir /notebooks/Jarvis_AI_Assistant/datasets \
+    --cleanup-checkpoints \
+    --max-checkpoints 2
+
+# Sync data to Google Drive for persistence
+python src/generative_ai_module/sync_gdrive.py \
+    --sync-all \
+    --models-dir /notebooks/Jarvis_AI_Assistant/models \
+    --datasets-dir /notebooks/Jarvis_AI_Assistant/datasets \
+    --metrics-dir /notebooks/Jarvis_AI_Assistant/metrics
+```
+
+### 6. Running the Jarvis AI Assistant
+
+Run the assistant with memory-efficient settings:
+
+```bash
+# Run the Jarvis AI Assistant with optimized memory settings
 cd /notebooks
 python src/generative_ai_module/run_jarvis.py \
-    --model deepseek-coder-6.7b-instruct \
+    --model deepseek-ai/deepseek-coder-6.7b-instruct \
+    --model-path /notebooks/Jarvis_AI_Assistant/models/deepseek_finetuned \
+    --interactive \
+    --max-tokens 512 \
     --quantization 4bit \
     --port 7860 \
-    --share \
-    --optimize \
-    --cache-dir /notebooks/Jarvis_AI_Assistant/models \
-    --log-level info
+    --share
 ```
 
-## Performance Optimization Tips for RTX 5000
+## Performance Optimization Tips for RTX 5000 (16GB)
 
-1. **Memory Management:**
+1. **Critical Memory Optimizations:**
 
-   - Use 4-bit quantization for large models
-   - Keep batch size ≤ 4 for 6.7B+ models
-   - Use gradient accumulation (8-16 steps) to simulate larger batches
-   - Monitor memory usage with `nvidia-smi`
+   - Always use 4-bit quantization for 6.7B+ models on 16GB GPU
+   - Keep batch size at 1-2 for large models
+   - Use gradient accumulation steps of 8-16 to simulate larger batches
+   - Monitor memory usage with `nvidia-smi -l 5`
+   - For sequence generation, limit max tokens to 512-1024
+   - Free CUDA cache periodically with `torch.cuda.empty_cache()`
 
-2. **Training Efficiency:**
+2. **Sequence Length Management:**
 
-   - Use LoRA for fine-tuning (saves 95%+ memory)
-   - Warm up learning rate for first ~10% of steps
-   - Use early stopping to prevent overfitting
-   - Optimize sequence length (1024-2048 for code)
+   - Use max_seq_length of 1024 for 6.7B models with 4-bit quantization
+   - For 1.3B models, sequence lengths of 2048 are possible
+   - Consider dynamic sequence length based on available memory
 
-3. **Model Selection:**
+3. **Efficient Fine-tuning:**
 
-   - DeepSeek-Coder 1.3B works well with larger batches
-   - DeepSeek-Coder 6.7B-Instruct has better quality but needs quantization
-   - Consider Unsloth optimization for 2x faster training
+   - Always use LoRA/QLoRA with 4-bit quantization (saves 95%+ memory)
+   - Use Flash Attention if available (20-40% speedup)
+   - Target only key modules with LoRA (q_proj, k_proj, v_proj, o_proj)
+   - Keep LoRA rank (r) between 8-16 for larger models
+   - Apply early stopping to prevent overfitting
 
-4. **Data Efficiency:**
-   - Use high-quality, domain-specific datasets
-   - Apply data preprocessing to remove low-quality samples
-   - Consider augmentation techniques
+4. **Optimizing Training Speed:**
 
-## Troubleshooting
+   - Enable Unsloth optimization for up to 2x training speed
+   - Use mixed precision training (fp16 where supported)
+   - Reduce validation frequency to save time (eval every 100-200 steps)
+   - Limit checkpoint saving frequency (save every 100-200 steps)
+   - Keep save_total_limit low (2-3) to manage disk space
 
-If you encounter memory issues:
+5. **Dataset Optimizations:**
+   - Use streaming datasets for large data
+   - Apply aggressive filtering to ensure high-quality samples
+   - Consider smaller, focused datasets rather than large, generic ones
+   - Preprocess and tokenize data ahead of time
+
+## Troubleshooting RTX 5000 Specific Issues
+
+If you encounter CUDA out-of-memory errors:
 
 ```bash
-# Check GPU memory usage
-watch -n 1 nvidia-smi
+# Monitor GPU memory usage
+watch -n 5 nvidia-smi
 
-# Reduce memory usage by:
-1. Decreasing batch size
-2. Reducing sequence length
-3. Using 4-bit quantization
-4. Using a smaller model
-5. Increasing gradient accumulation
+# Reduce memory usage via these steps (in order):
+1. Decrease batch size to 1
+2. Increase gradient accumulation steps (8→16→32)
+3. Reduce sequence length (2048→1024→512)
+4. Enable 4-bit quantization if not already
+5. Switch to a smaller model (6.7B→1.3B)
+6. Disable validation during training
+7. Restart the environment to clear fragmented memory
 ```
 
-If you encounter import errors:
+For poor training stability on RTX 5000:
 
 ```bash
-# Apply the fix_jarvis_imports.py script
+# Try these stability improvements:
+1. Reduce learning rate by half (2e-5→1e-5)
+2. Increase warmup steps (5-10% of total steps)
+3. Add gradient clipping: --max-grad-norm 1.0
+4. Use cosine learning rate scheduler
+5. Try a different optimizer (AdamW→Adafactor)
+```
+
+### Advanced Troubleshooting
+
+#### Import Errors and Module Access
+
+If you encounter import errors, first run the test script to diagnose the issue:
+
+```bash
+python /notebooks/test_imports.py
+```
+
+If specific modules are causing issues, apply the import fix script:
+
+```bash
+# Apply import fixes to problematic files
 python src/generative_ai_module/fix_jarvis_imports.py --force <problematic_file>.py
+```
+
+#### Memory Fragmentation
+
+The RTX 5000 with 16GB VRAM can suffer from memory fragmentation during long training sessions:
+
+```bash
+# Check for memory fragmentation
+nvidia-smi -i 0 --query-gpu=utilization.gpu,memory.total,memory.free,memory.used --format=csv
+
+# If you see high used memory but low GPU utilization, clear CUDA cache:
+python -c "import torch; torch.cuda.empty_cache(); print('CUDA cache cleared')"
+```
+
+#### Recovering from Training Crashes
+
+If training crashes due to OOM errors:
+
+```bash
+# 1. Ensure all processes are terminated
+pkill -9 python
+
+# 2. Free GPU memory
+nvidia-smi --gpu-reset
+
+# 3. Resume from the latest checkpoint with reduced parameters
+python src/generative_ai_module/finetune_deepseek.py \
+    --model deepseek-ai/deepseek-coder-6.7b-instruct \
+    --dataset jarvis_code_dataset \
+    --batch-size 1 \
+    --gradient-accumulation-steps 32 \
+    --load-in-4bit \
+    --resume-from-checkpoint /notebooks/Jarvis_AI_Assistant/checkpoints/latest
+```
+
+#### Paperspace-Specific Issues
+
+For issues specific to Paperspace Gradient:
+
+```bash
+# Reset environment variables if needed
+echo 'export PAPERSPACE=true' >> ~/.bashrc
+echo 'export PAPERSPACE_ENVIRONMENT=true' >> ~/.bashrc
+source ~/.bashrc
+
+# Clear Paperspace cache (if disk space is low)
+rm -rf /tmp/gradient_*
+
+# Set higher process priority for training job
+sudo nice -n -10 python src/generative_ai_module/finetune_deepseek.py [other args]
+```
+
+#### Debugging Unsloth Integration
+
+If you have issues with Unsloth optimization:
+
+```bash
+# Check if Unsloth can access the GPU
+python -c "from unsloth import FastLanguageModel; print(f'CUDA Available: {FastLanguageModel.is_cuda_available()}')"
+
+# Try running with basic settings first, then enable Unsloth
+python src/generative_ai_module/finetune_deepseek.py \
+    --model deepseek-ai/deepseek-coder-1.3b-instruct \
+    --dataset jarvis_code_dataset \
+    --batch-size 1 \
+    --load-in-4bit \
+    --use-unsloth \
+    --debug-mode
 ```
 
 ## Paperspace Setup
@@ -679,3 +909,4 @@ pip install gdown google-auth google-auth-oauthlib google-auth-httplib2
 # Sync to Google Drive
 python -c "from src.generative_ai_module.sync_gdrive import sync_all_to_gdrive; sync_all_to_gdrive()"
 ```
+````

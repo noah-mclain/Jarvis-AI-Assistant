@@ -284,6 +284,8 @@ def parse_args():
     # For code model
     parser.add_argument('--code-subset', type=str, default=None,
                       help='Specific subset of the code dataset (e.g., "python", "java")')
+    parser.add_argument('--subset', type=str, default=None,
+                      help='Alias for --code-subset for compatibility with finetune_deepseek.py')
     parser.add_argument('--all-code-subsets', action='store_true',
                       help='Use all code dataset subsets')
     parser.add_argument('--use-deepseek', action='store_true',
@@ -329,7 +331,17 @@ def parse_args():
     parser.add_argument('--use-mini-dataset', action='store_true',
                       help='Use mini dataset for quick testing')
     
-    return parser.parse_args()
+    args = parser.parse_args()
+    
+    # For compatibility, if subset is specified but code_subset is not, use subset value
+    if args.subset is not None and args.code_subset is None:
+        args.code_subset = args.subset
+    
+    # Similarly, if code_subset is specified but subset is not, use code_subset value
+    if args.code_subset is not None and args.subset is None:
+        args.subset = args.code_subset
+    
+    return args
 
 
 def install_dependencies():
@@ -606,11 +618,14 @@ def train_code_model(args, force_gpu: bool = True):
     # Common arguments
     finetune_script = os.path.join(os.path.dirname(__file__), "finetune_deepseek.py")
 
+    # Set default batch size if not specified
+    deepseek_batch_size = args.deepseek_batch_size if hasattr(args, 'deepseek_batch_size') else args.batch_size
+
     cmd_args = [
         sys.executable,  # Use the current Python interpreter
         finetune_script,
         "--epochs", str(args.epochs),
-        "--batch-size", str(args.deepseek_batch_size),
+        "--batch-size", str(deepseek_batch_size),
         "--max-samples", str(args.max_samples),
         "--sequence-length", str(args.sequence_length),
         "--learning-rate", str(args.learning_rate),
@@ -618,31 +633,27 @@ def train_code_model(args, force_gpu: bool = True):
         "--force-gpu",    # Boolean flag (no value)
     ]
 
-    # Add code subset if specified
-    if args.code_subset:
-        cmd_args.extend(["--code-subset", args.code_subset])
+    # Add code subset if specified - use --subset instead of --code-subset
+    if hasattr(args, 'code_subset') and args.code_subset:
+        cmd_args.extend(["--subset", args.code_subset])
 
     # Use all code subsets if requested
-    if args.all_code_subsets:
+    if hasattr(args, 'all_code_subsets') and args.all_code_subsets:
         cmd_args.append("--all-subsets")
 
     # Use mini dataset for faster testing if requested
-    if args.use_mini_dataset:
+    if hasattr(args, 'use_mini_dataset') and args.use_mini_dataset:
         cmd_args.append("--use-mini-dataset")
         print("Using mini dataset for quick testing")
 
     # Add quantization for NVIDIA GPUs only
-    if args.load_in_4bit and not on_apple_silicon and torch.cuda.is_available():
+    if hasattr(args, 'load_in_4bit') and args.load_in_4bit and not on_apple_silicon and torch.cuda.is_available():
         cmd_args.append("--load-in-4bit")
+    
+    # Add output directory
+    if hasattr(args, 'model_dir') and args.model_dir:
+        cmd_args.extend(["--output-dir", os.path.join(args.model_dir, "deepseek_finetuned")])
 
-    cmd_args.extend(
-        [
-            "--model-dir",
-            args.model_dir,
-            "--visualization-dir",
-            args.visualization_dir,
-        ]
-    )
     # Run the training process
     print("Running DeepSeek-Coder training with command:")
     print(" ".join(cmd_args))
