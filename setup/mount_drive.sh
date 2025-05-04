@@ -6,9 +6,9 @@ echo "===================================================================="
 
 # Check if running as root/sudo
 if [ "$EUID" -ne 0 ]; then
-  echo "This script needs root privileges to install packages and mount drives."
-  echo "Please run with sudo or as root."
-  exit 1
+  echo "Attempting to use sudo to run this script..."
+  sudo "$0" "$@"
+  exit $?
 fi
 
 # Make sure the content directory exists
@@ -19,9 +19,16 @@ echo "Installing necessary packages for mounting..."
 apt-get update -q
 apt-get install -y fuse rclone
 
-# Run the Python mounting script
+# Determine the script's directory to find the Python script
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Run the Python mounting script with full path
 echo "Running the Google Drive mounting script..."
-python mount_drive_paperspace.py
+python "${SCRIPT_DIR}/mount_drive_paperspace.py"
+
+# Source bashrc to apply environment variables
+echo "Updating environment variables..."
+source ~/.bashrc
 
 echo "===================================================================="
 echo "If your drive was not mounted successfully, you can try running:"
