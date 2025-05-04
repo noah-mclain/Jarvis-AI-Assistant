@@ -544,143 +544,207 @@ class GoogleDriveSync:
     LOCAL_VISUALIZATIONS_DIR = os.path.join(LOCAL_BASE, "visualizations")
     
     SYNC_FOLDERS = {
-        "metrics": f"{GDRIVE_BASE}/metrics",
-        "models": f"{GDRIVE_BASE}/models",
-        "datasets": f"{GDRIVE_BASE}/datasets",
-        "checkpoints": f"{GDRIVE_BASE}/checkpoints",
-        "preprocessed_data": f"{GDRIVE_BASE}/preprocessed_data",
-        "logs": f"{GDRIVE_BASE}/logs"
+        "models": (os.path.join(GDRIVE_BASE, "models"), LOCAL_MODELS_DIR),
+        "datasets": (os.path.join(GDRIVE_BASE, "datasets"), LOCAL_DATASETS_DIR),
+        "metrics": (os.path.join(GDRIVE_BASE, "metrics"), LOCAL_METRICS_DIR),
+        "evaluation_metrics": (os.path.join(GDRIVE_BASE, "evaluation_metrics"), LOCAL_EVALS_DIR),
+        "logs": (os.path.join(GDRIVE_BASE, "logs"), LOCAL_LOGS_DIR),
+        "checkpoints": (os.path.join(GDRIVE_BASE, "checkpoints"), LOCAL_CHECKPOINTS_DIR),
+        "visualizations": (os.path.join(GDRIVE_BASE, "visualizations"), LOCAL_VISUALIZATIONS_DIR),
     }
     
     @classmethod
     def ensure_local_dirs(cls):
-        """Ensure that all local directories needed for syncing exist."""
-        directories = [
-            cls.LOCAL_MODELS_DIR,
-            cls.LOCAL_DATASETS_DIR,
-            cls.LOCAL_METRICS_DIR,
-            cls.LOCAL_EVALS_DIR,
-            cls.LOCAL_LOGS_DIR,
-            cls.LOCAL_CHECKPOINTS_DIR,
-            cls.LOCAL_VISUALIZATIONS_DIR
-        ]
-        
-        for local_path in directories:
-            try:
-                os.makedirs(local_path, exist_ok=True)
-                logger.info(f"Ensured directory exists: {local_path}")
-            except (OSError, PermissionError) as e:
-                # Handle read-only filesystem errors gracefully
-                logger.warning(f"Could not create directory {local_path}: {e}")
-                logger.warning("Continuing without this directory. Some functionality may be limited.")
+        """Ensure all local directories exist"""
+        try:
+            # Create local directories if they don't exist
+            for folder_info in cls.SYNC_FOLDERS.values():
+                _, local_dir = folder_info
+                if not os.path.exists(local_dir):
+                    logger.info(f"Creating directory: {local_dir}")
+                    os.makedirs(local_dir, exist_ok=True)
+            return True
+        except Exception as e:
+            logger.error(f"Error creating local directories: {e}")
+            return False
     
     @classmethod
     def sync_to_gdrive(cls, folder_type=None):
         """
-        Syncs the specified folder type (or all folders if None) to Google Drive.
+        Sync files from local storage to Google Drive.
         
         Args:
-            folder_type (str, optional): One of "metrics", "models", "datasets", "checkpoints"
-                                         or None to sync all folders
+            folder_type (str, optional): Type of folder to sync. If None, sync all folders.
         """
-        if folder_type and folder_type not in cls.SYNC_FOLDERS:
-            raise ValueError(f"Invalid folder_type: {folder_type}. Must be one of {list(cls.SYNC_FOLDERS.keys())} or None")
+        # Validate rclone is available
+        if not cls._check_rclone():
+            logger.error("rclone not available. Cannot sync to Google Drive.")
+            return False
         
-        folders_to_sync = [folder_type] if folder_type else cls.SYNC_FOLDERS.keys()
+        # Ensure all local directories exist
+        cls.ensure_local_dirs()
         
-        for folder in folders_to_sync:
-            local_path = os.path.join(cls.LOCAL_BASE, folder)
-            gdrive_path = cls.SYNC_FOLDERS[folder]
-            
-            # Always ensure local directory exists
-            os.makedirs(local_path, exist_ok=True)
-            
-            logger.info(f"Syncing {local_path} to {gdrive_path}")
+        # Determine which folders to sync
+        folders_to_sync = {}
+        if folder_type and folder_type in cls.SYNC_FOLDERS:
+            gdrive_dir, local_dir = cls.SYNC_FOLDERS[folder_type]
+            folders_to_sync[folder_type] = (gdrive_dir, local_dir)
+        else:
+            folders_to_sync = cls.SYNC_FOLDERS
+        
+        # Perform the sync
+        success = True
+        for folder_name, (gdrive_dir, local_dir) in folders_to_sync.items():
             try:
-                cmd = ["rclone", "sync", local_path, gdrive_path]
-                result = subprocess.run(cmd, capture_output=True, text=True)
+                logger.info(f"Syncing {folder_name} from {local_dir} to {gdrive_dir}")
                 
-                if result.returncode == 0:
-                    logger.info(f"Successfully synced {folder} to Google Drive")
-                else:
-                    logger.error(f"Failed to sync {folder} to Google Drive: {result.stderr}")
+                # Check if local directory exists and is not empty
+                if not os.path.exists(local_dir) or not os.listdir(local_dir):
+                    logger.info(f"Skipping {folder_name}: Local directory {local_dir} is empty or doesn't exist")
+                    continue
+                
+                # Create GDrive directory if needed (using mkdir with --parents)
+                mkdir_cmd = ["rclone", "mkdir", "--parents", gdrive_dir]
+                subprocess.run(mkdir_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                
+                # Sync local to GDrive
+                cmd = ["rclone", "sync", local_dir, gdrive_dir, "-v"]
+                result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                logger.info(f"Successfully synced {folder_name} to Google Drive")
+                logger.debug(f"Sync output: {result.stdout.decode('utf-8')}")
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Error syncing {folder_name} to Google Drive: {e}")
+                logger.error(f"Command output: {e.stderr.decode('utf-8') if e.stderr else ''}")
+                success = False
             except Exception as e:
-                logger.error(f"Error syncing {folder} to Google Drive: {str(e)}")
+                logger.error(f"Unexpected error syncing {folder_name} to Google Drive: {e}")
+                success = False
+        
+        return success
     
     @classmethod
     def sync_from_gdrive(cls, folder_type=None):
         """
-        Syncs the specified folder type (or all folders if None) from Google Drive to local storage.
-        Creates local directories if they don't exist.
+        Sync files from Google Drive to local storage.
         
         Args:
-            folder_type (str, optional): One of "metrics", "models", "datasets", "checkpoints"
-                                         or None to sync all folders
+            folder_type (str, optional): Type of folder to sync. If None, sync all folders.
         """
-        if folder_type and folder_type not in cls.SYNC_FOLDERS:
-            raise ValueError(f"Invalid folder_type: {folder_type}. Must be one of {list(cls.SYNC_FOLDERS.keys())} or None")
+        # Validate rclone is available
+        if not cls._check_rclone():
+            logger.error("rclone not available. Cannot sync from Google Drive.")
+            return False
         
-        folders_to_sync = [folder_type] if folder_type else cls.SYNC_FOLDERS.keys()
+        # Ensure all local directories exist
+        cls.ensure_local_dirs()
         
-        for folder in folders_to_sync:
-            local_path = os.path.join(cls.LOCAL_BASE, folder)
-            gdrive_path = cls.SYNC_FOLDERS[folder]
-            
-            # Ensure local directory exists
-            os.makedirs(local_path, exist_ok=True)
-                
-            logger.info(f"Syncing {gdrive_path} to {local_path}")
+        # Determine which folders to sync
+        folders_to_sync = {}
+        if folder_type and folder_type in cls.SYNC_FOLDERS:
+            gdrive_dir, local_dir = cls.SYNC_FOLDERS[folder_type]
+            folders_to_sync[folder_type] = (gdrive_dir, local_dir)
+        else:
+            folders_to_sync = cls.SYNC_FOLDERS
+        
+        # Perform the sync
+        success = True
+        for folder_name, (gdrive_dir, local_dir) in folders_to_sync.items():
             try:
-                cmd = ["rclone", "sync", gdrive_path, local_path]
-                result = subprocess.run(cmd, capture_output=True, text=True)
+                logger.info(f"Syncing {folder_name} from {gdrive_dir} to {local_dir}")
                 
-                if result.returncode == 0:
-                    logger.info(f"Successfully synced {folder} from Google Drive")
-                else:
-                    logger.error(f"Failed to sync {folder} from Google Drive: {result.stderr}")
+                # Check if GDrive directory exists
+                check_cmd = ["rclone", "lsf", gdrive_dir]
+                result = subprocess.run(check_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                
+                if result.returncode != 0:
+                    logger.info(f"Skipping {folder_name}: GDrive directory {gdrive_dir} doesn't exist or is empty")
+                    continue
+                
+                # Create local directory if needed
+                os.makedirs(local_dir, exist_ok=True)
+                
+                # Sync GDrive to local
+                cmd = ["rclone", "sync", gdrive_dir, local_dir, "-v"]
+                result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                logger.info(f"Successfully synced {folder_name} from Google Drive")
+                logger.debug(f"Sync output: {result.stdout.decode('utf-8')}")
+            except subprocess.CalledProcessError as e:
+                logger.error(f"Error syncing {folder_name} from Google Drive: {e}")
+                logger.error(f"Command output: {e.stderr.decode('utf-8') if e.stderr else ''}")
+                success = False
             except Exception as e:
-                logger.error(f"Error syncing {folder} from Google Drive: {str(e)}")
+                logger.error(f"Unexpected error syncing {folder_name} from Google Drive: {e}")
+                success = False
+        
+        return success
+    
+    @classmethod
+    def _check_rclone(cls):
+        """Check if rclone is available and configured for Google Drive."""
+        try:
+            # Check if rclone is installed
+            subprocess.run(["rclone", "--version"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            
+            # Check if gdrive remote is configured
+            result = subprocess.run(["rclone", "listremotes"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            remotes = result.stdout.decode('utf-8').strip().split('\n')
+            
+            if not any(remote.startswith('gdrive:') for remote in remotes):
+                logger.warning("Google Drive remote not found in rclone configuration")
+                return False
+                
+            return True
+        except subprocess.SubprocessError:
+            logger.error("rclone is not installed or not in PATH")
+            return False
+        except Exception as e:
+            logger.error(f"Error checking rclone: {e}")
+            return False
     
     @classmethod
     def get_local_path(cls, folder_type, relative_path=""):
         """
-        Get the local path for a specific folder type.
-        Also ensures the directory exists.
+        Get the local path for a file or directory.
         
         Args:
-            folder_type (str): One of "metrics", "models", "datasets", "checkpoints"
+            folder_type (str): Type of folder
             relative_path (str, optional): Relative path within the folder
-            
+        
         Returns:
             str: Full local path
         """
         if folder_type not in cls.SYNC_FOLDERS:
-            raise ValueError(f"Invalid folder_type: {folder_type}. Must be one of {list(cls.SYNC_FOLDERS.keys())}")
+            logger.warning(f"Unknown folder type: {folder_type}. Using {cls.LOCAL_BASE} as base.")
+            return os.path.join(cls.LOCAL_BASE, folder_type, relative_path)
         
-        path = os.path.join(cls.LOCAL_BASE, folder_type, relative_path)
+        _, local_dir = cls.SYNC_FOLDERS[folder_type]
+        full_path = os.path.join(local_dir, relative_path)
         
         # Ensure the parent directory exists
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        parent_dir = os.path.dirname(full_path)
+        if not os.path.exists(parent_dir):
+            os.makedirs(parent_dir, exist_ok=True)
         
-        return path
+        return full_path
     
     @classmethod
     def get_gdrive_path(cls, folder_type, relative_path=""):
         """
-        Get the Google Drive path for a specific folder type.
+        Get the Google Drive path for a file or directory.
         
         Args:
-            folder_type (str): One of "metrics", "models", "datasets", "checkpoints"
+            folder_type (str): Type of folder
             relative_path (str, optional): Relative path within the folder
-            
+        
         Returns:
             str: Full Google Drive path
         """
         if folder_type not in cls.SYNC_FOLDERS:
-            raise ValueError(f"Invalid folder_type: {folder_type}. Must be one of {list(cls.SYNC_FOLDERS.keys())}")
+            logger.warning(f"Unknown folder type: {folder_type}. Using {cls.GDRIVE_BASE} as base.")
+            return os.path.join(cls.GDRIVE_BASE, folder_type, relative_path)
         
-        base_path = cls.SYNC_FOLDERS[folder_type]
-        return f"{base_path}/{relative_path}" if relative_path else base_path
+        gdrive_dir, _ = cls.SYNC_FOLDERS[folder_type]
+        return os.path.join(gdrive_dir, relative_path)
 
 # Initialize directories on module import
 GoogleDriveSync.ensure_local_dirs() 

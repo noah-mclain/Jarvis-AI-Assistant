@@ -21,16 +21,30 @@ class CombinedModel(nn.Module):
         self.dropout = nn.Dropout(0.2)
     
     def forward(self, x, hidden=None):
+        # Add safety checks for tensor types and shapes
+        if not isinstance(x, torch.Tensor):
+            raise TypeError(f"Input must be a torch.Tensor, got {type(x)}")
+        
         # Handle different input shapes:
         # x shape can be either:
         # [batch_size, seq_len, input_size] (3D tensor) - one-hot encoded
         # [batch_size, seq_len] (2D tensor) - token indices
         # [batch_size, input_size] (2D tensor) - single time step one-hot
-
+        # [seq_len] (1D tensor) - single sample token indices
+        
+        # Handle 1D tensor (single sequence of tokens)
+        if x.dim() == 1:
+            x = x.unsqueeze(0)  # Add batch dimension [1, seq_len]
+        
         # Process input based on dimensionality and dtype
         if x.dim() == 2:
             if x.dtype in [torch.long, torch.int64]:
                 # Input is token indices [batch_size, seq_len]
+                # Ensure values are within valid embedding range
+                vocab_size = self.embedding.num_embeddings
+                if x.max() >= vocab_size:
+                    # Clip indices to prevent out-of-bounds errors
+                    x = torch.clamp(x, 0, vocab_size - 1)
                 # Pass through embedding layer
                 x = self.embedding(x)
             else:
@@ -42,17 +56,32 @@ class CombinedModel(nn.Module):
             # 3D tensor inputs are assumed to be one-hot encodings
             # No embedding needed, just make sure it's float
             x = x.float()
-
-        # Pass through LSTM
-        lstm_out, hidden = self.lstm(x, hidden)
-
-        # Get output from last time step only
-        last_output = lstm_out[:, -1, :] if lstm_out.dim() == 3 else lstm_out
-        # Apply dropout and linear layer
-        last_output = self.dropout(last_output)
-        output = self.fc(last_output)
-
-        return output, hidden
+        
+        # Execute forward pass with error handling
+        try:
+            # Pass through LSTM
+            lstm_out, hidden = self.lstm(x, hidden)
+            
+            # Get output from last time step only
+            last_output = lstm_out[:, -1, :] if lstm_out.dim() == 3 else lstm_out
+            # Apply dropout and linear layer
+            last_output = self.dropout(last_output)
+            output = self.fc(last_output)
+            
+            return output, hidden
+        except RuntimeError as e:
+            # Handle specific runtime errors with more informative messages
+            if "device-side assert triggered" in str(e):
+                error_msg = (f"CUDA error: Device-side assert triggered. Input shape: {x.shape}, "
+                           f"dtype: {x.dtype}. This might be caused by invalid indices or values.")
+                raise RuntimeError(error_msg) from e
+            elif "expected hidden[0] size" in str(e):
+                error_msg = (f"LSTM hidden state size mismatch. Input shape: {x.shape}, "
+                           f"hidden state shapes: {hidden[0].shape}, {hidden[1].shape} if hidden else 'None'")
+                raise RuntimeError(error_msg) from e
+            else:
+                # Re-raise the original error
+                raise
     
 class TextGenerator:
     def __init__(self, force_gpu=False):

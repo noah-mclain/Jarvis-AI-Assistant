@@ -29,18 +29,58 @@ except ImportError:
         
         with torch.no_grad():
             for input_batch, target_batch in data_batches:
-                input_batch = input_batch.to(device)
-                target_batch = target_batch.to(device)
-                output, _ = model(input_batch)
-                loss = criterion(output.view(-1, output.size(-1)), target_batch.view(-1))
-                total_loss += loss.item()
-                predictions = output.argmax(dim=-1)
-                correct = (predictions == target_batch).sum().item()
-                total_correct += correct
-                total_samples += target_batch.numel()
-                total_batches += 1
+                try:
+                    # Move data to the model's device
+                    input_batch = input_batch.to(device)
+                    target_batch = target_batch.to(device)
+                    
+                    # Handle different target shapes
+                    # If target is 1D (just indices), we need to reshape for the loss calculation
+                    target_is_1d = target_batch.dim() == 1
+                    
+                    # Forward pass
+                    output, _ = model(input_batch)
+                    
+                    # Calculate loss - need to handle different shapes
+                    if target_is_1d:
+                        # For 1D targets, we need to match them with the output shape
+                        # The output is [batch_size, vocab_size]
+                        loss = criterion(output, target_batch)
+                        # For accuracy, compare the max prediction directly with target
+                        predictions = output.argmax(dim=1)
+                    else:
+                        # Regular case where target is [batch_size, sequence_length]
+                        loss = criterion(output.view(-1, output.size(-1)), target_batch.view(-1))
+                        # For accuracy, flatten both predictions and targets
+                        predictions = output.argmax(dim=-1).view(-1)
+                        target_batch = target_batch.view(-1)
+                    
+                    total_loss += loss.item()
+                    
+                    # Calculate accuracy
+                    correct = (predictions == target_batch).sum().item()
+                    total_correct += correct
+                    total_samples += target_batch.numel()
+                    
+                    total_batches += 1
+                    
+                except RuntimeError as e:
+                    print(f"Error processing batch: {e}")
+                    print(f"Input shape: {input_batch.shape}, Target shape: {target_batch.shape}")
+                    # Skip this batch but continue with others
+                    continue
         
-        avg_loss = total_loss / max(1, total_batches)
+        # Handle case where no batches were processed
+        if total_batches == 0:
+            print("WARNING: No batches were successfully processed")
+            return {
+                'loss': float('inf'),
+                'perplexity': float('inf'),
+                'accuracy': 0.0
+            }
+        
+        # Calculate metrics
+        avg_loss = total_loss / total_batches
         perplexity = np.exp(avg_loss)
         accuracy = total_correct / max(1, total_samples)
         
@@ -387,49 +427,6 @@ def install_dependencies():
         except Exception as e:
             print(f"Warning: Error installing dependencies: {e}")
             print("You may need to install these packages manually: bert-score rouge-score nltk transformers")
-
-
-def calculate_metrics(model, data_batches, device):
-    """Calculate metrics on a dataset (loss, perplexity, accuracy)"""
-    model.eval()
-    total_loss = 0.0
-    total_batches = 0
-    total_correct = 0
-    total_samples = 0
-    
-    criterion = torch.nn.CrossEntropyLoss()
-    
-    with torch.no_grad():
-        for input_batch, target_batch in data_batches:
-            # Move data to the model's device
-            input_batch = input_batch.to(device)
-            target_batch = target_batch.to(device)
-            
-            # Forward pass
-            output, _ = model(input_batch)
-            
-            # Calculate loss
-            loss = criterion(output.view(-1, output.size(-1)), target_batch.view(-1))
-            total_loss += loss.item()
-            
-            # Calculate accuracy
-            predictions = output.argmax(dim=-1)
-            correct = (predictions == target_batch).sum().item()
-            total_correct += correct
-            total_samples += target_batch.numel()
-            
-            total_batches += 1
-    
-    # Calculate metrics
-    avg_loss = total_loss / max(1, total_batches)
-    perplexity = np.exp(avg_loss)
-    accuracy = total_correct / max(1, total_samples)
-    
-    return {
-        'loss': avg_loss,
-        'perplexity': perplexity,
-        'accuracy': accuracy
-    }
 
 
 def train_text_model(dataset_name: str, args, force_gpu: bool = True):
