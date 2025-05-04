@@ -8,6 +8,7 @@ import torch
 import datasets
 import numpy as np
 from tqdm import tqdm
+from src.generative_ai_module.utils import get_storage_path, sync_to_gdrive
 
 def load_and_preprocess_dataset(max_samples=None, sequence_length=512, subset="python", all_subsets=False, return_raw=False, test_split=0.1, val_split=0.1):
     """
@@ -614,7 +615,8 @@ def split_dataset(dataset, val_ratio=0.1, test_ratio=0.1, seed=42):
 
 def save_preprocessing_metrics(metrics):
     """Save preprocessing metrics to a JSON file"""
-    metrics_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "metrics")
+    # Use the storage path utility to get the correct path
+    metrics_dir = get_storage_path("metrics")
     os.makedirs(metrics_dir, exist_ok=True)
     
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -639,3 +641,6 @@ def save_preprocessing_metrics(metrics):
         json.dump(serializable_metrics, f, indent=4)
     
     print(f"Preprocessing metrics saved to {metrics_path}")
+    
+    # Sync metrics to Google Drive
+    sync_to_gdrive("metrics")

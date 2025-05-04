@@ -581,6 +581,7 @@ python src/generative_ai_module/train_models.py \
     --visualization-dir /notebooks/Jarvis_AI_Assistant/visualizations
 
 # Train on ALL text datasets with RTX 5000 optimized parameters
+cd /notebooks
 python src/generative_ai_module/train_models.py \
     --model-type text \
     --datasets all \
@@ -648,6 +649,21 @@ python src/generative_ai_module/finetune_deepseek.py \
     --load-in-4bit \
     --use-unsloth \
     --output-dir /notebooks/Jarvis_AI_Assistant/models/deepseek_small_finetuned
+
+# Text model training with optimized settings for RTX 5000
+cd /notebooks
+python src/generative_ai_module/train_models.py \
+    --model-type text \
+    --datasets all \
+    --batch-size 4 \
+    --epochs 3 \
+    --learning-rate 3e-5 \
+    --early-stopping 3 \
+    --sequence-length 512 \
+    --max-samples 2000 \
+    --visualization-dir /notebooks/Jarvis_AI_Assistant/visualizations \
+    --model-dir /notebooks/Jarvis_AI_Assistant/models \
+    --warmup-steps 50
 ```
 
 ### 3. Evaluation and Metrics

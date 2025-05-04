@@ -580,7 +580,9 @@ def train_text_model(dataset_name: str, args, force_gpu: bool = True):
     print(f"Final model saved to {model_path}")
 
     # Save the metrics for future reference
-    metrics_path = os.path.join(args.visualization_dir, f"{dataset_name}_metrics.json")
+    metrics_dir = get_storage_path("metrics")
+    os.makedirs(metrics_dir, exist_ok=True)
+    metrics_path = os.path.join(metrics_dir, f"{dataset_name}_metrics.json")
     with open(metrics_path, 'w') as f:
         # Convert numpy values to Python types for JSON serialization
         serializable_metrics = {}
@@ -592,6 +594,9 @@ def train_text_model(dataset_name: str, args, force_gpu: bool = True):
 
         json.dump(serializable_metrics, f, indent=2)
     print(f"Training metrics saved to {metrics_path}")
+    
+    # Sync metrics to Google Drive
+    sync_to_gdrive("metrics")
 
     return metrics
 

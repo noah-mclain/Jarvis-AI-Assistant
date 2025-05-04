@@ -29,6 +29,8 @@ import time
 import math
 import functools
 
+from generative_ai_module.utils import get_storage_path
+
 from .prompt_enhancer import analyze_prompt
 from .unsloth_deepseek import evaluate_model
 
@@ -1251,8 +1253,8 @@ def save_evaluation_metrics(metrics: Dict[str, Any], dataset_name: str, model_ty
         dataset_name: Name of the dataset the model was evaluated on
         model_type: Type of model (text or code)
     """
-    # Create metrics directory if it doesn't exist
-    metrics_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "metrics")
+    # Use the storage path utility to get the correct path
+    metrics_dir = get_storage_path("metrics")
     os.makedirs(metrics_dir, exist_ok=True)
 
     # Format timestamp
@@ -1290,6 +1292,9 @@ def save_evaluation_metrics(metrics: Dict[str, Any], dataset_name: str, model_ty
         json.dump(serializable_metrics, f, indent=2)
 
     print(f"Evaluation metrics saved to {metrics_file}")
+    
+    # Sync metrics to Google Drive
+    sync_to_gdrive("metrics")
 
 def preprocess_data(args: argparse.Namespace) -> Dict[str, Any]:
     """Preprocess data based on arguments"""

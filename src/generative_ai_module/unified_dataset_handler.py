@@ -598,8 +598,18 @@ class UnifiedDatasetHandler:
         # Check that at least some batches have a decent length
         if 'batches' in data and data['batches']:
             for input_batch, target_batch in data['batches'][:10]:
-                if input_batch.size(1) < 5 or target_batch.size(1) < 10:
-                    logger.warning("Writing prompts dataset has suspiciously short sequences")
+                # Check input batch has sufficient length
+                if input_batch.size(1) < 5:
+                    logger.warning("Writing prompts dataset has suspiciously short input sequences")
+                    return False
+                
+                # Check target batch shape - if it's 2D check size(1), otherwise check size(0)
+                if target_batch.dim() > 1:
+                    if target_batch.size(1) < 10:
+                        logger.warning("Writing prompts dataset has suspiciously short target sequences")
+                        return False
+                elif len(target_batch) < 10:
+                    logger.warning("Writing prompts dataset has suspiciously few target elements")
                     return False
         return True
     
@@ -608,8 +618,18 @@ class UnifiedDatasetHandler:
         # Check that at least some batches have a decent length
         if 'batches' in data and data['batches']:
             for input_batch, target_batch in data['batches'][:10]:
-                if input_batch.size(1) < 5 or target_batch.size(1) < 5:
-                    logger.warning("Persona chat dataset has suspiciously short sequences")
+                # Check input batch has sufficient length
+                if input_batch.size(1) < 5:
+                    logger.warning("Persona chat dataset has suspiciously short input sequences")
+                    return False
+                
+                # Check target batch shape - if it's 2D check size(1), otherwise check size(0)
+                if target_batch.dim() > 1:
+                    if target_batch.size(1) < 5:
+                        logger.warning("Persona chat dataset has suspiciously short target sequences")
+                        return False
+                elif len(target_batch) < 5:
+                    logger.warning("Persona chat dataset has suspiciously few target elements")
                     return False
         return True
     
@@ -617,10 +637,15 @@ class UnifiedDatasetHandler:
         """Validate pile dataset"""
         # The Pile should have substantial text content
         if 'batches' in data and data['batches']:
-            total_length = sum(
-                input_batch.size(1)
-                for input_batch, target_batch in data['batches'][:10]
-            )
+            # Calculate total length across input batches
+            total_length = 0
+            for input_batch, _ in data['batches'][:10]:
+                # Add the sequence length for each batch
+                if input_batch.dim() > 1:
+                    total_length += input_batch.size(1)
+                else:
+                    total_length += len(input_batch)
+                    
             if total_length < 500:  # Arbitrary threshold
                 logger.warning("Pile dataset has suspiciously little text content")
                 return False
