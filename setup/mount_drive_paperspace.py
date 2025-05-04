@@ -49,8 +49,8 @@ def try_colab_mounting():
         print(f"Colab mounting failed: {e}")
         return False
 
-def setup_rclone_config():
-    """Create a headless-friendly rclone config for Paperspace."""
+def setup_rclone_config_manual():
+    """Setup rclone configuration manually, guiding the user through the process."""
     config_dir = os.path.expanduser("~/.config/rclone")
     os.makedirs(config_dir, exist_ok=True)
     
@@ -62,36 +62,40 @@ def setup_rclone_config():
                 print("Existing gdrive config found in rclone.conf")
                 return True
     
-    print("\n\033[1;32mSetting up rclone for Google Drive (Paperspace method)\033[0m")
-    print("This method uses a browser authentication.")
+    print("\n" + "=" * 70)
+    print("MANUAL RCLONE CONFIGURATION REQUIRED")
+    print("=" * 70)
+    print("Please follow these steps to configure Google Drive:")
+    print("1. In your terminal, run: rclone config")
+    print("2. Press 'n' for new remote")
+    print("3. Name: gdrive")
+    print("4. Type: drive (Google Drive)")
+    print("5. For client_id and client_secret, just press Enter to use defaults")
+    print("6. Scope: 1 (full access)")
+    print("7. Root folder: Just press Enter for default")
+    print("8. Service account file: Press Enter (leave empty)")
+    print("9. Edit advanced config: n (no)")
+    print("10. Use auto config: n (no, since we're on a remote server)")
+    print("11. Copy the URL shown and paste it into a browser")
+    print("12. Authenticate with your Google account")
+    print("13. Copy the verification code and paste it back in the terminal")
+    print("14. Configure as team drive: n (no)")
+    print("15. Press 'y' to confirm the configuration is correct")
+    print("16. Press 'q' to quit the config tool")
+    print("=" * 70)
     
-    # Start the rclone config process with automated responses
-    cmd = [
-        "rclone", "config", "create", "gdrive", "drive",
-        "scope=drive", "config_is_local=true", "config_refresh_token=true"
-    ]
-    
-    print("\nFollowing process will open a browser for authentication.")
-    print("Please complete the authentication and copy the verification code.")
-    
-    try:
-        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, stderr = p.communicate()
-        
-        print(stdout.decode())
-        if stderr:
-            print("Errors:", stderr.decode())
-            
+    response = input("Have you completed the manual rclone configuration? (y/n): ")
+    if response.lower() == 'y':
         # Verify configuration worked
         result = subprocess.run(["rclone", "listremotes"], capture_output=True, text=True)
         if "gdrive:" in result.stdout:
             print("Google Drive successfully configured in rclone!")
             return True
         else:
-            print("Failed to configure Google Drive in rclone.")
+            print("Failed to verify Google Drive configuration.")
             return False
-    except Exception as e:
-        print(f"Error setting up rclone config: {e}")
+    else:
+        print("Please complete the rclone configuration before continuing.")
         return False
 
 def try_rclone_mounting():
@@ -113,7 +117,7 @@ def try_rclone_mounting():
         result = subprocess.run(["rclone", "listremotes"], capture_output=True, text=True)
         
         if "gdrive:" not in result.stdout:
-            if not setup_rclone_config():
+            if not setup_rclone_config_manual():
                 print("Could not configure rclone for Google Drive")
                 return False
         
@@ -160,54 +164,11 @@ def try_rclone_mounting():
         print(f"Error in rclone mounting: {e}")
         return False
 
-def try_direct_mount():
-    """Try mounting with direct OS mount."""
-    print("\nAttempting to mount with direct OS method...")
-    try:
-        # Check if we have /dev/fuse (needed for FUSE mounts)
-        if not os.path.exists('/dev/fuse'):
-            print("FUSE device not available")
-            return False
-            
-        # Ensure mount point exists
-        os.makedirs('/content/drive/MyDrive', exist_ok=True)
-        
-        # Try to use a simple local mount to simulate Google Drive folder structure
-        # This is a fallback when all else fails
-        print("Creating a simulated drive structure...")
-        os.makedirs('/notebooks/simulated_gdrive', exist_ok=True)
-        os.makedirs('/notebooks/simulated_gdrive/MyDrive', exist_ok=True)
-        
-        # Use bind mount to make it accessible at the expected path
-        subprocess.run([
-            "mount", "--bind", 
-            "/notebooks/simulated_gdrive/MyDrive", 
-            "/content/drive/MyDrive"
-        ], check=True)
-        
-        if os.path.ismount('/content/drive/MyDrive'):
-            print("Created local simulated Google Drive structure")
-            return True
-        else:
-            print("Failed to create simulated drive")
-            return False
-    except Exception as e:
-        print(f"Error in direct mounting: {e}")
-        return False
-
-def setup_directories():
-    """Create necessary directories in Google Drive or locally."""
-    # Check if drive is mounted
-    if os.path.exists('/content/drive') and os.path.ismount('/content/drive'):
-        print("\nSetting up Google Drive directories...")
-        base_path = '/content/drive/MyDrive/Jarvis_AI_Assistant'
-        symlink_path = '/notebooks/google_drive_jarvis'
-        env_var_prefix = 'export JARVIS_STORAGE_PATH="/content/drive/MyDrive/Jarvis_AI_Assistant"'
-    else:
-        print("\nSetting up local directories (Google Drive mount failed)...")
-        base_path = '/notebooks/Jarvis_AI_Assistant'
-        symlink_path = '/notebooks/local_jarvis'
-        env_var_prefix = 'export JARVIS_STORAGE_PATH="/notebooks/Jarvis_AI_Assistant"'
+def create_simple_local_storage():
+    """Create a simple local storage structure for when Google Drive mounting fails."""
+    print("\nSetting up local storage in /notebooks/Jarvis_AI_Assistant...")
+    base_path = '/notebooks/Jarvis_AI_Assistant'
+    symlink_path = '/notebooks/local_jarvis'
     
     # Create directories
     for subdir in ['models', 'datasets', 'checkpoints', 'metrics']:
@@ -227,7 +188,7 @@ def setup_directories():
     # Set environment variables
     with open(os.path.expanduser("~/.bashrc"), "a") as bashrc:
         bashrc.write('\n# Jarvis AI Assistant paths\n')
-        bashrc.write(f'{env_var_prefix}\n')
+        bashrc.write(f'export JARVIS_STORAGE_PATH="{base_path}"\n')
         bashrc.write(f'export JARVIS_MODELS_PATH="{base_path}/models"\n')
         bashrc.write(f'export JARVIS_DATA_PATH="{base_path}/datasets"\n')
         bashrc.write(f'export JARVIS_CHECKPOINTS_PATH="{base_path}/checkpoints"\n')
@@ -246,6 +207,54 @@ def setup_directories():
     
     return base_path
 
+def setup_directories():
+    """Create necessary directories in Google Drive or locally."""
+    # Check if drive is mounted
+    if os.path.exists('/content/drive') and os.path.ismount('/content/drive'):
+        print("\nSetting up Google Drive directories...")
+        base_path = '/content/drive/MyDrive/Jarvis_AI_Assistant'
+        symlink_path = '/notebooks/google_drive_jarvis'
+        
+        # Create directories
+        for subdir in ['models', 'datasets', 'checkpoints', 'metrics']:
+            os.makedirs(f"{base_path}/{subdir}", exist_ok=True)
+        
+        print(f"Created directories in {base_path}")
+        
+        # Create symlink for easier access
+        if os.path.exists(symlink_path):
+            os.remove(symlink_path)
+        try:
+            os.symlink(base_path, symlink_path)
+            print(f"Created symlink at {symlink_path}")
+        except Exception as e:
+            print(f"Failed to create symlink: {e}")
+        
+        # Set environment variables
+        with open(os.path.expanduser("~/.bashrc"), "a") as bashrc:
+            bashrc.write('\n# Jarvis AI Assistant paths\n')
+            bashrc.write(f'export JARVIS_STORAGE_PATH="{base_path}"\n')
+            bashrc.write(f'export JARVIS_MODELS_PATH="{base_path}/models"\n')
+            bashrc.write(f'export JARVIS_DATA_PATH="{base_path}/datasets"\n')
+            bashrc.write(f'export JARVIS_CHECKPOINTS_PATH="{base_path}/checkpoints"\n')
+            bashrc.write(f'export JARVIS_METRICS_PATH="{base_path}/metrics"\n')
+        
+        print("Added environment variables to ~/.bashrc")
+        
+        # Create a simple test file to verify write access
+        try:
+            test_file = f"{base_path}/mount_test.txt"
+            with open(test_file, 'w') as f:
+                f.write(f"Mount test created at {time.ctime()}\n")
+            print(f"Created test file at {test_file} - write access confirmed!")
+        except Exception as e:
+            print(f"WARNING: Could not write to {base_path} - {e}")
+        
+        return base_path
+    else:
+        # Fall back to local storage
+        return create_simple_local_storage()
+
 def main():
     """Main function to coordinate mounting attempts."""
     print("=" * 60)
@@ -258,17 +267,13 @@ def main():
     # Install dependencies (returns True if rclone installed)
     rclone_installed = install_dependencies()
     
-    # Try mounting methods in order of preference for Paperspace
+    # Skip Colab mounting in Paperspace environments
     mounted = False
     
-    # Skip Colab mounting in Paperspace environments
-    # mounted = try_colab_mounting()
-    
-    if not mounted and rclone_installed:
+    if rclone_installed:
         mounted = try_rclone_mounting()
     
-    if not mounted:
-        mounted = try_direct_mount()
+    # Skip direct mount - it doesn't work in Paperspace due to FUSE limitations
     
     # Setup directories whether mounted or not
     base_path = setup_directories()
@@ -281,7 +286,10 @@ def main():
     else:
         print("WARNING: Google Drive could not be mounted.")
         print("Using local storage instead. Data will not persist across sessions!")
-        print("To try again manually, run: rclone config")
+        print("\nTo manually mount Google Drive later:")
+        print("1. Run: rclone config")
+        print("2. Follow the setup steps for Google Drive")
+        print("3. Run: rclone mount gdrive: /content/drive --daemon --vfs-cache-mode=full")
     print("=" * 60)
     print("To apply environment variables in your current terminal session, run:")
     print("source ~/.bashrc")
