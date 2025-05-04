@@ -5,29 +5,47 @@ from PIL import Image
 from typing import Union
 import zipfile
 import re
+import sys
+import importlib.util
+from pathlib import Path
 
 from .utils import is_zipfile
 
-# Try to import spaCy, but provide fallback if not available
+# Try to import spaCy with better error handling
+SPACY_AVAILABLE = False
+SPACY_MODEL_LOADED = False
+NLP = None
+
 try:
     import spacy
     SPACY_AVAILABLE = True
+    # Check if the model is also available
+    try:
+        # Try to load the model
+        NLP = spacy.load("en_core_web_sm")
+        SPACY_MODEL_LOADED = True
+    except OSError:
+        # Model not found, provide instructions
+        logging.warning("spaCy model 'en_core_web_sm' not found. For optimal text processing, install it with:")
+        logging.warning("python -m spacy download en_core_web_sm")
+        logging.warning("Or run setup/setup_spacy.py to install spaCy and the model correctly.")
+        logging.warning("Using basic text processing fallback for now.")
+    except Exception as e:
+        logging.warning(f"Error loading spaCy model: {str(e)}. Using basic text processing fallback.")
 except ImportError:
-    SPACY_AVAILABLE = False
     logging.warning("spaCy not available, using basic text processing fallback")
+    logging.warning("For optimal text processing, install spaCy by running setup/setup_spacy.py")
 
 class PromptEnhancer:
     def __init__(self):
         self.logger = logging.getLogger("PromptEnhancer")
         
-        # Try to load spaCy model if available
-        if SPACY_AVAILABLE:
-            try:
-                self.nlp = spacy.load("en_core_web_sm")
-                self.logger.info("Using spaCy for enhanced NLP processing")
-            except Exception as e:
-                self.logger.warning(f"Could not load spaCy model: {str(e)}")
-                SPACY_AVAILABLE = False
+        # Set up the NLP pipeline based on what's available
+        self.nlp = NLP  # This will be None if spaCy or model is not available
+        if self.nlp:
+            self.logger.info("Using spaCy for enhanced NLP processing")
+        else:
+            self.logger.info("Using basic text processing (no spaCy)")
         
     def enhance_prompt(self, input_data: Union[str, bytes, os.PathLike]) -> str:
         """
@@ -60,27 +78,65 @@ class PromptEnhancer:
 
     def _enhance_text(self, text: str) -> str:
         """Enhance text prompts using NLP techniques or fallback method"""
-        if SPACY_AVAILABLE:
+        if self.nlp:
             try:
                 doc = self.nlp(text)
                 
                 # Extract entities and syntactic features
                 entities = [ent.text for ent in doc.ents]
                 verbs = [token.lemma_ for token in doc if token.pos_ == "VERB"]
+                nouns = [token.text for token in doc if token.pos_ == "NOUN"]
+                adjectives = [token.text for token in doc if token.pos_ == "ADJ"]
 
-                return f"Generate high-quality output based on these requirements:\nMain subject: {', '.join(entities) if entities else 'general request'}\nActions needed: {', '.join(verbs) if verbs else 'create content'}\nDetailed description: {text}\nInclude appropriate technical specifications and artistic style based on the context."
+                # Build a more comprehensive enhanced prompt
+                return (
+                    "Generate high-quality output based on these requirements:\n"
+                    f"Main subjects: {', '.join(entities) if entities else ', '.join(nouns[:3]) if nouns else 'general request'}\n"
+                    f"Actions needed: {', '.join(verbs) if verbs else 'create content'}\n"
+                    f"Attributes: {', '.join(adjectives[:5]) if adjectives else 'professional'}\n"
+                    f"Detailed description: {text}\n"
+                    "Include appropriate technical specifications and artistic style based on the context."
+                )
             except Exception as e:
                 self.logger.warning(f"spaCy processing failed, using fallback: {str(e)}")
                 # Fall through to fallback method
         
         # Fallback method using basic text processing (no spaCy)
+        return self._enhance_text_fallback(text)
+    
+    def _enhance_text_fallback(self, text: str) -> str:
+        """Basic text processing fallback when spaCy is not available"""
         words = text.split()
         # Extract potential subjects (nouns) using capitalization as a heuristic
-        potential_subjects = [word for word in words if word[0].isupper() and len(word) > 3]
-        # Extract potential verbs using simple regex
-        potential_verbs = re.findall(r'\b(create|make|generate|write|build|design|develop|implement|analyze|explain|describe)\b', text.lower())
+        potential_subjects = [word.strip('.,?!()[]{}\'"`') for word in words if word and word[0].isupper() and len(word) > 3]
         
-        return f"Generate high-quality output based on these requirements:\nMain focus: {', '.join(potential_subjects[:3]) if potential_subjects else 'general request'}\nActions: {', '.join(potential_verbs) if potential_verbs else 'create content'}\nDetailed description: {text}\nInclude appropriate specifications based on the context."
+        # Extract potential verbs using simple regex
+        action_verbs = set([
+            'create', 'make', 'generate', 'write', 'build', 'design', 'develop', 
+            'implement', 'analyze', 'explain', 'describe', 'summarize', 'produce',
+            'compose', 'construct', 'prepare', 'provide', 'craft', 'form', 'arrange'
+        ])
+        potential_verbs = [word for word in words if word.lower() in action_verbs]
+        
+        # Extract keywords by frequency
+        word_freq = {}
+        for word in words:
+            word = word.lower().strip('.,?!()[]{}\'"`')
+            if len(word) > 3 and word not in action_verbs:
+                word_freq[word] = word_freq.get(word, 0) + 1
+        
+        # Get top keywords
+        top_keywords = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:5]
+        top_keywords = [word for word, _ in top_keywords]
+        
+        return (
+            "Generate high-quality output based on these requirements:\n"
+            f"Main focus: {', '.join(potential_subjects[:3]) if potential_subjects else 'general request'}\n"
+            f"Actions: {', '.join(potential_verbs) if potential_verbs else 'create content'}\n"
+            f"Keywords: {', '.join(top_keywords) if top_keywords else 'general content'}\n"
+            f"Detailed description: {text}\n"
+            "Include appropriate specifications based on the context."
+        )
 
     def _enhance_image(self, image_data: bytes) -> str:
         """Enhance prompts from image inputs"""
@@ -246,15 +302,50 @@ def analyze_prompt(prompt: str) -> str:
     
     return best_dataset
 
+# Function to verify spaCy is working correctly
+def verify_spacy():
+    """
+    Verify spaCy is installed and working correctly.
+    Returns a tuple of (is_working, message)
+    """
+    if not SPACY_AVAILABLE:
+        return False, "spaCy is not installed"
+    
+    if not SPACY_MODEL_LOADED:
+        return False, "spaCy model 'en_core_web_sm' is not loaded"
+    
+    try:
+        # Try a simple test
+        doc = NLP("This is a test sentence for spaCy.")
+        tokens = [token.text for token in doc]
+        pos_tags = [(token.text, token.pos_) for token in doc]
+        return True, f"spaCy is working correctly. Tokenized: {tokens[:3]}..."
+    except Exception as e:
+        return False, f"Error using spaCy: {str(e)}"
+
 # Example usage
 if __name__ == "__main__":
+    # Set up logging
+    logging.basicConfig(level=logging.INFO)
+    
+    # Print spaCy status
+    is_working, message = verify_spacy()
+    if is_working:
+        logging.info(f"spaCy status: {message}")
+    else:
+        logging.warning(f"spaCy status: {message}")
+        logging.info("Run setup/setup_spacy.py to fix spaCy installation")
+    
+    # Create the enhancer
     enhancer = PromptEnhancer()
     
-    # Text enhancement
-    print(enhancer.enhance_prompt("Create a futuristic cityscape"))
+    # Test with a sample prompt
+    sample_prompt = "Write a story about a journey through space and time with aliens and robots."
+    enhanced = enhancer.enhance_prompt(sample_prompt)
+    print("\nSample Prompt:", sample_prompt)
+    print("\nEnhanced Prompt:")
+    print(enhanced)
     
-    # File enhancement
-    print(enhancer.enhance_prompt("example.jpg"))
-    
-    # Zip enhancement
-    print(enhancer.enhance_prompt("inputs.zip"))
+    # Test dataset analysis
+    dataset = analyze_prompt(sample_prompt)
+    print(f"\nRecommended dataset: {dataset}")

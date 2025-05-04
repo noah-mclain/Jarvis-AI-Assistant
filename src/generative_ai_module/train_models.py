@@ -157,7 +157,7 @@ if not __name__ == "__main__":
     from .text_generator import TextGenerator
     from .unified_dataset_handler import UnifiedDatasetHandler
     from .evaluation_metrics import EvaluationMetrics
-    from .utils import get_storage_path, sync_to_gdrive, sync_logs, setup_logging, ensure_directory_exists, sync_from_gdrive
+    from .utils import get_storage_path, sync_to_gdrive, sync_logs, setup_logging, ensure_directory_exists, sync_from_gdrive, is_paperspace_environment
 
 class TrainingVisualizer:
     """Class to handle visualization of training metrics"""

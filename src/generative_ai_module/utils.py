@@ -249,4 +249,127 @@ def save_log_file(content, filename=None):
     sync_logs()
     
     return log_path
+
+# Add spaCy utilities
+def is_spacy_available():
+    """Check if spaCy is available in the current environment"""
+    try:
+        import spacy
+        return True, spacy.__version__
+    except ImportError:
+        return False, None
+
+def is_spacy_model_loaded(model_name="en_core_web_sm"):
+    """Check if a specific spaCy model is available and can be loaded"""
+    try:
+        import spacy
+        nlp = spacy.load(model_name)
+        # Test the model with a simple sentence
+        doc = nlp("This is a test sentence.")
+        return True, f"Model {model_name} loaded successfully"
+    except ImportError:
+        return False, "spaCy not installed"
+    except OSError:
+        return False, f"Model {model_name} not found"
+    except Exception as e:
+        return False, f"Error loading model: {str(e)}"
+
+def initialize_spacy(fallback_to_basic=True, log_errors=True):
+    """
+    Initialize spaCy with the en_core_web_sm model if available.
+    
+    Args:
+        fallback_to_basic: If True, will not raise errors but return None if spaCy is unavailable
+        log_errors: If True, will log errors and warnings
+        
+    Returns:
+        nlp: The spaCy NLP object if available, None otherwise
+    """
+    import logging
+    
+    try:
+        import spacy
+        try:
+            nlp = spacy.load("en_core_web_sm")
+            if log_errors:
+                logging.info("spaCy initialized with en_core_web_sm model")
+            return nlp
+        except OSError as e:
+            if log_errors:
+                logging.warning(f"spaCy model not found: {str(e)}")
+                logging.warning("To install the model, run: python -m spacy download en_core_web_sm")
+            if not fallback_to_basic:
+                raise e
+            return None
+        except Exception as e:
+            if log_errors:
+                logging.error(f"Error initializing spaCy: {str(e)}")
+            if not fallback_to_basic:
+                raise e
+            return None
+    except ImportError:
+        if log_errors:
+            logging.warning("spaCy not installed")
+            logging.warning("For better text processing, install spaCy with: pip install spacy")
+        if not fallback_to_basic:
+            raise ImportError("spaCy not installed")
+        return None
+
+def process_text_with_spacy_or_fallback(text, nlp=None):
+    """
+    Process text with spaCy if available, or use a simple fallback method.
+    
+    Args:
+        text: The text to process
+        nlp: Optional spaCy NLP object. If None, will try to initialize
+        
+    Returns:
+        dict: Processed text information (entities, tokens, etc.)
+    """
+    # If nlp is not provided, try to initialize spaCy
+    if nlp is None:
+        nlp = initialize_spacy(fallback_to_basic=True, log_errors=False)
+    
+    # If spaCy is available, use it for processing
+    if nlp is not None:
+        try:
+            doc = nlp(text)
+            return {
+                "entities": [(ent.text, ent.label_) for ent in doc.ents],
+                "tokens": [token.text for token in doc],
+                "pos_tags": [(token.text, token.pos_) for token in doc],
+                "nouns": [token.text for token in doc if token.pos_ == "NOUN"],
+                "verbs": [token.text for token in doc if token.pos_ == "VERB"],
+                "adjectives": [token.text for token in doc if token.pos_ == "ADJ"],
+                "dependency_tree": [(token.text, token.dep_, token.head.text) for token in doc],
+                "sentences": [sent.text for sent in doc.sents]
+            }
+        except Exception:
+            # Fall back to basic processing if spaCy fails
+            pass
+    
+    # Basic fallback processing
+    import re
+    words = text.split()
+    sentences = re.split(r'[.!?]+', text)
+    sentences = [s.strip() for s in sentences if s.strip()]
+    
+    # Basic POS guesses - very rudimentary!
+    nouns = [word for word in words if word[0].isupper() and len(word) > 3]
+    potential_verbs = [word for word in words if word.lower() in {
+        'is', 'are', 'was', 'were', 'have', 'has', 'had', 'do', 'does', 'did',
+        'can', 'could', 'will', 'would', 'shall', 'should', 'may', 'might',
+        'make', 'create', 'generate', 'write', 'build', 'design', 'develop'
+    }]
+    
+    return {
+        "entities": [],  # Empty since we can't detect entities
+        "tokens": words,
+        "pos_tags": [],  # Empty since we can't determine POS
+        "nouns": nouns,
+        "verbs": potential_verbs,
+        "adjectives": [],  # Empty since we can't determine adjectives
+        "dependency_tree": [],  # Empty since we can't determine dependencies
+        "sentences": sentences
+    }
     
