@@ -35,53 +35,71 @@ class MinimalTokenizer:
             # First, fix the import system to avoid ParametricAttention_v2 error
             self._fix_imports()
             
-            # Import only the absolute minimum from spaCy
+            # Try to initialize without any module patching first
             try:
-                # Import just the English language directly to avoid other imports
-                import en_core_web_sm
-                
-                # Get just the tokenizer component
-                self.tokenizer = en_core_web_sm.load().tokenizer
-                self.is_available = True
-                logger.info("Minimal spaCy tokenizer initialized successfully")
-            except ImportError:
-                logger.warning("en_core_web_sm not found, trying direct spaCy import")
-                try:
-                    # Try to import spaCy directly and get English tokenizer
-                    import spacy
-                    self.tokenizer = spacy.blank("en").tokenizer
-                    self.is_available = True
-                    logger.info("Minimal spaCy tokenizer initialized with blank model")
-                except ImportError:
-                    logger.warning("spaCy not available, using fallback tokenizer")
+                self._init_with_direct_import()
+                return  # If this works, we're done
+            except Exception as e:
+                logger.warning(f"Direct import failed: {e}, trying fallback methods")
+            
+            # If direct import failed, try with minimal patching
+            try:
+                self._init_with_minimal_patching()
+            except Exception as e:
+                logger.warning(f"Minimal patching failed: {e}")
+                # Continue to fallback tokenizer
         except Exception as e:
             logger.error(f"Error initializing minimal tokenizer: {e}")
+    
+    def _init_with_direct_import(self):
+        """Try to initialize spaCy directly without any module patching"""
+        import spacy
+        self.nlp = spacy.blank("en")
+        self.tokenizer = self.nlp.tokenizer
+        self.is_available = True
+        logger.info("Minimal spaCy tokenizer initialized with direct import")
+    
+    def _init_with_minimal_patching(self):
+        """Initialize with minimal module patching"""
+        # Create dummy modules only as needed
+        class DummyModule:
+            def __init__(self, name):
+                self.__name__ = name
+                # Add ParametricAttention_v2 attribute to avoid the common error
+                if name == "thinc.api":
+                    self.ParametricAttention_v2 = type("ParametricAttention_v2", (), {})
+            
+            def __getattr__(self, attr_name):
+                # For 'registry()' error, return a callable that accepts no args
+                if attr_name == "registry":
+                    return lambda: None
+                # Return dummy objects for other attributes
+                return type(attr_name, (), {})
+        
+        # Patch just the minimum modules needed
+        for module_name in ['thinc.api']:
+            if module_name in sys.modules:
+                del sys.modules[module_name]
+            sys.modules[module_name] = DummyModule(module_name)
+        
+        # Try importing again
+        import spacy
+        
+        # Use only the most minimal functionality
+        self.nlp = spacy.blank("en")
+        self.tokenizer = self.nlp.tokenizer
+        self.is_available = True
+        logger.info("Minimal spaCy tokenizer initialized with minimal patching")
     
     def _fix_imports(self):
         """Fix problematic imports by manipulating the module system"""
         try:
-            # Create a simple dummy module class
-            class DummyModule:
-                def __init__(self, name):
-                    self.__name__ = name
-                    self.__dict__["ParametricAttention_v2"] = type("ParametricAttention_v2", (), {})
-                
-                def __getattr__(self, name):
-                    # Return a dummy object for any attribute
-                    return type(name, (), {})()
-            
-            # Replace problematic modules
-            for module_name in ['thinc.api', 'thinc.layers', 'thinc.model', 'thinc.config']:
-                if module_name in sys.modules:
-                    del sys.modules[module_name]
-                sys.modules[module_name] = DummyModule(module_name)
-            
-            # Set other environment variables that might help
+            # Set environment variables that might help
             os.environ["SPACY_WARNING_IGNORE"] = "W008,W107,W101"
             
             return True
         except Exception as e:
-            logger.error(f"Error fixing imports: {e}")
+            logger.error(f"Error setting environment variables: {e}")
             return False
     
     def tokenize(self, text):

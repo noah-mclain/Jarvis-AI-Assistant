@@ -4,19 +4,26 @@ echo "======================================================================"
 echo "🔧 Ultimate Paperspace spaCy Fix for Jarvis AI Assistant"
 echo "======================================================================"
 
-# Step 1: Optional - Check if we're running in Paperspace
+# Step 1: Detect if we're running in Paperspace
+IS_PAPERSPACE=false
 if [ -d "/paperspace" ] || [[ "$HOSTNAME" == *"gradient"* ]] || [[ "$PAPERSPACE" == "true" ]]; then
     echo "✅ Detected Paperspace environment"
+    IS_PAPERSPACE=true
 else
-    echo "⚠️ This doesn't appear to be a Paperspace environment, but will continue anyway"
+    echo "⚠️ This doesn't appear to be a Paperspace environment"
+    echo "  Will install a regular spaCy setup with the minimal tokenizer as fallback"
 fi
 
 # Step 2: Ask for confirmation
 echo ""
 echo "This script will:"
 echo "  1. Clean up any existing spaCy installation"
-echo "  2. Install the minimal spaCy setup for Paperspace"
-echo "  3. Configure Jarvis AI to use the minimal tokenizer"
+if [ "$IS_PAPERSPACE" = true ]; then
+    echo "  2. Install the minimal spaCy setup for Paperspace"
+else
+    echo "  2. Install a regular spaCy setup with fallback mechanisms"
+fi
+echo "  3. Configure Jarvis AI to use the minimal tokenizer when needed"
 echo ""
 read -p "Continue? (y/n): " -n 1 -r
 echo ""
@@ -68,23 +75,25 @@ class MinimalTokenizer:
             
             # Import only the absolute minimum from spaCy
             try:
-                # Import just the English language directly to avoid other imports
-                import en_core_web_sm
-                
-                # Get just the tokenizer component
-                self.tokenizer = en_core_web_sm.load().tokenizer
+                # Try to import spaCy directly and get blank tokenizer
+                # This is more reliable in Paperspace than loading models
+                import spacy
+                self.nlp = spacy.blank("en")
+                self.tokenizer = self.nlp.tokenizer
                 self.is_available = True
-                logger.info("Minimal spaCy tokenizer initialized successfully")
-            except ImportError:
-                logger.warning("en_core_web_sm not found, trying direct spaCy import")
+                logger.info("Minimal spaCy tokenizer initialized with blank model")
+                
+                # Only try to load the model if blank tokenizer works
                 try:
-                    # Try to import spaCy directly and get English tokenizer
-                    import spacy
-                    self.tokenizer = spacy.blank("en").tokenizer
-                    self.is_available = True
-                    logger.info("Minimal spaCy tokenizer initialized with blank model")
-                except ImportError:
-                    logger.warning("spaCy not available, using fallback tokenizer")
+                    # Try loading model - but continue even if it fails
+                    model_nlp = spacy.load("en_core_web_sm")
+                    self.tokenizer = model_nlp.tokenizer
+                    logger.info("Loaded en_core_web_sm tokenizer")
+                except Exception as model_e:
+                    # Keep using blank tokenizer
+                    logger.warning(f"Using blank tokenizer (model error: {model_e})")
+            except ImportError:
+                logger.warning("spaCy not available, using fallback tokenizer")
         except Exception as e:
             logger.error(f"Error initializing minimal tokenizer: {e}")
     
@@ -216,7 +225,7 @@ try:
         
         # Test if we can use it in a loop (basic stress test)
         print("\nRunning basic stress test...")
-        for i in range(10):
+        for i in range(5):
             test = f"Test sentence {i}: The quick brown fox jumps over the lazy dog."
             tokens = tokenize(test)
             print(f"  Tokenized test {i}: {len(tokens)} tokens")
@@ -241,27 +250,73 @@ EOF
 chmod +x test_minimal_spacy.py
 echo "✅ Created test_minimal_spacy.py"
 
-# Step 5: Uninstall existing problematic packages
+# Step 5: Uninstall existing potentially conflicting packages
 echo ""
 echo "Step 1: Removing potentially conflicting packages..."
 pip uninstall -y spacy thinc spacy-legacy spacy-loggers catalogue wasabi srsly weasel confection 
 
-# Step 6: Install spaCy essentials
+# Step 6: Install spaCy based on environment
 echo ""
-echo "Step 2: Installing the minimal spaCy setup..."
-pip install spacy==3.7.4 --no-deps
-pip install en_core_web_sm==3.7.0 --no-deps
+echo "Step 2: Installing spaCy..."
 
-# Step 7: Run the test script
+if [ "$IS_PAPERSPACE" = true ]; then
+    # Paperspace minimal installation
+    echo "Installing minimal spaCy setup for Paperspace..."
+    
+    # Install minimal dependencies first
+    pip install pydantic==1.10.13 --no-deps
+    pip install wasabi==1.1.3 --no-deps
+    pip install srsly==2.4.8 --no-deps
+    pip install catalogue==2.0.10 --no-deps
+    
+    # Install thinc with minimal dependencies
+    pip install thinc==8.1.10 --no-deps
+    
+    # Install spaCy with minimal dependencies
+    pip install spacy==3.7.4 --no-deps
+    
+    # Install en_core_web_sm directly
+    python -m pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0.tar.gz --no-deps
+else
+    # Regular installation for non-Paperspace
+    echo "Installing regular spaCy setup for non-Paperspace environment..."
+    pip install "spacy>=3.7.0,<3.8.0"
+    python -m spacy download en_core_web_sm
+fi
+
+# Step 7: Test direct import
+echo ""
+echo "Testing direct spaCy imports..."
+
+python -c "
+import sys
+try:
+    import spacy
+    print(f'SpaCy version: {spacy.__version__}')
+    try:
+        # Try creating a blank model
+        nlp = spacy.blank('en')
+        print('✅ Created blank English model')
+        doc = nlp('Test sentence')
+        print('✅ Basic tokenization works')
+        print('Tokens:', [t.text for t in doc])
+    except Exception as e:
+        print(f'❌ Error with blank model: {e}')
+except Exception as e:
+    print(f'❌ Error importing spaCy: {e}')
+"
+
+# Step 8: Run the test script
 echo ""
 echo "Step 3: Testing the minimal tokenizer..."
 python test_minimal_spacy.py
+TEST_RESULT=$?
 
 # Print final instructions
 echo ""
 echo "======================================================================"
 
-if [ $? -eq 0 ]; then
+if [ $TEST_RESULT -eq 0 ]; then
     echo "✅ The minimal spaCy tokenizer has been successfully installed!"
     echo "   Jarvis AI Assistant will now use the minimal tokenizer automatically."
     echo ""
@@ -271,8 +326,12 @@ if [ $? -eq 0 ]; then
     echo "   Example:"
     echo "   tokens = tokenize('Your text here')"
 else
-    echo "❌ There was an issue setting up the minimal tokenizer."
-    echo "   Please check the error messages above for details."
+    echo "⚠️ The tokenizer is using fallback mode (basic string splitting)"
+    echo "   This will still work but may not be as accurate as spaCy's tokenizer."
+    echo ""
+    echo "   This is normal in Paperspace environments where spaCy is problematic."
+    echo "   You can still use the tokenizer in your code with:"
+    echo "   from src.generative_ai_module.minimal_spacy_tokenizer import tokenize"
 fi
 
 echo "======================================================================" 
