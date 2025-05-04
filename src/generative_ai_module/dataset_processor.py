@@ -127,9 +127,15 @@ class DatasetProcessor:
             input_tensor = torch.zeros(sequence_length, n_chars)
             for t, char in enumerate(input_seq):
                 idx = char_to_idx.get(char, char_to_idx[unknown_token])
+                # Ensure the index is within bounds of the tensor dimension
+                if idx >= n_chars:
+                    idx = char_to_idx[unknown_token]  # Default to unknown token if out of range
                 input_tensor[t, idx] = 1.0
                 
             target_idx = char_to_idx.get(target_char, char_to_idx[unknown_token])
+            # Ensure target index is within bounds
+            if target_idx >= n_chars:
+                target_idx = char_to_idx[unknown_token]
             target_tensor = torch.tensor([target_idx])
             
             sequences.append((input_tensor, target_tensor))
