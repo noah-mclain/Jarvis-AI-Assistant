@@ -319,92 +319,99 @@ class TrainingVisualizer:
 
 
 def parse_args():
-    """Parse command-line arguments for training"""
-    parser = argparse.ArgumentParser(description="Train models for Jarvis AI")
+    """Parse command line arguments"""
+    parser = argparse.ArgumentParser(description="Train models for Jarvis AI Assistant")
     
-    # Basic arguments
-    parser.add_argument("--model_type", type=str, choices=["text", "code"], default="text",
-                      help="Type of model to train (text or code)")
-    parser.add_argument("--dataset", type=str, default="writing_prompts",
-                      help="Dataset to use for training")
-    parser.add_argument("--dataset_path", type=str, default=None,
-                      help="Path to the dataset (if not in standard location)")
-    parser.add_argument("--output_dir", type=str, default=None,
-                      help="Directory to save the trained model")
-    
-    # Model configuration
-    parser.add_argument("--model_name", type=str, default=None,
-                      help="Name of pretrained model to fine-tune")
-    parser.add_argument("--model_size", type=str, 
-                      choices=["small", "medium", "large", "xl", "deepseek-small", "deepseek-medium"],
-                      default="small", help="Size of the model to train")
+    # Basic options
+    parser.add_argument('--model_type', type=str, choices=['text', 'code'], 
+                       help='Type of model to train')
+    parser.add_argument('--dataset', type=str, default=None,
+                       help='Dataset name, path, or comma-separated list of HuggingFace datasets')
+    parser.add_argument('--dataset_path', type=str, default=None,
+                       help='Path to the dataset')
+    parser.add_argument('--output_dir', type=str, default=None,
+                       help='Output directory for model and results')
+    parser.add_argument('--model_name', type=str, default=None,
+                       help='Name of model to use for training')
+    parser.add_argument('--model_size', type=str, choices=['small', 'medium', 'large', 'xl', 
+                                                     'deepseek-small', 'deepseek-medium'],
+                       default='medium', help='Size of model to use')
     
     # Training parameters
-    parser.add_argument("--epochs", type=int, default=3,
-                      help="Number of training epochs")
-    parser.add_argument("--batch_size", type=int, default=4,
-                      help="Batch size for training")
-    parser.add_argument("--learning_rate", type=float, default=2e-5,
-                      help="Learning rate for training")
-    parser.add_argument("--max_length", type=int, default=512,
-                      help="Maximum sequence length")
-    parser.add_argument("--gradient_accumulation_steps", type=int, default=1,
-                      help="Number of update steps to accumulate before performing a backward/update pass")
-    parser.add_argument("--no_fp16", action="store_true",
-                      help="Disable mixed-precision training")
+    parser.add_argument('--epochs', type=int, default=3,
+                       help='Number of training epochs')
+    parser.add_argument('--batch_size', type=int, default=64,
+                       help='Batch size for training')
+    parser.add_argument('--learning_rate', type=float, default=2e-5,
+                       help='Learning rate for training')
+    parser.add_argument('--max_length', type=int, default=512,
+                       help='Maximum sequence length')
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
+                       help='Number of gradient accumulation steps')
     
-    # PEFT (Parameter-Efficient Fine-Tuning) options
-    parser.add_argument("--no_peft", action="store_true",
-                      help="Disable PEFT for fine-tuning")
-    parser.add_argument("--peft_type", type=str, choices=["lora", "prefix", "prompt"], 
-                      default="lora", help="Type of PEFT method to use")
-    parser.add_argument("--use_int8", action="store_true",
-                      help="Enable int8 quantization")
-    parser.add_argument("--lora_r", type=int, default=16,
-                      help="LoRA attention dimension")
-    parser.add_argument("--lora_alpha", type=int, default=32,
-                      help="LoRA alpha parameter")
-    parser.add_argument("--lora_dropout", type=float, default=0.05,
-                      help="Dropout probability for LoRA layers")
+    # Optimization options
+    parser.add_argument('--no_fp16', action='store_true',
+                       help='Disable FP16 training')
+    parser.add_argument('--no_peft', action='store_true',
+                       help='Disable parameter-efficient fine-tuning (PEFT)')
+    parser.add_argument('--peft_type', type=str, choices=['lora', 'prefix', 'prompt'],
+                       default='lora', help='Type of PEFT to use')
+    parser.add_argument('--use_int8', action='store_true',
+                       help='Use int8 quantization')
     
-    # Training strategy parameters
-    parser.add_argument("--evaluation_strategy", type=str, 
-                      choices=["steps", "epoch", "no"], default="epoch",
-                      help="The evaluation strategy to use")
-    parser.add_argument("--save_strategy", type=str, 
-                      choices=["steps", "epoch", "no"], default="epoch",
-                      help="The checkpoint save strategy to use")
-    parser.add_argument("--logging_steps", type=int, default=10,
-                      help="Number of steps between logging")
-    parser.add_argument("--run_name", type=str, default=None,
-                      help="Name for this training run")
+    # LoRA parameters
+    parser.add_argument('--lora_r', type=int, default=16,
+                       help='Rank for LoRA adapters')
+    parser.add_argument('--lora_alpha', type=int, default=32,
+                       help='Alpha for LoRA adapters')
+    parser.add_argument('--lora_dropout', type=float, default=0.05,
+                       help='Dropout for LoRA adapters')
     
-    # Hardware options
-    parser.add_argument("--cpu_only", action="store_true",
-                      help="Use CPU only (no GPU)")
+    # Trainer parameters
+    parser.add_argument('--evaluation_strategy', type=str, choices=['steps', 'epoch', 'no'],
+                       default='epoch', help='Evaluation strategy')
+    parser.add_argument('--save_strategy', type=str, choices=['steps', 'epoch', 'no'],
+                       default='epoch', help='Save strategy')
+    parser.add_argument('--logging_steps', type=int, default=10,
+                       help='Logging steps')
+    parser.add_argument('--run_name', type=str, default=None,
+                       help='Run name for logging')
     
-    # Dependency management
-    parser.add_argument("--install_dependencies", action="store_true",
-                      help="Automatically install required dependencies")
+    # Execution options
+    parser.add_argument('--cpu_only', action='store_true',
+                       help='Force CPU usage even if GPU is available')
+    parser.add_argument('--install_dependencies', action='store_true',
+                       help='Install dependencies before running')
     
-    # Enhanced evaluation options
-    parser.add_argument("--no_enhanced_eval", action="store_true",
-                      help="Disable enhanced evaluation metrics")
-    parser.add_argument("--eval_metrics_dir", type=str, default=None,
-                      help="Directory for saving evaluation metrics")
-    parser.add_argument("--visualize_metrics", action="store_true",
-                      help="Generate visualizations of evaluation metrics")
-    parser.add_argument("--eval_samples", type=int, default=5,
-                      help="Number of samples to use for enhanced evaluation")
-    parser.add_argument("--eval_bert_model", type=str, 
-                      default="microsoft/deberta-xlarge-mnli",
-                      help="Model to use for BERTScore computation")
-    parser.add_argument("--collect_human_feedback", action="store_true",
-                      help="Enable interactive collection of human feedback")
-    parser.add_argument("--report_name", type=str, default=None,
-                      help="Name for the evaluation report")
+    # Evaluation parameters
+    parser.add_argument('--no_enhanced_eval', action='store_true',
+                       help='Disable enhanced evaluation with BERTScore, ROUGE, etc.')
+    parser.add_argument('--eval_metrics_dir', type=str, default='evaluation_metrics',
+                       help='Directory to store evaluation metrics')
+    parser.add_argument('--visualize_metrics', action='store_true',
+                       help='Create visualizations of training metrics')
+    parser.add_argument('--eval_samples', type=int, default=10,
+                       help='Number of samples to use for evaluation')
+    parser.add_argument('--eval_bert_model', type=str, 
+                       default='bert-base-uncased',
+                       help='BERT model to use for evaluation metrics')
     
-    return parser.parse_args()
+    # Feedback options
+    parser.add_argument('--collect_human_feedback', action='store_true',
+                       help='Collect human feedback on model outputs')
+    parser.add_argument('--report_name', type=str, default=None,
+                       help='Name for the evaluation report')
+    
+    # Parse the arguments
+    args = parser.parse_args()
+    
+    # Process dataset if it contains comma-separated values
+    if args.dataset and ',' in args.dataset:
+        # Store the original comma-separated string for use with HuggingFace datasets
+        args.dataset_list = [ds.strip() for ds in args.dataset.split(',')]
+        logger.info(f"Using multiple datasets: {args.dataset_list}")
+    
+    return args
 
 
 def install_dependencies():
@@ -1313,119 +1320,138 @@ def main():
     
     # Create output directory
     if not args.output_dir:
-        args.output_dir = f"models/{args.model_type}_{args.dataset}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        dataset_name = args.dataset.replace('/', '_') if args.dataset else "unknown"
+        args.output_dir = f"models/{args.model_type}_{dataset_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     os.makedirs(args.output_dir, exist_ok=True)
     
     # Set up evaluation metrics options
-    use_enhanced_eval = True
-    eval_metrics_dir = os.path.join(args.output_dir, "evaluation_metrics")
+    use_enhanced_eval = not args.no_enhanced_eval
+    eval_metrics_dir = args.eval_metrics_dir or os.path.join(args.output_dir, "evaluation_metrics")
+    os.makedirs(eval_metrics_dir, exist_ok=True)
+    
+    # Process datasets
+    datasets_to_train = []
+    
+    # Handle comma-separated HuggingFace datasets
+    if hasattr(args, 'dataset_list') and args.dataset_list:
+        # Use the list of HuggingFace datasets
+        for dataset in args.dataset_list:
+            datasets_to_train.append({
+                'name': dataset,
+                'path': dataset,  # The dataset path is the same as the name for HuggingFace datasets
+                'is_huggingface': True
+            })
+    # Handle single dataset (which could be a HuggingFace dataset with '/' in the name)
+    elif args.dataset:
+        is_huggingface = '/' in args.dataset
+        dataset_path = args.dataset  # Use the dataset name as the path for HuggingFace datasets
+        
+        if not is_huggingface:
+            # Local dataset - check if it exists
+            default_path = f"data/{args.dataset}"
+            if os.path.exists(default_path):
+                dataset_path = default_path
+            elif args.dataset_path:
+                dataset_path = args.dataset_path
+            elif not os.path.exists(args.dataset):
+                print(f"Dataset not found at {default_path}")
+                print("Please provide the dataset path with --dataset_path")
+                return 1
+        
+        datasets_to_train.append({
+            'name': args.dataset,
+            'path': dataset_path,
+            'is_huggingface': is_huggingface
+        })
+    else:
+        print("No dataset specified. Please provide a dataset with --dataset.")
+        return 1
+    
+    # Determine model name based on size if not provided
+    model_name = args.model_name
+    if not model_name:
+        if args.model_size == "small":
+            model_name = "gpt2"
+        elif args.model_size == "medium":
+            model_name = "gpt2-medium"
+        elif args.model_size == "large":
+            model_name = "gpt2-large"
+        elif args.model_size == "xl":
+            model_name = "gpt2-xl"
+        elif args.model_size == "deepseek-small":
+            model_name = "deepseek-ai/deepseek-coder-1.3b-base"
+        elif args.model_size == "deepseek-medium":
+            model_name = "deepseek-ai/deepseek-coder-6.7b-base"
+        else:
+            model_name = "gpt2"
     
     # Handle specific model types
     if args.model_type == "text":
-        # Train text generation model
-        print(f"Training text generation model on {args.dataset} dataset")
+        # Process each dataset
+        all_results = {}
         
-        # Set up dataset path
-        dataset_path = f"data/{args.dataset}"
-        if not os.path.exists(dataset_path):
-            print(f"Dataset not found at {dataset_path}")
-            print("Please provide the dataset path with --dataset_path")
-            if args.dataset_path:
-                dataset_path = args.dataset_path
-            else:
-                return 1
-        
-        # Determine model name based on size
-        model_name = args.model_name
-        if not model_name:
-            if args.model_size == "small":
-                model_name = "gpt2"
-            elif args.model_size == "medium":
-                model_name = "gpt2-medium"
-            elif args.model_size == "large":
-                model_name = "gpt2-large"
-            elif args.model_size == "xl":
-                model_name = "gpt2-xl"
-            elif args.model_size == "deepseek-small":
-                model_name = "deepseek-ai/deepseek-coder-1.3b-base"
-            elif args.model_size == "deepseek-medium":
-                model_name = "deepseek-ai/deepseek-coder-6.7b-base"
-            else:
-                model_name = "gpt2"
-        
-        # Train the model
-        trainer, results = train_model(
-            model_name=model_name,
-            dataset_path=dataset_path,
-            output_dir=args.output_dir,
-            epochs=args.epochs,
-            batch_size=args.batch_size,
-            learning_rate=args.learning_rate,
-            max_length=args.max_length,
-            use_peft=not args.no_peft,
-            peft_type=args.peft_type,
-            use_int8=args.use_int8,
-            lora_r=args.lora_r,
-            lora_alpha=args.lora_alpha,
-            lora_dropout=args.lora_dropout,
-            gradient_accumulation_steps=args.gradient_accumulation_steps,
-            evaluation_strategy=args.evaluation_strategy,
-            save_strategy=args.save_strategy,
-            logging_steps=args.logging_steps,
-            fp16=not args.no_fp16,
-            run_name=args.run_name or f"{args.model_type}_{args.dataset}",
-            use_enhanced_eval=use_enhanced_eval,
-            eval_metrics_dir=eval_metrics_dir
-        )
-        
-        # Display results
-        if trainer and results:
-            train_result = results.get("train_result", {})
-            enhanced_eval = results.get("enhanced_eval_results", {})
+        for dataset_info in datasets_to_train:
+            dataset_name = dataset_info['name']
+            dataset_path = dataset_info['path']
+            is_huggingface = dataset_info['is_huggingface']
             
-            print("\n" + "="*40)
+            print(f"\n{'='*50}")
+            print(f"Training text generation model on {dataset_name} dataset")
+            print(f"{'='*50}")
+            
+            # For HuggingFace datasets, we'll use the dataset processor's ability to handle them
+            if is_huggingface:
+                print(f"Processing HuggingFace dataset: {dataset_name}")
+                # dataset_path is already set to the HuggingFace dataset name
+            else:
+                print(f"Processing local dataset from: {dataset_path}")
+            
+            # Create a dataset-specific output directory
+            dataset_output_dir = os.path.join(args.output_dir, dataset_name.replace('/', '_'))
+            os.makedirs(dataset_output_dir, exist_ok=True)
+            
+            # Train on this dataset
+            dataset_metrics_dir = os.path.join(eval_metrics_dir, dataset_name.replace('/', '_'))
+            os.makedirs(dataset_metrics_dir, exist_ok=True)
+            
+            try:
+                # Process the dataset and train the model
+                result = train_text_model(
+                    dataset_name=dataset_name,
+                    args=args,
+                    force_gpu=not args.cpu_only
+                )
+                
+                if result:
+                    all_results[dataset_name] = result
+                    print(f"Successfully trained on {dataset_name}")
+                else:
+                    print(f"Failed to train on {dataset_name}")
+            except Exception as e:
+                print(f"Error training on {dataset_name}: {str(e)}")
+                import traceback
+                traceback.print_exc()
+        
+        # Summarize results
+        if all_results:
+            print("\n" + "="*50)
             print("Training Complete!")
-            print("="*40)
-            
-            print(f"\nTraining metrics:")
-            if hasattr(train_result, "metrics"):
-                for key, value in train_result.metrics.items():
-                    print(f"  {key}: {value}")
-            
-            print(f"\nModel saved to: {args.output_dir}")
-            
-            # Report enhanced evaluation results if available
-            if enhanced_eval:
-                print("\nEnhanced Evaluation Results:")
-                
-                if "aggregated_metrics" in enhanced_eval:
-                    print("\nAggregated Metrics:")
-                    for metric, values in enhanced_eval["aggregated_metrics"].items():
-                        if isinstance(values, dict) and "mean" in values:
-                            print(f"  {metric}: {values['mean']:.4f} (±{values['std']:.4f})")
-                
-                if "metrics_by_dataset" in enhanced_eval:
-                    datasets = enhanced_eval["metrics_by_dataset"].keys()
-                    print(f"\nEvaluated on {len(datasets)} dataset(s): {', '.join(datasets)}")
-                
-                if "samples" in enhanced_eval:
-                    print(f"\nEvaluation included {len(enhanced_eval['samples'])} sample(s)")
-                
-                # Visualizations summary
-                vis_dir = os.path.join(args.output_dir, "evaluation_visualizations")
-                if os.path.exists(vis_dir) and os.listdir(vis_dir):
-                    print(f"\nVisualization plots available in: {vis_dir}")
+            print("="*50)
+            print(f"\nTrained on {len(all_results)} dataset(s):")
+            for dataset_name in all_results.keys():
+                print(f"  - {dataset_name}")
+            print(f"\nModels saved to: {args.output_dir}")
             
             # Sync to Google Drive if in Paperspace
             if is_paperspace_environment():
                 try:
                     from src.generative_ai_module.utils import sync_to_gdrive
                     sync_to_gdrive(args.output_dir)
-                    print(f"Model and evaluation results synced to Google Drive")
+                    print(f"Models and evaluation results synced to Google Drive")
                 except Exception as e:
                     print(f"Error syncing to Google Drive: {e}")
         else:
-            print("Training failed. Check the logs for details.")
+            print("No datasets were successfully trained. Check the logs for details.")
     
     elif args.model_type == "code":
         # Train code generation model

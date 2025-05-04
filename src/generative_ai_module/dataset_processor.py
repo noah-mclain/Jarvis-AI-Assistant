@@ -879,36 +879,294 @@ The chain rule is powerful because it allows you to break down complex derivativ
     
     def prepare_dataset(self, source='persona_chat', split='train', 
                        sequence_length=100, batch_size=64, max_samples=None, 
-                       cache_dir=None, subset=None):
+                       cache_dir=None, subset=None, output_dir=None):
         """
-        Unified method to prepare any supported dataset for training
+        Prepare a dataset for training
         
         Args:
-            source: Source dataset name or path
-            split: Dataset split ('train', 'test', or 'validation')
+            source: Dataset name/path, can be a standard dataset or a HuggingFace dataset name (e.g., 'agie-ai/OpenAssistant-oasst1')
+            split: Dataset split (train, validation, test)
             sequence_length: Length of sequences
             batch_size: Batch size
-            max_samples: Maximum number of samples to load (None for all)
-            cache_dir: Optional directory to cache the downloaded dataset
-            subset: Specific subset for datasets that support it (like The Pile)
+            max_samples: Maximum number of samples to load
+            cache_dir: Optional directory to cache the dataset
+            subset: Optional subset name for datasets with subsets
+            output_dir: Optional directory to save processed datasets
             
         Returns:
-            Batched dataset ready for training
+            Dictionary with dataset information
         """
-        # Load and preprocess text data based on dataset source
-        if source == 'persona_chat':
-            raw_text = self.load_persona_chat(split, max_samples, cache_dir)
-        elif source == 'writing_prompts':
-            raw_text = self.load_writing_prompts(split, max_samples, cache_dir)
-        elif source == 'pile':
-            raw_text = self.load_pile_dataset(subset, split, max_samples, cache_dir)
-        elif source == 'openassistant':
-            raw_text = self.load_openassistant_dataset(split, max_samples, cache_dir)
-        elif source == 'gpteacher':
-            raw_text = self.load_gpteacher_dataset(split, max_samples, cache_dir)
-        else:
-            # Treat as path to local file or directory
-            raw_text = self.load_data(source)
+        self.sequence_length = sequence_length
         
-        # Create batches
-        return self.prepare_text_batches(raw_text, sequence_length, batch_size)
+        # Check if source is a HuggingFace dataset (containing a slash)
+        is_huggingface_dataset = '/' in source
+        
+        # Output directory for processed datasets
+        if output_dir is None:
+            output_dir = os.path.join('datasets', 'processed')
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # First, check if we already have a preprocessed version
+        dataset_name = source.replace('/', '_') if is_huggingface_dataset else source
+        output_path = os.path.join(output_dir, f"{dataset_name}_{split}_preprocessed.pt")
+        
+        if os.path.exists(output_path):
+            print(f"Loading preprocessed dataset from {output_path}...")
+            return self.load_preprocessed_data(output_path)
+        
+        print(f"Preparing dataset: {source} (split: {split})")
+        
+        # Special handling for standard datasets
+        if not is_huggingface_dataset:
+            if source == 'writing_prompts':
+                raw_text = self.load_writing_prompts(split=split, max_samples=max_samples, cache_dir=cache_dir)
+            elif source == 'persona_chat':
+                raw_text = self.load_persona_chat(split=split, max_samples=max_samples, cache_dir=cache_dir)
+            elif source == 'pile':
+                raw_text = self.load_pile_dataset(subset=subset, split=split, max_samples=max_samples, cache_dir=cache_dir)
+            elif source == 'openassistant':
+                raw_text = self.load_openassistant_dataset(split=split, max_samples=max_samples, cache_dir=cache_dir)
+            elif source == 'gpteacher':
+                raw_text = self.load_gpteacher_dataset(split=split, max_samples=max_samples, cache_dir=cache_dir)
+            elif os.path.exists(source):
+                # Local file or directory
+                raw_text = self.load_data(source)
+            else:
+                raise ValueError(f"Unknown dataset source: {source}")
+        else:
+            # Handle HuggingFace datasets directly
+            try:
+                print(f"Loading HuggingFace dataset: {source}")
+                hf_dataset = load_dataset(source, split=split, cache_dir=cache_dir)
+                
+                # Limit samples if specified
+                if max_samples is not None and max_samples < len(hf_dataset):
+                    hf_dataset = hf_dataset.select(range(max_samples))
+                    
+                # Extract text based on dataset format
+                raw_text = self._process_huggingface_dataset(hf_dataset, source)
+                
+            except Exception as e:
+                print(f"Error loading HuggingFace dataset {source}: {str(e)}")
+                raise
+        
+        # Create sequences and batches
+        print(f"Creating sequences with length {sequence_length}...")
+        sequences = self.create_sequences(raw_text, sequence_length)
+        
+        print(f"Creating batches with batch size {batch_size}...")
+        batches = self.create_batches(sequences, batch_size=batch_size)
+        
+        dataset = {
+            'batches': batches,
+            'metadata': {
+                'source': source,
+                'split': split,
+                'sequence_length': sequence_length,
+                'batch_size': batch_size,
+                'sample_count': len(sequences),
+                'batch_count': len(batches)
+            }
+        }
+        
+        # Save preprocessed data for future use
+        print(f"Saving preprocessed dataset to {output_path}...")
+        self.save_tokenized_data(dataset, os.path.dirname(output_path), os.path.basename(output_path))
+        
+        return dataset
+
+    def _process_huggingface_dataset(self, dataset, source_name):
+        """
+        Process a HuggingFace dataset into a format suitable for training
+        
+        Args:
+            dataset: HuggingFace dataset object
+            source_name: Name of the dataset source
+            
+        Returns:
+            Processed text ready for sequence creation
+        """
+        print(f"Processing HuggingFace dataset with {len(dataset)} samples")
+        
+        # Try to find text fields based on common field names
+        text_fields = []
+        sample_item = dataset[0] if len(dataset) > 0 else {}
+        
+        # Check for known text fields
+        potential_fields = ['text', 'content', 'dialogue', 'prompt', 'completion', 
+                            'input', 'output', 'question', 'answer', 'instruction',
+                            'response', 'conversation', 'source']
+        
+        for field in potential_fields:
+            if field in sample_item and isinstance(sample_item[field], str):
+                text_fields.append(field)
+        
+        # Special handling for specific datasets
+        if 'OpenAssistant-oasst1' in source_name:
+            return self._process_openassistant_huggingface(dataset)
+        elif 'GPTeacher' in source_name:
+            return self._process_gpteacher_huggingface(dataset)
+        elif 'Synthetic-Persona-Chat' in source_name:
+            return self._process_persona_chat_huggingface(dataset)
+        elif 'writingprompts' in source_name.lower():
+            return self._process_writing_prompts_huggingface(dataset)
+        elif 'pile' in source_name.lower():
+            return self._process_pile_huggingface(dataset)
+        elif 'code_search_net' in source_name.lower():
+            return self._process_code_search_net_huggingface(dataset)
+        
+        # Generic processing if no special handling
+        if not text_fields:
+            # If no text fields found, try to use the first string field
+            for key, value in sample_item.items():
+                if isinstance(value, str) and len(value) > 10:  # Require some minimum length
+                    text_fields.append(key)
+                    break
+        
+        if not text_fields:
+            raise ValueError(f"Could not identify text fields in dataset {source_name}")
+        
+        print(f"Using text fields: {text_fields}")
+        
+        # Combine text from identified fields
+        combined_texts = []
+        for item in tqdm(dataset, desc="Processing samples"):
+            item_texts = []
+            for field in text_fields:
+                if field in item and item[field]:
+                    item_texts.append(str(item[field]))
+            
+            if item_texts:
+                combined_texts.append("\n".join(item_texts))
+        
+        return "\n\n".join(combined_texts)
+
+    def _process_openassistant_huggingface(self, dataset):
+        """Process OpenAssistant dataset from HuggingFace"""
+        conversations = []
+        
+        # Group by message_tree_id to reconstruct conversations
+        conversation_map = {}
+        
+        for item in tqdm(dataset, desc="Processing OpenAssistant"):
+            message_id = item.get('message_id')
+            parent_id = item.get('parent_id')
+            text = item.get('text', '')
+            role = item.get('role', '')
+            message_tree_id = item.get('message_tree_id')
+            
+            if not message_tree_id or not text:
+                continue
+            
+            if message_tree_id not in conversation_map:
+                conversation_map[message_tree_id] = []
+            
+            conversation_map[message_tree_id].append({
+                'id': message_id,
+                'parent_id': parent_id,
+                'text': text,
+                'role': role
+            })
+        
+        # Convert to formatted conversations
+        for tree_id, messages in conversation_map.items():
+            # Create a map for quick parent lookup
+            id_to_message = {msg['id']: msg for msg in messages if msg['id']}
+            
+            # Find root messages (no parent)
+            roots = [msg for msg in messages if not msg['parent_id']]
+            
+            if not roots:
+                continue
+            
+            # Process each conversation tree
+            for root in roots:
+                conversation = []
+                conversation.append(f"USER: {root['text']}")
+                
+                # Find direct children (responses)
+                children = [msg for msg in messages if msg.get('parent_id') == root['id']]
+                
+                for child in children:
+                    if child['role'] == 'assistant':
+                        conversation.append(f"ASSISTANT: {child['text']}")
+                
+                conversations.append("\n".join(conversation))
+        
+        return "\n\n".join(conversations)
+
+    def _process_gpteacher_huggingface(self, dataset):
+        """Process GPTeacher dataset from HuggingFace"""
+        conversations = []
+        
+        for item in tqdm(dataset, desc="Processing GPTeacher"):
+            if 'instruction' in item and 'response' in item:
+                conversation = []
+                conversation.append(f"USER: {item['instruction']}")
+                conversation.append(f"ASSISTANT: {item['response']}")
+                conversations.append("\n".join(conversation))
+        
+        return "\n\n".join(conversations)
+
+    def _process_persona_chat_huggingface(self, dataset):
+        """Process Persona Chat dataset from HuggingFace"""
+        conversations = []
+        
+        for item in tqdm(dataset, desc="Processing Persona Chat"):
+            if 'personas' in item and 'dialogue' in item:
+                # Extract persona information
+                persona_text = "\n".join([f"PERSONA: {p}" for p in item['personas']])
+                
+                # Extract dialogue
+                dialogue_turns = []
+                
+                if isinstance(item['dialogue'], list):
+                    for i, turn in enumerate(item['dialogue']):
+                        speaker = "USER" if i % 2 == 0 else "ASSISTANT"
+                        dialogue_turns.append(f"{speaker}: {turn}")
+                
+                dialogue_text = "\n".join(dialogue_turns)
+                
+                # Combine persona and dialogue
+                full_text = f"{persona_text}\n\n{dialogue_text}"
+                conversations.append(full_text)
+        
+        return "\n\n".join(conversations)
+
+    def _process_writing_prompts_huggingface(self, dataset):
+        """Process Writing Prompts dataset from HuggingFace"""
+        prompt_story_pairs = []
+        
+        for item in tqdm(dataset, desc="Processing Writing Prompts"):
+            if 'prompt' in item and 'story' in item:
+                prompt = item['prompt']
+                story = item['story']
+                
+                formatted_text = f"<PROMPT>\n{prompt}\n<STORY>\n{story}\n<END>"
+                prompt_story_pairs.append(formatted_text)
+        
+        return "\n\n".join(prompt_story_pairs)
+
+    def _process_pile_huggingface(self, dataset):
+        """Process Pile dataset from HuggingFace"""
+        texts = []
+        
+        for item in tqdm(dataset, desc="Processing Pile"):
+            if 'text' in item:
+                texts.append(item['text'])
+        
+        return "\n\n".join(texts)
+
+    def _process_code_search_net_huggingface(self, dataset):
+        """Process Code Search Net dataset from HuggingFace"""
+        code_texts = []
+        
+        for item in tqdm(dataset, desc="Processing Code Search Net"):
+            if 'code' in item and 'docstring' in item:
+                code = item['code']
+                docstring = item['docstring']
+                
+                formatted_text = f"DOCSTRING:\n{docstring}\n\nCODE:\n{code}"
+                code_texts.append(formatted_text)
+        
+        return "\n\n".join(code_texts)

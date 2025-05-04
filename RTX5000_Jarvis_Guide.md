@@ -596,6 +596,11 @@ python src/generative_ai_module/fix_jarvis_imports.py --force src/generative_ai_
 python src/generative_ai_module/fix_jarvis_imports.py --force src/generative_ai_module/unified_generation_pipeline.py
 ```
 
+## Install additional libraries needed by google drive
+```bash
+ pip install gdown google-auth google-auth-oauthlib google-auth-httplib2
+ ```
+
 ## Optimal Training Commands for RTX 5000 (16GB GPU)
 
 These commands are specifically optimized for the RTX 5000 GPU with 16GB VRAM, 8 CPUs, and 30GB RAM. They balance performance with memory constraints to get the best results.
@@ -627,17 +632,18 @@ python src/generative_ai_module/train_models.py \
 # Train on ALL text datasets with RTX 5000 optimized parameters
 cd /notebooks
 python src/generative_ai_module/train_models.py \
-    --model-type text \
-    --datasets all \
-    --batch-size 4 \
+    --model_type text \
+    --dataset "agie-ai/OpenAssistant-oasst1,teknium/GPTeacher-General-Instruct,google/Synthetic-Persona-Chat,euclaise/writingprompts" \
+    --batch_size 4 \
     --epochs 3 \
-    --learning-rate 3e-5 \
-    --early-stopping 3 \
-    --sequence-length 512 \
-    --max-samples 2000 \
-    --visualization-dir /notebooks/Jarvis_AI_Assistant/visualizations \
-    --model-dir /notebooks/Jarvis_AI_Assistant/models \
-    --warmup-steps 50
+    --learning_rate 3e-5 \
+    --max_length 512 \
+    --output_dir /notebooks/Jarvis_AI_Assistant/models \
+    --eval_metrics_dir /notebooks/Jarvis_AI_Assistant/visualizations \
+    --evaluation_strategy steps \
+    --save_strategy steps \
+    --logging_steps 50 \
+    --visualize_metrics
 
 # Train on specific text datasets (if you don't want all)
 python src/generative_ai_module/train_models.py \
