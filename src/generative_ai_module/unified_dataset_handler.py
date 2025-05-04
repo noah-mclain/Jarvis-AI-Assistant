@@ -272,7 +272,10 @@ class UnifiedDatasetHandler:
         Returns:
             Dictionary with preprocessed dataset
         """
-        if dataset_name not in self.SUPPORTED_DATASETS:
+        # Check if this is a HuggingFace dataset (contains a slash)
+        is_huggingface_dataset = '/' in dataset_name
+        
+        if not is_huggingface_dataset and dataset_name not in self.SUPPORTED_DATASETS:
             logger.error(f"Unsupported dataset: {dataset_name}")
             raise ValueError(f"Unsupported dataset: {dataset_name}. "
                            f"Supported datasets: {', '.join(self.SUPPORTED_DATASETS)}")
@@ -281,7 +284,61 @@ class UnifiedDatasetHandler:
                   f"max_samples: {max_samples}, subset: {subset})")
 
         # Load dataset using appropriate processor
-        if dataset_name in {"writing_prompts", "persona_chat"}:
+        if is_huggingface_dataset:
+            # Handle external HuggingFace datasets
+            try:
+                from datasets import load_dataset
+                
+                # Create an identifier for the processed data file
+                hf_dataset_id = dataset_name.replace('/', '_')
+                
+                # Check if we have a cached processed version
+                cache_dir = get_storage_path(os.path.join("datasets", "processed"))
+                os.makedirs(cache_dir, exist_ok=True)
+                cache_path = os.path.join(cache_dir, f"{hf_dataset_id}_{split}_processed.pt")
+                
+                if os.path.exists(cache_path):
+                    logger.info(f"Loading processed dataset from cache: {cache_path}")
+                    import torch
+                    return torch.load(cache_path)
+                
+                # Load the dataset from HuggingFace
+                logger.info(f"Loading HuggingFace dataset: {dataset_name}")
+                hf_dataset = load_dataset(dataset_name, split=split)
+                
+                # Limit samples if specified
+                if max_samples is not None and max_samples < len(hf_dataset):
+                    hf_dataset = hf_dataset.select(range(max_samples))
+                
+                # Process the dataset
+                processor = DatasetProcessor()
+                data = processor._process_huggingface_dataset(hf_dataset, dataset_name)
+                
+                # Create sequences and batches
+                sequences = processor.create_sequences(data, sequence_length=512)  # default sequence length
+                batches = processor.create_batches(sequences, batch_size=4)       # default batch size
+                
+                # Create dataset dictionary
+                dataset = {
+                    'batches': batches,
+                    'metadata': {
+                        'source': dataset_name,
+                        'split': split,
+                        'sample_count': len(sequences),
+                        'batch_count': len(batches)
+                    }
+                }
+                
+                # Cache the processed dataset
+                import torch
+                torch.save(dataset, cache_path)
+                logger.info(f"Cached processed dataset to: {cache_path}")
+                
+                return dataset
+            except Exception as e:
+                logger.error(f"Error loading HuggingFace dataset {dataset_name}: {str(e)}")
+                raise
+        elif dataset_name in {"writing_prompts", "persona_chat"}:
             # These datasets use the improved processor
             data = self.improved_processor.process_dataset(
                 dataset_name, max_samples=max_samples
