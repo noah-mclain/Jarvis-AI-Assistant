@@ -465,6 +465,27 @@ def train_text_model(dataset_name: str, args, force_gpu: bool = True):
     print(f"Training Text Model on {dataset_name.upper()} dataset")
     print(f"{'='*50}")
 
+    # Check if model_dir exists
+    if not hasattr(args, 'model_dir') or not args.model_dir:
+        args.model_dir = os.path.join(args.output_dir, 'models')
+        os.makedirs(args.model_dir, exist_ok=True)
+        
+    # Check for early stopping
+    if not hasattr(args, 'early_stopping'):
+        args.early_stopping = 0
+        
+    # Check for validation split
+    if not hasattr(args, 'validation_split'):
+        args.validation_split = 0.1
+        
+    # Check for test split
+    if not hasattr(args, 'test_split'):
+        args.test_split = 0.1
+        
+    # Check for max_samples
+    if not hasattr(args, 'max_samples'):
+        args.max_samples = None
+
     # Determine gradient accumulation steps based on available memory
     # This allows simulation of larger batch sizes on limited GPU memory
     gradient_accumulation_steps = getattr(args, 'gradient_accumulation_steps', 4)
@@ -479,7 +500,7 @@ def train_text_model(dataset_name: str, args, force_gpu: bool = True):
     # Create text generator and dataset handler
     generator = TextGenerator(force_gpu=force_gpu)
     dataset_handler = UnifiedDatasetHandler()
-    visualizer = TrainingVisualizer(args.visualization_dir)
+    visualizer = TrainingVisualizer(args.eval_metrics_dir)
 
     # Get device
     device = generator.device
