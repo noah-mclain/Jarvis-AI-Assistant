@@ -6,7 +6,7 @@ including text generation, code generation, and fine-tuning.
 """
 
 # Import core components
-from .jarvis_unified import UnifiedModel
+from .jarvis_unified import JarvisAI as UnifiedModel
 from .text_generator import TextGenerator
 from .code_generator import CodeGenerator
 from .evaluation_metrics import calculate_metrics, evaluate_generation
