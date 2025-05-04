@@ -146,7 +146,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Tuple, Optional, Union
 from tqdm import tqdm
-from .utils import is_paperspace_environment
+
+# Force Paperspace environment to be True
+# This replaces the is_paperspace_environment() function call with a hardcoded True
+def is_paperspace_environment():
+    return True
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -737,13 +741,15 @@ def main():
     
     args = parse_args()
     
-    # If we're in Paperspace, sync from Google Drive first
-    if is_paperspace_environment():
-        logger.info("Running in Paperspace environment, syncing from Google Drive...")
+    # Always assume we're in a Paperspace environment
+    logger.info("Assuming Paperspace environment, syncing from Google Drive...")
+    try:
         sync_from_gdrive("datasets")
         sync_from_gdrive("models")
         sync_from_gdrive("metrics")
         logger.info("Synced latest data from Google Drive")
+    except Exception as e:
+        logger.warning(f"Failed to sync from Google Drive: {e}")
     
     # Create output directories - ensure they exist
     ensure_directory_exists("models")
@@ -814,13 +820,14 @@ def main():
         print("Text Model Training Complete!")
         print(f"Total training time: {int(hours)}h {int(minutes)}m {int(seconds)}s")
 
-    # After training, sync everything to Google Drive
-    if is_paperspace_environment():
+    # After training, always try to sync everything to Google Drive
+    try:
         sync_to_gdrive("models")
         sync_to_gdrive("metrics")
         sync_logs()
         logger.info("Training complete! Model and metrics synced to Google Drive.")
-    else:
+    except Exception as e:
+        logger.warning(f"Failed to sync to Google Drive: {e}")
         logger.info("Training complete!")
 
 
@@ -830,5 +837,5 @@ if __name__ == "__main__":
     from src.generative_ai_module.text_generator import TextGenerator
     from src.generative_ai_module.unified_dataset_handler import UnifiedDatasetHandler
     from src.generative_ai_module.evaluation_metrics import EvaluationMetrics
-    from src.generative_ai_module.utils import get_storage_path, sync_to_gdrive, sync_logs, setup_logging
+    from src.generative_ai_module.utils import get_storage_path, sync_to_gdrive, sync_logs, setup_logging, ensure_directory_exists, sync_from_gdrive
     main() 
