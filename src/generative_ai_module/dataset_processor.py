@@ -111,34 +111,93 @@ class DatasetProcessor:
         if sequence_length is None:
             sequence_length = self.sequence_length
             
+        # Safety check for empty text
+        if not text:
+            print("Warning: Empty text provided to create_sequences")
+            return []
+            
+        # Get character mapping and vocabulary size
         char_to_idx = self.text_generator.char_to_index
         unknown_token = self.text_generator.unknown_token
-        n_chars = len(char_to_idx)
+        
+        # Verify unknown token is in the mapping
+        if unknown_token not in char_to_idx:
+            print(f"Warning: Unknown token '{unknown_token}' not in char_to_index, adding it")
+            char_to_idx[unknown_token] = len(char_to_idx)
+            
+        # Determine the actual vocabulary size from the char_to_index mapping
+        n_chars = max(char_to_idx.values()) + 1
         
         # Create character-level sequences
         sequences = []
-        for i in range(len(text) - sequence_length - 1):
-            # Input is sequence_length characters
-            input_seq = text[i:i+sequence_length]
-            # Target is the next character
-            target_char = text[i+sequence_length]
+        
+        # Skip sequences if text is too short
+        if len(text) <= sequence_length + 1:
+            print(f"Warning: Text length ({len(text)}) is too short for sequence length ({sequence_length})")
+            return []
             
-            # Convert to indices
-            input_tensor = torch.zeros(sequence_length, n_chars)
-            for t, char in enumerate(input_seq):
-                idx = char_to_idx.get(char, char_to_idx[unknown_token])
-                # Ensure the index is within bounds of the tensor dimension
-                if idx >= n_chars:
-                    idx = char_to_idx[unknown_token]  # Default to unknown token if out of range
-                input_tensor[t, idx] = 1.0
+        try:
+            for i in range(0, len(text) - sequence_length - 1, sequence_length // 2):  # Use stride of half the sequence length
+                # Input is sequence_length characters
+                input_seq = text[i:i+sequence_length]
+                # Target is the next character
+                target_char = text[i+sequence_length]
                 
-            target_idx = char_to_idx.get(target_char, char_to_idx[unknown_token])
-            # Ensure target index is within bounds
-            if target_idx >= n_chars:
-                target_idx = char_to_idx[unknown_token]
-            target_tensor = torch.tensor([target_idx])
+                # Two options for input representation:
+                # 1. One-hot encoding (matrix approach)
+                # 2. Index-based (embedding approach)
+                
+                # Approach 1: One-hot encoding
+                try:
+                    input_tensor = torch.zeros(sequence_length, n_chars)
+                    for t, char in enumerate(input_seq):
+                        # Get character index or use unknown token index if not found
+                        idx = char_to_idx.get(char, char_to_idx.get(unknown_token, 0))
+                        
+                        # Double-check index is within bounds
+                        if idx >= n_chars:
+                            print(f"Warning: Index {idx} for character '{char}' exceeds vocabulary size {n_chars}, using unknown token")
+                            idx = char_to_idx.get(unknown_token, 0)
+                        
+                        input_tensor[t, idx] = 1.0
+                    
+                    # Get target index
+                    target_idx = char_to_idx.get(target_char, char_to_idx.get(unknown_token, 0))
+                    
+                    # Ensure target index is within bounds
+                    if target_idx >= n_chars:
+                        print(f"Warning: Target index {target_idx} for character '{target_char}' exceeds vocabulary size {n_chars}, using unknown token")
+                        target_idx = char_to_idx.get(unknown_token, 0)
+                    
+                    target_tensor = torch.tensor([target_idx])
+                    sequences.append((input_tensor, target_tensor))
+                except Exception as e:
+                    print(f"Error creating sequence at position {i}: {str(e)}")
+                    continue
+        except Exception as e:
+            print(f"Error in create_sequences: {str(e)}")
+            # Fall back to a simpler approach with fewer sequences
+            print("Falling back to simplified sequence creation")
             
-            sequences.append((input_tensor, target_tensor))
+            try:
+                # Create a very small number of sequences as a fallback
+                for i in range(min(10, len(text) - sequence_length - 1)):
+                    input_seq = text[i:i+sequence_length]
+                    target_char = text[i+sequence_length]
+                    
+                    # Use index-based approach for simplicity
+                    input_indices = [char_to_idx.get(char, char_to_idx.get(unknown_token, 0)) for char in input_seq]
+                    target_idx = char_to_idx.get(target_char, char_to_idx.get(unknown_token, 0))
+                    
+                    # Create tensors
+                    input_tensor = torch.tensor(input_indices).view(1, -1)  # Add batch dimension
+                    target_tensor = torch.tensor([target_idx])
+                    
+                    sequences.append((input_tensor, target_tensor))
+            except Exception as inner_e:
+                print(f"Error in fallback sequence creation: {str(inner_e)}")
+                # Return empty list if all else fails
+                return []
             
         return sequences
     
@@ -994,111 +1053,268 @@ The chain rule is powerful because it allows you to break down complex derivativ
         """
         print(f"Processing HuggingFace dataset with {len(dataset)} samples")
         
-        # Try to find text fields based on common field names
-        text_fields = []
-        sample_item = dataset[0] if len(dataset) > 0 else {}
+        # Get metadata about the dataset structure
+        if len(dataset) == 0:
+            print(f"Warning: Dataset {source_name} is empty")
+            return ""
+            
+        sample_item = dataset[0]
+        print(f"Dataset structure for {source_name}: {list(sample_item.keys())}")
         
-        # Check for known text fields
-        potential_fields = ['text', 'content', 'dialogue', 'prompt', 'completion', 
-                            'input', 'output', 'question', 'answer', 'instruction',
-                            'response', 'conversation', 'source']
-        
-        for field in potential_fields:
-            if field in sample_item and isinstance(sample_item[field], str):
-                text_fields.append(field)
-        
-        # Special handling for specific datasets
-        if 'OpenAssistant-oasst1' in source_name:
+        # Special handling for specific datasets based on their name
+        if any(name in source_name.lower() for name in ['openassistant', 'oasst']):
             return self._process_openassistant_huggingface(dataset)
-        elif 'GPTeacher' in source_name:
+        elif any(name in source_name.lower() for name in ['gpteacher', 'instruct']):
             return self._process_gpteacher_huggingface(dataset)
-        elif 'Synthetic-Persona-Chat' in source_name:
+        elif any(name in source_name.lower() for name in ['persona', 'chat', 'conversation', 'dialogue']):
             return self._process_persona_chat_huggingface(dataset)
-        elif 'writingprompts' in source_name.lower():
+        elif any(name in source_name.lower() for name in ['writing', 'prompt', 'story']):
             return self._process_writing_prompts_huggingface(dataset)
-        elif 'pile' in source_name.lower():
+        elif any(name in source_name.lower() for name in ['pile', 'corpus']):
             return self._process_pile_huggingface(dataset)
-        elif 'code_search_net' in source_name.lower():
+        elif any(name in source_name.lower() for name in ['code', 'programming']):
             return self._process_code_search_net_huggingface(dataset)
         
-        # Generic processing if no special handling
-        if not text_fields:
-            # If no text fields found, try to use the first string field
-            for key, value in sample_item.items():
-                if isinstance(value, str) and len(value) > 10:  # Require some minimum length
-                    text_fields.append(key)
-                    break
+        # Generic processing based on common field names if no special handling matched
+        text_fields = []
         
+        # Check for common field patterns in datasets
+        field_patterns = {
+            'instruction-response': ['instruction', 'response'],
+            'prompt-completion': ['prompt', 'completion'],
+            'question-answer': ['question', 'answer', 'responses'],
+            'input-output': ['input', 'output'],
+            'text-content': ['text', 'content'],
+            'message-conversation': ['message', 'conversation', 'messages', 'dialog', 'dialogue']
+        }
+        
+        # Try to identify the dataset type based on its fields
+        dataset_type = None
+        for pattern_type, fields in field_patterns.items():
+            if any(field in sample_item for field in fields):
+                dataset_type = pattern_type
+                text_fields.extend([field for field in fields if field in sample_item])
+                break
+                
+        if dataset_type:
+            print(f"Detected dataset type: {dataset_type} with fields: {text_fields}")
+        else:
+            # Fall back to searching for any text fields
+            for key, value in sample_item.items():
+                if isinstance(value, str) and len(value) > 10:  # Minimum length for text fields
+                    text_fields.append(key)
+                    
         if not text_fields:
+            # Last resort - if we have a 'data' field that's a list or dictionary, try to extract from there
+            if 'data' in sample_item and (isinstance(sample_item['data'], list) or isinstance(sample_item['data'], dict)):
+                print(f"Found 'data' field, attempting to extract content")
+                return self._process_nested_data_field(dataset)
+                
             raise ValueError(f"Could not identify text fields in dataset {source_name}")
         
         print(f"Using text fields: {text_fields}")
         
-        # Combine text from identified fields
+        # Process the dataset based on the identified structure
+        try:
+            if dataset_type == 'instruction-response' or dataset_type == 'prompt-completion' or dataset_type == 'question-answer':
+                # Format as a conversation/QA dataset
+                return self._process_conversational_dataset(dataset, text_fields)
+            else:
+                # Default processing - concatenate text fields
+                return self._process_general_text_dataset(dataset, text_fields)
+        except Exception as e:
+            print(f"Error processing dataset {source_name}: {str(e)}")
+            # Fall back to simple processing
+            return self._fallback_dataset_processing(dataset)
+            
+    def _process_nested_data_field(self, dataset):
+        """Process datasets with nested data structures"""
         combined_texts = []
-        for item in tqdm(dataset, desc="Processing samples"):
+        
+        for item in tqdm(dataset, desc="Processing nested data"):
+            if 'data' not in item:
+                continue
+                
+            data = item['data']
+            if isinstance(data, list):
+                # Try to extract text from list items
+                texts = []
+                for entry in data:
+                    if isinstance(entry, str):
+                        texts.append(entry)
+                    elif isinstance(entry, dict):
+                        # Extract text fields from dictionary
+                        for k, v in entry.items():
+                            if isinstance(v, str) and len(v) > 10:
+                                texts.append(f"{k}: {v}")
+                                
+                if texts:
+                    combined_texts.append("\n".join(texts))
+            elif isinstance(data, dict):
+                # Extract text fields from dictionary
+                texts = []
+                for k, v in data.items():
+                    if isinstance(v, str) and len(v) > 10:
+                        texts.append(f"{k}: {v}")
+                        
+                if texts:
+                    combined_texts.append("\n".join(texts))
+                    
+        return "\n\n".join(combined_texts)
+        
+    def _process_conversational_dataset(self, dataset, text_fields):
+        """Process datasets with a conversational structure (question-answer, prompt-completion, etc.)"""
+        conversations = []
+        
+        # Identify the input and output fields
+        input_field = None
+        output_field = None
+        
+        for field in text_fields:
+            if field in ['instruction', 'prompt', 'question', 'input']:
+                input_field = field
+            elif field in ['response', 'completion', 'answer', 'output', 'responses']:
+                output_field = field
+                
+        if not input_field or not output_field:
+            # If we couldn't clearly identify input/output fields, use the first two fields
+            if len(text_fields) >= 2:
+                input_field = text_fields[0]
+                output_field = text_fields[1]
+            else:
+                # Not enough fields for conversation format
+                return self._process_general_text_dataset(dataset, text_fields)
+                
+        # Process each item as a conversation turn
+        for item in tqdm(dataset, desc="Processing conversations"):
+            if input_field in item and output_field in item:
+                input_text = item[input_field]
+                output_text = item[output_field]
+                
+                # Handle case where output is a list
+                if isinstance(output_text, list):
+                    if len(output_text) > 0:
+                        if isinstance(output_text[0], str):
+                            output_text = output_text[0]  # Use the first response
+                        elif isinstance(output_text[0], dict) and 'text' in output_text[0]:
+                            output_text = output_text[0]['text']  # Common structure
+                        else:
+                            output_text = str(output_text)  # Fallback
+                    else:
+                        output_text = ""  # Empty list
+                
+                # Format as a conversation
+                conversation = f"USER: {input_text.strip()}\nASSISTANT: {output_text.strip()}"
+                conversations.append(conversation)
+                
+        return "\n\n".join(conversations)
+        
+    def _process_general_text_dataset(self, dataset, text_fields):
+        """Process general text datasets by concatenating text fields"""
+        combined_texts = []
+        
+        for item in tqdm(dataset, desc="Processing text data"):
             item_texts = []
             for field in text_fields:
                 if field in item and item[field]:
-                    item_texts.append(str(item[field]))
+                    text = item[field]
+                    if isinstance(text, str):
+                        item_texts.append(text)
+                    elif isinstance(text, list) and all(isinstance(t, str) for t in text):
+                        item_texts.append("\n".join(text))
+                    else:
+                        item_texts.append(str(text))
             
             if item_texts:
                 combined_texts.append("\n".join(item_texts))
-        
+                
         return "\n\n".join(combined_texts)
+        
+    def _fallback_dataset_processing(self, dataset):
+        """Last resort processing for datasets with unexpected structures"""
+        texts = []
+        
+        for item in tqdm(dataset, desc="Fallback processing"):
+            # Convert the entire item to a string representation
+            item_str = str(item)
+            # Clean up the string representation
+            item_str = item_str.replace("'", '"').replace("{", "").replace("}", "").replace("[", "").replace("]", "")
+            texts.append(item_str)
+            
+        return "\n\n".join(texts)
 
     def _process_openassistant_huggingface(self, dataset):
         """Process OpenAssistant dataset from HuggingFace"""
         conversations = []
         
-        # Group by message_tree_id to reconstruct conversations
-        conversation_map = {}
+        # Check the dataset structure to determine the format
+        sample_item = dataset[0] if len(dataset) > 0 else {}
         
-        for item in tqdm(dataset, desc="Processing OpenAssistant"):
-            message_id = item.get('message_id')
-            parent_id = item.get('parent_id')
-            text = item.get('text', '')
-            role = item.get('role', '')
-            message_tree_id = item.get('message_tree_id')
+        # Check if this is OASST1 format
+        if all(field in sample_item for field in ['message_id', 'parent_id', 'role']):
+            # Group by message_tree_id to reconstruct conversations
+            conversation_map = {}
             
-            if not message_tree_id or not text:
-                continue
-            
-            if message_tree_id not in conversation_map:
-                conversation_map[message_tree_id] = []
-            
-            conversation_map[message_tree_id].append({
-                'id': message_id,
-                'parent_id': parent_id,
-                'text': text,
-                'role': role
-            })
-        
-        # Convert to formatted conversations
-        for tree_id, messages in conversation_map.items():
-            # Create a map for quick parent lookup
-            id_to_message = {msg['id']: msg for msg in messages if msg['id']}
-            
-            # Find root messages (no parent)
-            roots = [msg for msg in messages if not msg['parent_id']]
-            
-            if not roots:
-                continue
-            
-            # Process each conversation tree
-            for root in roots:
-                conversation = []
-                conversation.append(f"USER: {root['text']}")
+            for item in tqdm(dataset, desc="Processing OpenAssistant"):
+                message_id = item.get('message_id')
+                parent_id = item.get('parent_id')
+                text = item.get('text', '')
+                role = item.get('role', '')
+                message_tree_id = item.get('message_tree_id')
                 
-                # Find direct children (responses)
-                children = [msg for msg in messages if msg.get('parent_id') == root['id']]
+                if not message_tree_id or not text:
+                    continue
+                    
+                if message_tree_id not in conversation_map:
+                    conversation_map[message_tree_id] = []
                 
-                for child in children:
-                    if child['role'] == 'assistant':
-                        conversation.append(f"ASSISTANT: {child['text']}")
+                conversation_map[message_tree_id].append({
+                    'id': message_id,
+                    'parent_id': parent_id,
+                    'text': text,
+                    'role': role
+                })
+            
+            # Convert to formatted conversations
+            for tree_id, messages in conversation_map.items():
+                # Create a map for quick parent lookup
+                id_to_message = {msg['id']: msg for msg in messages if msg['id']}
                 
-                conversations.append("\n".join(conversation))
-        
+                # Find root messages (no parent)
+                roots = [msg for msg in messages if not msg['parent_id']]
+                
+                if not roots:
+                    continue
+                
+                # Process each conversation tree
+                for root in roots:
+                    conversation = []
+                    conversation.append(f"USER: {root['text']}")
+                    
+                    # Find direct children (responses)
+                    children = [msg for msg in messages if msg.get('parent_id') == root['id']]
+                    
+                    for child in children:
+                        if child['role'] == 'assistant':
+                            conversation.append(f"ASSISTANT: {child['text']}")
+                    
+                    conversations.append("\n".join(conversation))
+        # Check if this is messages format
+        elif 'messages' in sample_item:
+            for item in tqdm(dataset, desc="Processing OpenAssistant messages"):
+                if 'messages' in item and isinstance(item['messages'], list):
+                    conversation = []
+                    for msg in item['messages']:
+                        role = msg.get('role', '').upper()
+                        content = msg.get('content', '')
+                        if role and content:
+                            conversation.append(f"{role}: {content}")
+                    if conversation:
+                        conversations.append("\n".join(conversation))
+        # Otherwise, fall back to generic conversational processing
+        else:
+            return self._process_conversational_dataset(dataset, ['instruction', 'response'])
+                    
         return "\n\n".join(conversations)
 
     def _process_gpteacher_huggingface(self, dataset):
@@ -1106,11 +1322,24 @@ The chain rule is powerful because it allows you to break down complex derivativ
         conversations = []
         
         for item in tqdm(dataset, desc="Processing GPTeacher"):
+            # Check for instruction-response format
             if 'instruction' in item and 'response' in item:
-                conversation = []
-                conversation.append(f"USER: {item['instruction']}")
-                conversation.append(f"ASSISTANT: {item['response']}")
+                instruction = item['instruction']
+                response = item['response']
+                
+                # Check for context
+                if 'context' in item and item['context']:
+                    context = item['context']
+                    conversation = [f"CONTEXT: {context}", f"USER: {instruction}", f"ASSISTANT: {response}"]
+                else:
+                    conversation = [f"USER: {instruction}", f"ASSISTANT: {response}"]
+                
                 conversations.append("\n".join(conversation))
+            # Check for input-output format
+            elif 'input' in item and 'output' in item:
+                input_text = item['input']
+                output_text = item['output']
+                conversations.append(f"USER: {input_text}\nASSISTANT: {output_text}")
         
         return "\n\n".join(conversations)
 
@@ -1119,15 +1348,46 @@ The chain rule is powerful because it allows you to break down complex derivativ
         conversations = []
         
         for item in tqdm(dataset, desc="Processing Persona Chat"):
+            # Check for standard persona chat format
             if 'personas' in item and 'dialogue' in item:
                 # Extract persona information
-                persona_text = "\n".join([f"PERSONA: {p}" for p in item['personas']])
+                persona_lines = []
+                if isinstance(item['personas'], list):
+                    for p in item['personas']:
+                        persona_lines.append(f"PERSONA: {p}")
+                elif isinstance(item['personas'], dict) and 'persona_1' in item['personas']:
+                    for p in item['personas']['persona_1']:
+                        persona_lines.append(f"PERSONA: {p}")
+                
+                persona_text = "\n".join(persona_lines)
                 
                 # Extract dialogue
                 dialogue_turns = []
                 
                 if isinstance(item['dialogue'], list):
                     for i, turn in enumerate(item['dialogue']):
+                        speaker = "USER" if i % 2 == 0 else "ASSISTANT"
+                        dialogue_turns.append(f"{speaker}: {turn}")
+                
+                dialogue_text = "\n".join(dialogue_turns)
+                
+                # Combine persona and dialogue
+                full_text = f"{persona_text}\n\n{dialogue_text}"
+                conversations.append(full_text)
+            # Check for alternate format with personality and utterances
+            elif 'personality' in item and 'utterances' in item:
+                # Extract persona information
+                persona_lines = []
+                for p in item['personality']:
+                    persona_lines.append(f"PERSONA: {p}")
+                
+                persona_text = "\n".join(persona_lines)
+                
+                # Extract dialogue from last utterance history
+                dialogue_turns = []
+                if 'history' in item['utterances'][-1]:
+                    history = item['utterances'][-1]['history']
+                    for i, turn in enumerate(history):
                         speaker = "USER" if i % 2 == 0 else "ASSISTANT"
                         dialogue_turns.append(f"{speaker}: {turn}")
                 
@@ -1148,6 +1408,7 @@ The chain rule is powerful because it allows you to break down complex derivativ
                 prompt = item['prompt']
                 story = item['story']
                 
+                # Apply standard format with special tokens
                 formatted_text = f"<PROMPT>\n{prompt}\n<STORY>\n{story}\n<END>"
                 prompt_story_pairs.append(formatted_text)
         
@@ -1158,8 +1419,17 @@ The chain rule is powerful because it allows you to break down complex derivativ
         texts = []
         
         for item in tqdm(dataset, desc="Processing Pile"):
+            # Check for the standard text field
             if 'text' in item:
-                texts.append(item['text'])
+                text = item['text']
+                
+                # Add source information if available
+                if 'meta' in item and isinstance(item['meta'], dict):
+                    source = item['meta'].get('pile_set_name', 'Unknown')
+                    formatted_text = f"<SOURCE>\n{source}\n<TEXT>\n{text}\n<END>"
+                    texts.append(formatted_text)
+                else:
+                    texts.append(text)
         
         return "\n\n".join(texts)
 
@@ -1168,9 +1438,23 @@ The chain rule is powerful because it allows you to break down complex derivativ
         code_texts = []
         
         for item in tqdm(dataset, desc="Processing Code Search Net"):
+            # Check for code and docstring fields
             if 'code' in item and 'docstring' in item:
                 code = item['code']
                 docstring = item['docstring']
+                
+                # Add language information if available
+                if 'language' in item:
+                    language = item['language']
+                    formatted_text = f"LANGUAGE: {language}\nDOCSTRING:\n{docstring}\n\nCODE:\n{code}"
+                else:
+                    formatted_text = f"DOCSTRING:\n{docstring}\n\nCODE:\n{code}"
+                
+                code_texts.append(formatted_text)
+            # Handle cases where function_tokens is present
+            elif 'function_tokens' in item and isinstance(item['function_tokens'], list):
+                code = ' '.join(item['function_tokens'])
+                docstring = ' '.join(item.get('docstring_tokens', ['No docstring']))
                 
                 formatted_text = f"DOCSTRING:\n{docstring}\n\nCODE:\n{code}"
                 code_texts.append(formatted_text)

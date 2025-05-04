@@ -8,14 +8,57 @@ This guide provides optimized commands and best practices for running the Jarvis
 
 ```bash
 # Set up Python environment
-pip install -U pip
-pip install torch==2.1.2 transformers==4.40.2 datasets accelerate unsloth
+sudo apt-get update
+sudo apt-get install -y make build-essential libssl-dev zlib1g-dev \
+libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm \
+libncurses5-dev libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev \
+python3-dev sqlite3
+
+curl https://pyenv.run | bash
+
+# Add pyenv to your shell config
+echo 'export PATH="$HOME/.pyenv/bin:$PATH"' >> ~/.bashrc
+echo 'eval "$(pyenv init --path)"' >> ~/.bashrc
+echo 'eval "$(pyenv virtualenv-init)"' >> ~/.bashrc
+source ~/.bashrc
+
+pyenv install 3.11.5
+pyenv global 3.11.5
+python --version  # Should output "Python 3.11.5"
+python -m venv jarvis_env  # Uses pyenv's 3.11.5
+source jarvis_env/bin/activate
+
+pip cache purge
+
+# Install dependencies
+sudo apt-get update
+sudo apt-get install -y curl unzip
+
+# Download and run the rclone installer
+curl https://rclone.org/install.sh | sudo bash
+rclone version
+
+rclone config
+
+# Sync entire folder to Paperspace storage
+rclone sync gdrive: \
+  /notebooks/Jarvis_AI_Assistant \
+  --drive-root-folder-id 1bGqUvfzVrZdxBqLz9rl0sN3_j5UjpSTE \
+  --progress \
+  --transfers 4 \
+  --checkers 8 \
+  --drive-acknowledge-abuse
+
+  # Compare source and destination
+rclone check gdrive: /notebooks/Jarvis_AI_Assistant \
+  --drive-root-folder-id 1bGqUvfzVrZdxBqLz9rl0sN3_j5UjpSTE \
+  --size-only
 
 # Install Google Drive integration for data persistence
 pip install gdown google-auth google-auth-oauthlib google-auth-httplib2
 
 # Create required directories
-mkdir -p /notebooks/Jarvis_AI_Assistant/{models,datasets,metrics,logs,checkpoints,evaluation_metrics,visualizations}
+# mkdir -p /notebooks/Jarvis_AI_Assistant/{models,datasets,metrics,logs,checkpoints,evaluation_metrics,visualizations}
 ```
 
 ## Refactored Module Structure
@@ -596,11 +639,6 @@ python src/generative_ai_module/fix_jarvis_imports.py --force src/generative_ai_
 python src/generative_ai_module/fix_jarvis_imports.py --force src/generative_ai_module/unified_generation_pipeline.py
 ```
 
-## Install additional libraries needed by google drive
-```bash
- pip install gdown google-auth google-auth-oauthlib google-auth-httplib2
- ```
-
 ## Optimal Training Commands for RTX 5000 (16GB GPU)
 
 These commands are specifically optimized for the RTX 5000 GPU with 16GB VRAM, 8 CPUs, and 30GB RAM. They balance performance with memory constraints to get the best results.
@@ -647,15 +685,20 @@ python src/generative_ai_module/train_models.py \
 
 # Train on specific text datasets (if you don't want all)
 python src/generative_ai_module/train_models.py \
-    --model-type text \
-    --datasets writing_prompts persona_chat \
-    --batch-size 4 \
+    --model_type text \
+    --dataset "writing_prompts,persona_chat" \
+    --batch_size 4 \
     --epochs 3 \
-    --learning-rate 3e-5 \
-    --early-stopping 3 \
-    --sequence-length 512 \
-    --max-samples 5000 \
-    --visualization-dir /notebooks/Jarvis_AI_Assistant/visualizations
+    --learning_rate 3e-5 \
+    --early_stopping 3 \
+    --max_length 512 \
+    --max_samples 5000 \
+    --eval_metrics_dir /notebooks/Jarvis_AI_Assistant/visualizations \
+    --output_dir /notebooks/Jarvis_AI_Assistant/models \
+    --evaluation_strategy steps \
+    --save_strategy steps \
+    --logging_steps 50 \
+    --visualize_metrics
 ```
 
 ### 2. Fine-tuning DeepSeek Models with Unsloth
@@ -703,17 +746,21 @@ python src/generative_ai_module/finetune_deepseek.py \
 # Text model training with optimized settings for RTX 5000
 cd /notebooks
 python src/generative_ai_module/train_models.py \
-    --model-type text \
-    --datasets all \
-    --batch-size 4 \
+    --model_type text \
+    --dataset all \
+    --batch_size 4 \
     --epochs 3 \
-    --learning-rate 3e-5 \
-    --early-stopping 3 \
-    --sequence-length 512 \
-    --max-samples 2000 \
-    --visualization-dir /notebooks/Jarvis_AI_Assistant/visualizations \
-    --model-dir /notebooks/Jarvis_AI_Assistant/models \
-    --warmup-steps 50
+    --learning_rate 3e-5 \
+    --early_stopping 3 \
+    --max_length 512 \
+    --max_samples 2000 \
+    --eval_metrics_dir /notebooks/Jarvis_AI_Assistant/visualizations \
+    --output_dir /notebooks/Jarvis_AI_Assistant/models \
+    --warmup_steps 50 \
+    --evaluation_strategy steps \
+    --save_strategy steps \
+    --logging_steps 50 \
+    --visualize_metrics
 ```
 
 ### 3. Evaluation and Metrics

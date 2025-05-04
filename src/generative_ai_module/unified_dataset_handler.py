@@ -32,7 +32,7 @@ try:
     DATASETS_AVAILABLE = True
 except ImportError:
     DATASETS_AVAILABLE = False
-    print("Warning: HuggingFace datasets library not available. Install with: pip install datasets")
+    print("HuggingFace datasets library not found. Some features will be limited.")
 
 # Import necessary modules from the generative_ai_module using relative imports
 from .dataset_processor import DatasetProcessor
@@ -314,27 +314,60 @@ class UnifiedDatasetHandler:
                 processor = DatasetProcessor()
                 data = processor._process_huggingface_dataset(hf_dataset, dataset_name)
                 
-                # Create sequences and batches
-                sequences = processor.create_sequences(data, sequence_length=512)  # default sequence length
-                batches = processor.create_batches(sequences, batch_size=4)       # default batch size
-                
-                # Create dataset dictionary
-                dataset = {
-                    'batches': batches,
-                    'metadata': {
-                        'source': dataset_name,
-                        'split': split,
-                        'sample_count': len(sequences),
-                        'batch_count': len(batches)
+                # Create sequences and batches with error handling
+                try:
+                    sequences = processor.create_sequences(data, sequence_length=512)  # default sequence length
+                    batches = processor.create_batches(sequences, batch_size=4)       # default batch size
+                    
+                    # Create dataset dictionary
+                    dataset = {
+                        'batches': batches,
+                        'metadata': {
+                            'source': dataset_name,
+                            'split': split,
+                            'sample_count': len(sequences),
+                            'batch_count': len(batches)
+                        }
                     }
-                }
-                
-                # Cache the processed dataset
-                import torch
-                torch.save(dataset, cache_path)
-                logger.info(f"Cached processed dataset to: {cache_path}")
-                
-                return dataset
+                    
+                    # Cache the processed dataset
+                    import torch
+                    torch.save(dataset, cache_path)
+                    logger.info(f"Cached processed dataset to: {cache_path}")
+                    
+                    return dataset
+                except Exception as e:
+                    logger.error(f"Error processing HuggingFace dataset {dataset_name}: {str(e)}")
+                    
+                    # Try alternate approach with a smaller batch of the dataset
+                    try:
+                        logger.info(f"Trying again with a reduced sample size for {dataset_name}")
+                        # Take a smaller subset
+                        reduced_hf_dataset = hf_dataset.select(range(min(1000, len(hf_dataset))))
+                        data = processor._process_huggingface_dataset(reduced_hf_dataset, dataset_name)
+                        sequences = processor.create_sequences(data, sequence_length=512)
+                        batches = processor.create_batches(sequences, batch_size=4)
+                        
+                        dataset = {
+                            'batches': batches,
+                            'metadata': {
+                                'source': dataset_name,
+                                'split': split,
+                                'sample_count': len(sequences),
+                                'batch_count': len(batches),
+                                'note': 'Created from reduced dataset due to processing errors'
+                            }
+                        }
+                        
+                        # Cache the processed dataset
+                        import torch
+                        torch.save(dataset, cache_path)
+                        logger.info(f"Cached processed dataset to: {cache_path} (reduced version)")
+                        
+                        return dataset
+                    except Exception as inner_e:
+                        logger.error(f"Error processing reduced dataset {dataset_name}: {str(inner_e)}")
+                        raise
             except Exception as e:
                 logger.error(f"Error loading HuggingFace dataset {dataset_name}: {str(e)}")
                 raise

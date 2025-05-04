@@ -96,13 +96,22 @@ class CombinedModel(nn.Module):
 class TextGenerator:
     def __init__(self, force_gpu=False):
         self.all_chars = string.printable
-        self.n_chars = len(self.all_chars)
         self.char_to_index = {char: i for i, char in enumerate(self.all_chars)}
-        self.index_to_char = {i: char for char, i in self.char_to_index.items()}
         self.unknown_token = "<UNK>"
+        
+        # Add unknown token to character set and mapping
+        self.char_to_index[self.unknown_token] = len(self.all_chars)
         self.all_chars += self.unknown_token
-        self.char_to_index[self.unknown_token] = len(self.all_chars) - 1
+        
+        # Now set n_chars to the actual vocabulary size
+        self.n_chars = len(self.char_to_index)
+        
+        # Create index to character mapping
+        self.index_to_char = {i: char for char, i in self.char_to_index.items()}
+        
+        # Initialize model with correct vocabulary size
         self.model = CombinedModel(self.n_chars, 128, self.n_chars, 2)
+        
         self.force_gpu = force_gpu
         self.device = self._get_device()
         self.model = self.model.to(self.device)

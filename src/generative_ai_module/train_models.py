@@ -1330,11 +1330,13 @@ def main():
         install_dependencies()
     
     # Initialize logging
+    log_dir = os.path.join("/notebooks/Jarvis_AI_Assistant/logs" if os.path.exists("/notebooks") else os.path.expanduser("~/Jarvis_AI_Assistant/logs"))
+    os.makedirs(log_dir, exist_ok=True)
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[
-            logging.FileHandler(f"training_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"),
+            logging.FileHandler(os.path.join(log_dir, f"training_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")),
             logging.StreamHandler(sys.stdout)
         ]
     )
