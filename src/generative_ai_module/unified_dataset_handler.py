@@ -38,6 +38,7 @@ except ImportError:
 from .dataset_processor import DatasetProcessor
 from .improved_preprocessing import ImprovedPreprocessor
 from .prompt_enhancer import analyze_prompt
+from .utils import get_storage_path, sync_to_gdrive, sync_from_gdrive
 
 # Configure logging
 logging.basicConfig(
@@ -115,7 +116,8 @@ class ConversationContext:
 
 class UnifiedDatasetHandler:
     """
-    Unified handler for all datasets, providing a consistent interface.
+    A unified handler for processing and managing datasets for generative AI tasks.
+    Implements dataset loading, preprocessing, and saving functionality.
     """
     
     # Supported datasets
@@ -136,16 +138,37 @@ class UnifiedDatasetHandler:
         "gpteacher": "Instruction-following dataset with educational content"
     }
     
-    def __init__(self, cache_dir: Optional[str] = None, force_gpu: bool = True):
+    def __init__(self, dataset_name=None, dataset_path=None, output_dir=None, cache_dir=None):
         """
-        Initialize the unified dataset handler.
+        Initialize the dataset handler.
         
         Args:
-            cache_dir: Directory to cache downloaded datasets
-            force_gpu: Whether to use GPU for preprocessing when available
+            dataset_name (str, optional): Name of the dataset to load from HuggingFace Hub.
+            dataset_path (str, optional): Path to a local dataset.
+            output_dir (str, optional): Directory to save processed datasets.
+            cache_dir (str, optional): Directory to cache downloaded datasets.
         """
-        self.cache_dir = cache_dir
-        self.force_gpu = force_gpu
+        self.dataset_name = dataset_name
+        self.dataset_path = dataset_path
+        
+        # Use the storage path utility for consistent paths
+        self.output_dir = output_dir or get_storage_path("datasets", "processed")
+        self.cache_dir = cache_dir or get_storage_path("datasets", "cache")
+        
+        # Create directories if they don't exist
+        os.makedirs(self.output_dir, exist_ok=True)
+        os.makedirs(self.cache_dir, exist_ok=True)
+        
+        self.dataset = None
+        self.tokenizer = None
+        
+        # Try to sync from Google Drive on initialization to get latest datasets
+        if dataset_path is None and dataset_name is None:
+            try:
+                sync_from_gdrive("datasets")
+                logger.info("Synced latest datasets from Google Drive")
+            except Exception as e:
+                logger.warning(f"Failed to sync datasets from Google Drive: {str(e)}")
         
         # Initialize processors
         self.processor = DatasetProcessor()
@@ -759,6 +782,64 @@ class UnifiedDatasetHandler:
             Name of the best dataset
         """
         return analyze_prompt(prompt)
+
+    def save_processed_dataset(self, dataset, output_path=None, dataset_name=None):
+        """
+        Save a processed dataset to disk and sync to Google Drive.
+        
+        Args:
+            dataset: The dataset to save
+            output_path (str, optional): Path to save the dataset
+            dataset_name (str, optional): Name to use for the dataset file
+        
+        Returns:
+            str: Path where the dataset was saved
+        """
+        if output_path is None:
+            dataset_name = dataset_name or f"processed_dataset_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            output_path = os.path.join(self.output_dir, dataset_name)
+        
+        # Save the dataset
+        logger.info(f"Saving processed dataset to {output_path}")
+        dataset.save_to_disk(output_path)
+        
+        # Sync to Google Drive
+        sync_to_gdrive("datasets")
+        logger.info("Synced datasets to Google Drive")
+        
+        return output_path
+
+    @staticmethod
+    def list_available_datasets(directory=None):
+        """
+        List all available processed datasets.
+        
+        Args:
+            directory (str, optional): Directory to look for datasets. Defaults to the datasets directory.
+        
+        Returns:
+            list: List of dataset paths
+        """
+        # Try to sync from Google Drive first to get the latest datasets
+        try:
+            sync_from_gdrive("datasets")
+            logger.info("Synced latest datasets from Google Drive")
+        except Exception as e:
+            logger.warning(f"Failed to sync datasets from Google Drive: {str(e)}")
+        
+        directory = directory or get_storage_path("datasets")
+        
+        if not os.path.exists(directory):
+            logger.warning(f"Dataset directory {directory} does not exist")
+            return []
+        
+        # Find directories that contain dataset files
+        dataset_dirs = []
+        for root, dirs, files in os.walk(directory):
+            if any(f == "dataset_info.json" for f in files):
+                dataset_dirs.append(root)
+        
+        return dataset_dirs
 
 # Example usage
 if __name__ == "__main__":

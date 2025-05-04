@@ -1,31 +1,41 @@
 """
-Generative AI Module
+Generative AI Module for the Jarvis AI Assistant
 
-A module for generating text and code using neural networks.
+This module provides the core functionality for generative AI tasks,
+including text generation, code generation, and fine-tuning.
 """
 
-# Core components
-from .text_generator import TextGenerator, CombinedModel
+# Import core components
+from .jarvis_unified import UnifiedModel
+from .text_generator import TextGenerator
 from .code_generator import CodeGenerator
+from .evaluation_metrics import calculate_metrics, evaluate_generation
 from .dataset_processor import DatasetProcessor
-from .prompt_enhancer import PromptEnhancer
-from .unified_dataset_handler import UnifiedDatasetHandler, ConversationContext
+from .prompt_enhancer import PromptEnhancer, analyze_prompt
 
-# Utilities
-from .utils import is_zipfile, process_zip
+# Import Google Drive sync functionality
+from .utils import sync_to_gdrive, sync_from_gdrive, get_storage_path
+from .sync_gdrive import sync_all_to_gdrive, sync_all_from_gdrive
 
-# Preprocessing tools
-from .improved_preprocessing import ImprovedCharTokenizer, ImprovedPreprocessor, clean_and_normalize_text
-from .code_preprocessing import load_and_preprocess_dataset, save_preprocessing_metrics
+# Define public API
+__all__ = [
+    'UnifiedModel',
+    'TextGenerator',
+    'CodeGenerator',
+    'DatasetProcessor',
+    'PromptEnhancer',
+    'calculate_metrics',
+    'evaluate_generation',
+    'analyze_prompt',
+    # Google Drive sync functionality
+    'sync_to_gdrive',
+    'sync_from_gdrive',
+    'sync_all_to_gdrive',
+    'sync_all_from_gdrive',
+    'get_storage_path'
+]
 
-# Pipeline
-from .unified_generation_pipeline import (
-    train_text_generator,
-    train_code_generator,
-    preprocess_data,
-    calculate_metrics,
-    TrainingVisualizer,
-    main as run_pipeline
-)
-
-__version__ = "1.0.0"
+# Version information
+__version__ = '0.2.0'
+__author__ = 'Jarvis AI Team'
+__description__ = 'Generative AI Module for Jarvis Assistant'

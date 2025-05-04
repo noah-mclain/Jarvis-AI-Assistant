@@ -17,6 +17,7 @@ from pathlib import Path
 import time
 import json
 from datetime import datetime
+from .utils import get_storage_path, sync_to_gdrive, sync_from_gdrive, is_paperspace_environment
 
 # Set up logging
 logging.basicConfig(
@@ -211,24 +212,34 @@ def create_mini_dataset(sequence_length=2048, num_samples=10):
     return Dataset.from_list(data)
 
 def main():
-    """Main function for fine-tuning"""
-    parser = argparse.ArgumentParser(description="Fine-tune a language model with Unsloth and bitsandbytes optimizations")
+    """
+    Main function to run the finetuning process.
+    """
+    parser = argparse.ArgumentParser(description="Run finetuning for LLMs with customizable parameters")
+    
+    # Model and dataset parameters
+    parser.add_argument("--model_name", type=str, default="deepseek-ai/deepseek-coder-6.7b-base", 
+                        help="Name of the base model to finetune")
+    parser.add_argument("--dataset_path", type=str, default=None, 
+                        help="Path to the dataset to use for finetuning")
+    parser.add_argument("--dataset_name", type=str, default=None, 
+                        help="Name of the dataset on HuggingFace Hub to use for finetuning")
+    
+    # Output directory
+    parser.add_argument("--output_dir", type=str, default=None, 
+                        help="Directory to save the finetuned model")
+    
+    # Training parameters
+    parser.add_argument("--epochs", type=int, default=3, 
+                        help="Number of epochs to train for")
     
     # Model arguments
-    parser.add_argument("--base-model", type=str, default="deepseek-ai/deepseek-coder-6.7b-base",
-                        help="Base model to fine-tune")
     parser.add_argument("--load-in-4bit", action="store_true", default=True,
                         help="Load model in 4-bit precision (recommended for A100 GPUs)")
     parser.add_argument("--load-in-8bit", action="store_true",
                         help="Load model in 8-bit precision (alternative to 4-bit)")
     
     # Dataset arguments
-    parser.add_argument("--dataset", type=str, default=None,
-                        help="HuggingFace dataset name")
-    parser.add_argument("--dataset-config", type=str, default=None,
-                        help="Dataset configuration")
-    parser.add_argument("--json-file", type=str, default=None,
-                        help="Path to JSON file with training data")
     parser.add_argument("--max-seq-length", type=int, default=2048,
                         help="Maximum sequence length")
     parser.add_argument("--max-samples", type=int, default=None,
@@ -237,10 +248,6 @@ def main():
                         help="Use a small synthetic dataset for testing")
     
     # Training arguments
-    parser.add_argument("--output-dir", type=str, default="/content/drive/MyDrive/Jarvis_AI_Assistant/models/fine_tuned",
-                        help="Output directory for model checkpoints")
-    parser.add_argument("--epochs", type=int, default=1,
-                        help="Number of training epochs")
     parser.add_argument("--batch-size", type=int, default=4,
                         help="Batch size per device")
     parser.add_argument("--gradient-accumulation-steps", type=int, default=4,
@@ -266,9 +273,22 @@ def main():
     parser.add_argument("--optim", type=str, default="adamw_torch_fused",
                         help="Optimizer to use")
     
+    # Parse arguments
     args = parser.parse_args()
     
-    # Make sure the output directory exists
+    # First, sync from Google Drive to get latest datasets and checkpoints if we're in Paperspace
+    if is_paperspace_environment():
+        sync_from_gdrive("datasets")
+        sync_from_gdrive("checkpoints")
+        logger.info("Synced latest datasets and checkpoints from Google Drive")
+    
+    # If output_dir is not specified, use the storage path utility
+    if args.output_dir is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        model_name_short = args.model_name.split('/')[-1]
+        args.output_dir = get_storage_path("models", f"{model_name_short}_finetuned_{timestamp}")
+    
+    # Ensure output directory exists
     os.makedirs(args.output_dir, exist_ok=True)
     
     # Check for A100 GPU and set optimal parameters
@@ -289,9 +309,9 @@ def main():
     logger.info(f"Starting fine-tuning with settings: {args}")
     
     # Load tokenizer and model
-    logger.info(f"Loading tokenizer from {args.base_model}")
+    logger.info(f"Loading tokenizer from {args.model_name}")
     tokenizer = AutoTokenizer.from_pretrained(
-        args.base_model,
+        args.model_name,
         trust_remote_code=True
     )
     tokenizer.pad_token = tokenizer.eos_token
@@ -319,18 +339,17 @@ def main():
         dataset = create_mini_dataset(sequence_length=args.max_seq_length)
     else:
         dataset = load_training_data(
-            dataset_name=args.dataset,
-            dataset_config=args.dataset_config,
-            json_file=args.json_file,
+            dataset_name=args.dataset_name,
+            dataset_config=args.dataset_path,
             max_samples=args.max_samples
         )
     
     # Load model with Unsloth optimization (if requested)
     if args.use_unsloth:
-        logger.info(f"Loading model from {args.base_model} with Unsloth optimizations")
+        logger.info(f"Loading model from {args.model_name} with Unsloth optimizations")
         # Use Unsloth's FastLanguageModel for optimized training
         model, tokenizer = FastLanguageModel.from_pretrained(
-            model_name=args.base_model,
+            model_name=args.model_name,
             max_seq_length=args.max_seq_length,
             quantization_config=quantization_config,
             device_map="auto",
@@ -355,9 +374,9 @@ def main():
         )
         logger.info("Applied LoRA with Unsloth optimizations")
     else:
-        logger.info(f"Loading model from {args.base_model} with standard HF approach")
+        logger.info(f"Loading model from {args.model_name} with standard HF approach")
         model = AutoModelForCausalLM.from_pretrained(
-            args.base_model,
+            args.model_name,
             quantization_config=quantization_config,
             device_map="auto",
             torch_dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16,
@@ -468,7 +487,7 @@ def main():
     config_file = os.path.join(output_folder, "training_config.json")
     with open(config_file, "w") as f:
         json.dump({
-            "base_model": args.base_model,
+            "model_name": args.model_name,
             "load_in_4bit": args.load_in_4bit,
             "load_in_8bit": args.load_in_8bit,
             "max_seq_length": args.max_seq_length,
@@ -487,7 +506,16 @@ def main():
         }, f, indent=2)
     
     logger.info(f"Saved training configuration to {config_file}")
-    logger.info("Fine-tuning complete!")
+    
+    # After training is complete, sync to Google Drive
+    if is_paperspace_environment():
+        logger.info("Training complete, syncing results to Google Drive...")
+        sync_to_gdrive("models")
+        sync_to_gdrive("metrics")
+        sync_to_gdrive("checkpoints")
+        logger.info("Sync complete!")
+    
+    logger.info(f"Finetuning complete! Model saved to {args.output_dir}")
 
 if __name__ == "__main__":
     main()

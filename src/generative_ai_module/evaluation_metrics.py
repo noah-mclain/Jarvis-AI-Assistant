@@ -18,6 +18,7 @@ import numpy as np
 from typing import Dict, List, Union, Optional, Any, Tuple
 from datetime import datetime
 from collections import defaultdict, Counter
+from .utils import get_storage_path, sync_to_gdrive
 
 # Try to import optional dependencies, with graceful fallbacks
 try:
@@ -564,6 +565,122 @@ class EvaluationMetrics:
         except Exception as e:
             print(f"Error installing dependencies: {e}")
             return False
+
+def save_metrics(metrics, model_name, dataset_name, timestamp=None):
+    """
+    Save evaluation metrics to a JSON file and sync to Google Drive.
+    
+    Args:
+        metrics (dict): Dictionary of metrics
+        model_name (str): Name of the model
+        dataset_name (str): Name of the dataset
+        timestamp (str, optional): Timestamp to use in the filename
+    
+    Returns:
+        str: Path to the saved metrics file
+    """
+    if timestamp is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Use storage path utility to get correct path
+    metrics_dir = get_storage_path("metrics")
+    os.makedirs(metrics_dir, exist_ok=True)
+    
+    # Create a clean filename
+    model_name_clean = model_name.replace('/', '_')
+    dataset_name_clean = dataset_name.replace('/', '_')
+    
+    filename = f"{model_name_clean}_{dataset_name_clean}_{timestamp}.json"
+    filepath = os.path.join(metrics_dir, filename)
+    
+    # Add metadata
+    metrics_with_meta = {
+        "model_name": model_name,
+        "dataset_name": dataset_name,
+        "timestamp": timestamp,
+        "metrics": metrics
+    }
+    
+    # Save the metrics
+    with open(filepath, 'w') as f:
+        json.dump(metrics_with_meta, f, indent=2)
+    
+    # Sync to Google Drive
+    sync_to_gdrive("metrics")
+    
+    logger.info(f"Saved metrics to {filepath} and synced to Google Drive")
+    return filepath
+
+class MetricLogger:
+    """
+    Logger for tracking and saving metrics during model evaluation.
+    """
+    
+    def __init__(self, model_name, dataset_name):
+        """
+        Initialize the metric logger.
+        
+        Args:
+            model_name (str): Name of the model being evaluated
+            dataset_name (str): Name of the dataset being used
+        """
+        self.model_name = model_name
+        self.dataset_name = dataset_name
+        self.metrics = {}
+        self.start_time = datetime.now()
+        
+        # Create timestamp for this evaluation run
+        self.timestamp = self.start_time.strftime("%Y%m%d_%H%M%S")
+        
+        # Use storage path utility to get metrics directory
+        self.metrics_dir = get_storage_path("metrics")
+        os.makedirs(self.metrics_dir, exist_ok=True)
+    
+    def log_metric(self, metric_name, value, step=None):
+        """Log a single metric value."""
+        if metric_name not in self.metrics:
+            self.metrics[metric_name] = []
+        
+        entry = {"value": value, "timestamp": datetime.now().isoformat()}
+        if step is not None:
+            entry["step"] = step
+        
+        self.metrics[metric_name].append(entry)
+        logger.info(f"Metric {metric_name}: {value}")
+    
+    def log_metrics(self, metrics_dict, step=None):
+        """Log multiple metrics at once."""
+        for metric_name, value in metrics_dict.items():
+            self.log_metric(metric_name, value, step)
+    
+    def save(self):
+        """Save all metrics to a file and sync to Google Drive."""
+        return save_metrics(self.metrics, self.model_name, self.dataset_name, self.timestamp)
+    
+    def save_and_sync(self, include_samples=True):
+        """
+        Save metrics and sync to Google Drive, with option to include sample outputs.
+        
+        Args:
+            include_samples (bool): Whether to include sample outputs in the metrics
+            
+        Returns:
+            str: Path to the saved metrics file
+        """
+        # Add run summary metrics
+        self.metrics["run_summary"] = {
+            "start_time": self.start_time.isoformat(),
+            "end_time": datetime.now().isoformat(),
+            "duration_seconds": (datetime.now() - self.start_time).total_seconds()
+        }
+        
+        # Save the metrics
+        filepath = self.save()
+        
+        # Sync to Google Drive
+        sync_to_gdrive("metrics")
+        
+        return filepath
 
 # Example usage
 if __name__ == "__main__":

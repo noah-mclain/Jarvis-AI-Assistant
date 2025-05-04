@@ -32,6 +32,7 @@ from typing import Dict, List, Any, Tuple, Optional, Union
 from tqdm import tqdm
 from datetime import datetime
 from pathlib import Path
+from .utils import get_storage_path, sync_to_gdrive
 
 # Add the parent directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -507,6 +508,102 @@ def train_code_model(args, force_gpu: bool = True):
         return False
 
     return True
+
+
+def save_training_metrics(metrics, run_name, epoch=None):
+    """
+    Save training metrics to a file.
+    
+    Args:
+        metrics (dict): Dictionary containing metrics
+        run_name (str): Name of the training run
+        epoch (int, optional): Current epoch number
+    """
+    epoch_str = f"_epoch_{epoch}" if epoch is not None else ""
+    
+    # Use the storage path utility to get the correct path
+    metrics_dir = get_storage_path("metrics")
+    os.makedirs(metrics_dir, exist_ok=True)
+    
+    metrics_file = os.path.join(metrics_dir, f"{run_name}{epoch_str}_metrics.json")
+    
+    with open(metrics_file, 'w') as f:
+        json.dump(metrics, f, indent=2)
+    
+    # Sync metrics to Google Drive
+    sync_to_gdrive("metrics")
+    
+    logger.info(f"Saved metrics to {metrics_file}")
+
+
+def train_model(
+    model_name,
+    dataset_path,
+    output_dir=None,
+    epochs=3,
+    batch_size=4,
+    learning_rate=2e-5,
+    max_length=512,
+    use_peft=True,
+    peft_type='lora',
+    use_int8=False,
+    lora_r=16,
+    lora_alpha=32,
+    lora_dropout=0.05,
+    gradient_accumulation_steps=1,
+    warmup_steps=100,
+    evaluation_strategy='epoch',
+    save_strategy='epoch',
+    logging_steps=10,
+    seed=42,
+    push_to_hub=False,
+    hub_model_id=None,
+    hub_private_repo=True,
+    report_to='tensorboard',
+    fp16=True,
+    run_name=None,
+    save_total_limit=3
+):
+    """
+    Train a transformer model using the HuggingFace Transformers library.
+    """
+    if output_dir is None:
+        # Use the storage path utility to get the correct path
+        output_dir = get_storage_path("models", run_name or model_name.split('/')[-1])
+    
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # ... existing code ...
+    
+    # Add this at the end of the function, just before returning
+    # Sync models and checkpoints to Google Drive after training
+    sync_to_gdrive("models")
+    sync_to_gdrive("checkpoints")
+    
+    return trainer, model
+
+
+class CustomCallback(TrainerCallback):
+    """Custom callback for syncing checkpoints to Google Drive during training."""
+    
+    def __init__(self, sync_interval=1):
+        self.sync_interval = sync_interval
+        self.last_sync_step = 0
+    
+    def on_save(self, args, state, control, **kwargs):
+        """Called when the trainer saves a checkpoint."""
+        # Sync metrics and checkpoints to Google Drive
+        sync_to_gdrive("metrics")
+        sync_to_gdrive("checkpoints")
+        logger.info("Synced metrics and checkpoints to Google Drive")
+    
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        """Called when the trainer logs metrics."""
+        if (state.global_step - self.last_sync_step) >= self.sync_interval * args.logging_steps:
+            # Sync metrics to Google Drive
+            sync_to_gdrive("metrics")
+            self.last_sync_step = state.global_step
+            logger.info(f"Synced metrics to Google Drive at step {state.global_step}")
 
 
 def main():
