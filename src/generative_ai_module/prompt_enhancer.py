@@ -11,11 +11,26 @@ from pathlib import Path
 
 from .utils import is_zipfile
 
+# Import our minimal tokenizer - will always work even if spaCy fails
+try:
+    from .minimal_spacy_tokenizer import tokenize as minimal_tokenize
+    MINIMAL_TOKENIZER_AVAILABLE = True
+except ImportError:
+    MINIMAL_TOKENIZER_AVAILABLE = False
+    logging.warning("Minimal tokenizer not available, will use basic fallback")
+
 # Try to import spaCy with better error handling and Paperspace compatibility
 SPACY_AVAILABLE = False
 SPACY_MODEL_LOADED = False
 TOKENIZER_ONLY_MODE = False
 NLP = None
+
+# Check if we're in Paperspace
+IS_PAPERSPACE = (
+    os.environ.get('PAPERSPACE', '').lower() == 'true' or 
+    'gradient' in os.environ.get('HOSTNAME', '').lower() or
+    os.path.exists('/paperspace')
+)
 
 def fix_paperspace_spacy_imports():
     """Fix spaCy imports for Paperspace environments by creating dummy imports"""
@@ -25,64 +40,66 @@ def fix_paperspace_spacy_imports():
             """Dummy module to replace problematic imports"""
             def __init__(self, name):
                 self.__name__ = name
+                # Add ParametricAttention_v2 directly to the __dict__ to ensure it's available
+                self.__dict__["ParametricAttention_v2"] = type("ParametricAttention_v2", (), {})
             
             def __getattr__(self, attr):
-                # Return self for nested attributes
-                return self
+                # Return a dummy object for any attribute
+                return type(attr, (), {})()
         
         # We'll manipulate sys.modules to prevent problematic imports
-        if 'thinc.api' in sys.modules:
-            del sys.modules['thinc.api']
+        for module_name in ['thinc.api', 'thinc.layers', 'thinc.model', 'thinc.config']:
+            if module_name in sys.modules:
+                del sys.modules[module_name]
+            sys.modules[module_name] = DummyModule(module_name)
         
-        # Insert a dummy module for thinc.api
-        dummy_thinc_api = DummyModule('thinc.api')
-        sys.modules['thinc.api'] = dummy_thinc_api
-        
-        # Add ParametricAttention_v2 to the dummy module
-        dummy_thinc_api.ParametricAttention_v2 = object()
-        
+        logging.info("Paperspace compatibility fixed applied to spaCy imports")
         return True
     except Exception as e:
         logging.error(f"Error fixing Paperspace spaCy imports: {e}")
         return False
 
-# Try different approaches to load spaCy
-try:
-    # First attempt normal import
-    import spacy
-    SPACY_AVAILABLE = True
-    # Check if the model is also available
+# If in Paperspace, use minimal tokenizer approach instead of full spaCy
+if IS_PAPERSPACE and MINIMAL_TOKENIZER_AVAILABLE:
+    logging.info("Paperspace environment detected, using minimal tokenizer")
+    TOKENIZER_ONLY_MODE = True
+else:
+    # Try different approaches to load spaCy
     try:
-        # Try to load the model
-        NLP = spacy.load("en_core_web_sm")
-        SPACY_MODEL_LOADED = True
-    except OSError:
-        # Model not found, provide instructions
-        logging.warning("spaCy model 'en_core_web_sm' not found. For optimal text processing, install it with:")
-        logging.warning("python -m spacy download en_core_web_sm")
-        logging.warning("Or run setup/setup_spacy.py to install spaCy and the model correctly.")
-        logging.warning("Using basic text processing fallback for now.")
-    except Exception as e:
-        is_paperspace = os.environ.get('PAPERSPACE', '') == 'true' or 'gradient' in os.environ.get('HOSTNAME', '')
-        if "ParametricAttention_v2" in str(e) or is_paperspace:
-            logging.warning("Detected Paperspace environment with compatibility issues")
-            # Try to fix the imports for Paperspace
-            if fix_paperspace_spacy_imports():
-                try:
-                    # Try loading again with minimal features
-                    NLP = spacy.load("en_core_web_sm")
-                    SPACY_MODEL_LOADED = True
-                    TOKENIZER_ONLY_MODE = True
-                    logging.warning("spaCy loaded in tokenizer-only mode for Paperspace compatibility")
-                except Exception as inner_e:
-                    logging.warning(f"Failed to load spaCy even with Paperspace fixes: {inner_e}")
+        # First attempt normal import
+        import spacy
+        SPACY_AVAILABLE = True
+        # Check if the model is also available
+        try:
+            # Try to load the model
+            NLP = spacy.load("en_core_web_sm")
+            SPACY_MODEL_LOADED = True
+        except OSError:
+            # Model not found, provide instructions
+            logging.warning("spaCy model 'en_core_web_sm' not found. For optimal text processing, install it with:")
+            logging.warning("python -m spacy download en_core_web_sm")
+            logging.warning("Or run setup/setup_spacy.py to install spaCy and the model correctly.")
+            logging.warning("Using basic text processing fallback for now.")
+        except Exception as e:
+            if "ParametricAttention_v2" in str(e) or IS_PAPERSPACE:
+                logging.warning("Detected Paperspace environment with compatibility issues")
+                # Try to fix the imports for Paperspace
+                if fix_paperspace_spacy_imports():
+                    try:
+                        # Try loading again with minimal features
+                        NLP = spacy.load("en_core_web_sm")
+                        SPACY_MODEL_LOADED = True
+                        TOKENIZER_ONLY_MODE = True
+                        logging.warning("spaCy loaded in tokenizer-only mode for Paperspace compatibility")
+                    except Exception as inner_e:
+                        logging.warning(f"Failed to load spaCy even with Paperspace fixes: {inner_e}")
+                else:
+                    logging.warning("Failed to apply Paperspace-specific fixes")
             else:
-                logging.warning("Failed to apply Paperspace-specific fixes")
-        else:
-            logging.warning(f"Error loading spaCy model: {str(e)}. Using basic text processing fallback.")
-except ImportError:
-    logging.warning("spaCy not available, using basic text processing fallback")
-    logging.warning("For optimal text processing, install spaCy by running setup/setup_spacy.py")
+                logging.warning(f"Error loading spaCy model: {str(e)}. Using basic text processing fallback.")
+    except ImportError:
+        logging.warning("spaCy not available, using basic text processing fallback")
+        logging.warning("For optimal text processing, install spaCy by running setup/setup_spacy.py")
 
 class PromptEnhancer:
     def __init__(self):
@@ -91,8 +108,12 @@ class PromptEnhancer:
         # Set up the NLP pipeline based on what's available
         self.nlp = NLP  # This will be None if spaCy or model is not available
         self.tokenizer_only_mode = TOKENIZER_ONLY_MODE
+        self.minimal_tokenizer_available = MINIMAL_TOKENIZER_AVAILABLE
+        self.is_paperspace = IS_PAPERSPACE
         
-        if self.nlp:
+        if self.is_paperspace and self.minimal_tokenizer_available:
+            self.logger.info("Using minimal spaCy tokenizer for Paperspace compatibility")
+        elif self.nlp:
             if self.tokenizer_only_mode:
                 self.logger.info("Using spaCy in tokenizer-only mode for Paperspace compatibility")
             else:
@@ -131,6 +152,11 @@ class PromptEnhancer:
 
     def _enhance_text(self, text: str) -> str:
         """Enhance text prompts using NLP techniques or fallback method"""
+        # For Paperspace, try minimal tokenizer first (most reliable)
+        if self.is_paperspace and self.minimal_tokenizer_available:
+            return self._enhance_text_minimal_tokenizer(text)
+        
+        # For regular environments, use full spaCy if available
         if self.nlp:
             try:
                 if self.tokenizer_only_mode:
@@ -161,6 +187,38 @@ class PromptEnhancer:
         
         # Fallback method using basic text processing (no spaCy)
         return self._enhance_text_fallback(text)
+    
+    def _enhance_text_minimal_tokenizer(self, text: str) -> str:
+        """Enhanced text processing using our minimal tokenizer module (most reliable in Paperspace)"""
+        try:
+            # Use minimal_tokenize imported from minimal_spacy_tokenizer.py
+            tokens = minimal_tokenize(text)
+            
+            # Get word frequencies
+            word_freq = {}
+            for token in tokens:
+                if len(token) > 3 and token.isalpha():
+                    token = token.lower()
+                    word_freq[token] = word_freq.get(token, 0) + 1
+            
+            # Extract top keywords
+            keywords = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:7]
+            keywords = [word for word, _ in keywords]
+            
+            # Extract potential subjects (capitalized words)
+            potential_subjects = [token for token in tokens if token and token[0].isupper() and len(token) > 3]
+            
+            return (
+                "Generate high-quality output based on these requirements:\n"
+                f"Main focus: {', '.join(potential_subjects[:3]) if potential_subjects else 'general request'}\n"
+                f"Keywords: {', '.join(keywords) if keywords else 'general content'}\n"
+                f"Word count: {len(tokens)} words\n"
+                f"Detailed description: {text}\n"
+                "Include appropriate specifications based on the context."
+            )
+        except Exception as e:
+            self.logger.warning(f"Minimal tokenizer processing failed: {str(e)}")
+            return self._enhance_text_fallback(text)
     
     def _enhance_text_tokenizer_only(self, text: str) -> str:
         """Enhanced text processing using only the tokenizer (Paperspace-safe)"""

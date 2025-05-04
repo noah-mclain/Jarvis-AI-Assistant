@@ -250,47 +250,135 @@ def save_log_file(content, filename=None):
     
     return log_path
 
-# Add spaCy utilities
+# Add spaCy utilities with Paperspace compatibility
 def is_spacy_available():
     """Check if spaCy is available in the current environment"""
     try:
+        # Check if minimal tokenizer is available first
+        try:
+            from .minimal_spacy_tokenizer import tokenize as minimal_tokenize
+            return True, "minimal-tokenizer"
+        except ImportError:
+            pass
+        
+        # Try importing regular spaCy
         import spacy
         return True, spacy.__version__
     except ImportError:
         return False, None
+    except Exception as e:
+        # Handle ParametricAttention_v2 error or other issues
+        if "ParametricAttention_v2" in str(e):
+            # Try to use minimal tokenizer instead
+            try:
+                from .minimal_spacy_tokenizer import tokenize as minimal_tokenize
+                return True, "minimal-tokenizer"
+            except ImportError:
+                pass
+        return False, str(e)
 
 def is_spacy_model_loaded(model_name="en_core_web_sm"):
     """Check if a specific spaCy model is available and can be loaded"""
+    # First check if minimal tokenizer is available
+    try:
+        from .minimal_spacy_tokenizer import tokenizer
+        if tokenizer.is_available:
+            return True, f"Minimal tokenizer loaded successfully (Paperspace-safe)"
+    except ImportError:
+        pass
+    
+    # Try regular spaCy model
     try:
         import spacy
-        nlp = spacy.load(model_name)
-        # Test the model with a simple sentence
-        doc = nlp("This is a test sentence.")
-        return True, f"Model {model_name} loaded successfully"
+        # Only try this on non-Paperspace environments to avoid segfaults
+        if not is_paperspace_environment():
+            nlp = spacy.load(model_name)
+            # Test the model with a simple sentence
+            doc = nlp("This is a test sentence.")
+            return True, f"Model {model_name} loaded successfully"
+        else:
+            # On Paperspace, we don't want to load the full pipeline
+            try:
+                # Just try a very minimal test to see if the model can be found
+                nlp = spacy.load(model_name, disable=["ner", "parser", "attribute_ruler", "lemmatizer"])
+                # Only test tokenization which is safe
+                tokens = [t.text for t in nlp.tokenizer("Test sentence")]
+                return True, f"Model {model_name} tokenizer available (Paperspace-safe mode)"
+            except Exception as e:
+                return False, f"Error loading model in Paperspace-safe mode: {str(e)}"
     except ImportError:
         return False, "spaCy not installed"
     except OSError:
         return False, f"Model {model_name} not found"
     except Exception as e:
+        if "ParametricAttention_v2" in str(e):
+            return False, "Paperspace compatibility issue: ParametricAttention_v2 error"
         return False, f"Error loading model: {str(e)}"
 
-def initialize_spacy(fallback_to_basic=True, log_errors=True):
+def initialize_spacy(fallback_to_basic=True, log_errors=True, paperspace_safe=None):
     """
     Initialize spaCy with the en_core_web_sm model if available.
     
     Args:
         fallback_to_basic: If True, will not raise errors but return None if spaCy is unavailable
         log_errors: If True, will log errors and warnings
+        paperspace_safe: Override for Paperspace detection - if None, will auto-detect
         
     Returns:
         nlp: The spaCy NLP object if available, None otherwise
     """
     import logging
     
+    # Auto-detect Paperspace if not specified
+    if paperspace_safe is None:
+        paperspace_safe = is_paperspace_environment()
+    
+    # Try using minimal tokenizer first if in Paperspace
+    if paperspace_safe:
+        try:
+            from .minimal_spacy_tokenizer import tokenizer
+            if tokenizer.is_available:
+                if log_errors:
+                    logging.info("Using minimal spaCy tokenizer (Paperspace-safe)")
+                
+                # Return a simplified object with just tokenizer functionality
+                class MinimalNLP:
+                    def __init__(self, tokenizer):
+                        self.tokenizer = tokenizer
+                    
+                    def __call__(self, text):
+                        tokens = self.tokenizer.tokenize(text)
+                        # Return a dummy doc object with just the tokens
+                        class DummyDoc:
+                            def __init__(self, tokens):
+                                self.tokens = tokens
+                                self.ents = []
+                            def __iter__(self):
+                                for t in self.tokens:
+                                    yield type('DummyToken', (), {'text': t, 'pos_': "UNKNOWN", 'dep_': "UNKNOWN", 'head': type('DummyHead', (), {'text': ""})})
+                            def __getitem__(self, i):
+                                if isinstance(i, slice):
+                                    return [type('DummyToken', (), {'text': t}) for t in self.tokens[i]]
+                                return type('DummyToken', (), {'text': self.tokens[i]})
+                        return DummyDoc(tokens)
+                
+                return MinimalNLP(tokenizer)
+        except ImportError:
+            if log_errors:
+                logging.warning("Minimal tokenizer not available, trying regular spaCy")
+    
+    # For non-Paperspace or if minimal tokenizer failed, try regular spaCy
     try:
         import spacy
         try:
-            nlp = spacy.load("en_core_web_sm")
+            # In Paperspace, load with minimal components to avoid segfaults
+            if paperspace_safe:
+                if log_errors:
+                    logging.info("Loading spaCy in Paperspace-safe mode")
+                nlp = spacy.load("en_core_web_sm", disable=["ner", "parser", "attribute_ruler", "lemmatizer"])
+            else:
+                nlp = spacy.load("en_core_web_sm")
+            
             if log_errors:
                 logging.info("spaCy initialized with en_core_web_sm model")
             return nlp
@@ -302,6 +390,17 @@ def initialize_spacy(fallback_to_basic=True, log_errors=True):
                 raise e
             return None
         except Exception as e:
+            if "ParametricAttention_v2" in str(e):
+                if log_errors:
+                    logging.error(f"Paperspace compatibility issue with spaCy: {str(e)}")
+                try:
+                    # Final attempt - create blank model which should work
+                    if log_errors:
+                        logging.info("Trying to create blank model as last resort")
+                    nlp = spacy.blank("en")
+                    return nlp
+                except Exception:
+                    pass
             if log_errors:
                 logging.error(f"Error initializing spaCy: {str(e)}")
             if not fallback_to_basic:
@@ -326,14 +425,53 @@ def process_text_with_spacy_or_fallback(text, nlp=None):
     Returns:
         dict: Processed text information (entities, tokens, etc.)
     """
+    # Check if we're in Paperspace
+    paperspace_mode = is_paperspace_environment()
+    
+    # Check for minimal tokenizer first
+    try:
+        from .minimal_spacy_tokenizer import tokenize as minimal_tokenize
+        if paperspace_mode:
+            tokens = minimal_tokenize(text)
+            return {
+                "entities": [],  # Empty since we can't detect entities in minimal mode
+                "tokens": tokens,
+                "pos_tags": [],  # Empty in minimal mode
+                "nouns": [t for t in tokens if t[0].isupper() and len(t) > 3],  # Simple heuristic
+                "verbs": [],  # Empty in minimal mode
+                "adjectives": [],  # Empty in minimal mode
+                "dependency_tree": [],  # Empty in minimal mode
+                "sentences": [s.strip() for s in text.split('.') if s.strip()],  # Simple period splitting
+                "minimal_mode": True
+            }
+    except ImportError:
+        pass  # Continue with standard approach if minimal_tokenize not available
+    
     # If nlp is not provided, try to initialize spaCy
     if nlp is None:
-        nlp = initialize_spacy(fallback_to_basic=True, log_errors=False)
+        nlp = initialize_spacy(fallback_to_basic=True, log_errors=False, paperspace_safe=paperspace_mode)
     
     # If spaCy is available, use it for processing
     if nlp is not None:
         try:
             doc = nlp(text)
+            
+            # In Paperspace/minimal mode, only return tokens to avoid segfaults
+            if paperspace_mode or hasattr(nlp, 'tokenizer') and not hasattr(doc, 'ents'):
+                tokens = [token.text for token in doc]
+                return {
+                    "entities": [],  # Empty since we can't detect entities in minimal mode
+                    "tokens": tokens,
+                    "pos_tags": [],  # Empty in minimal mode
+                    "nouns": [t for t in tokens if t[0].isupper() and len(t) > 3],  # Simple heuristic
+                    "verbs": [],  # Empty in minimal mode
+                    "adjectives": [],  # Empty in minimal mode
+                    "dependency_tree": [],  # Empty in minimal mode
+                    "sentences": [s.strip() for s in text.split('.') if s.strip()],  # Simple period splitting
+                    "minimal_mode": True
+                }
+            
+            # Full mode for non-Paperspace environments
             return {
                 "entities": [(ent.text, ent.label_) for ent in doc.ents],
                 "tokens": [token.text for token in doc],
@@ -342,7 +480,8 @@ def process_text_with_spacy_or_fallback(text, nlp=None):
                 "verbs": [token.text for token in doc if token.pos_ == "VERB"],
                 "adjectives": [token.text for token in doc if token.pos_ == "ADJ"],
                 "dependency_tree": [(token.text, token.dep_, token.head.text) for token in doc],
-                "sentences": [sent.text for sent in doc.sents]
+                "sentences": [sent.text for sent in doc.sents],
+                "minimal_mode": False
             }
         except Exception:
             # Fall back to basic processing if spaCy fails
@@ -370,6 +509,7 @@ def process_text_with_spacy_or_fallback(text, nlp=None):
         "verbs": potential_verbs,
         "adjectives": [],  # Empty since we can't determine adjectives
         "dependency_tree": [],  # Empty since we can't determine dependencies
-        "sentences": sentences
+        "sentences": sentences,
+        "minimal_mode": True  # Using basic mode
     }
     
