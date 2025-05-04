@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import string
 import os
+import tempfile
+import shutil
 
 from .utils import is_zipfile, process_zip
 
@@ -104,8 +106,31 @@ class TextGenerator:
             if isinstance(input_data, str):
                 if not is_zipfile(input_data):
                     return self.char_indices_tensor(input_data)
-                zip_contents = process_zip(input_data)
-                return " ".join(zip_contents)
+                
+                # Create a temporary directory to extract the ZIP file
+                extract_dir = tempfile.mkdtemp()
+                
+                # Process the ZIP file
+                if process_zip(input_data, extract_dir):
+                    # Read the extracted files
+                    all_text = []
+                    for root, _, files in os.walk(extract_dir):
+                        for file in files:
+                            try:
+                                with open(os.path.join(root, file), 'r', encoding='utf-8') as f:
+                                    all_text.append(f.read())
+                            except UnicodeDecodeError:
+                                # Skip binary files
+                                pass
+                
+                    # Clean up the temporary directory
+                    shutil.rmtree(extract_dir)
+                    
+                    # Join all texts and return
+                    combined_text = " ".join(all_text)
+                    return self.char_indices_tensor(combined_text)
+                else:
+                    raise ValueError(f"Failed to process ZIP file: {input_data}")
             elif hasattr(input_data, 'read'):  # Handle file-like objects
                 try:
                     content = input_data.read().decode('utf-8')

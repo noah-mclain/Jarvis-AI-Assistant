@@ -5,14 +5,15 @@ This module provides the core functionality for generative AI tasks,
 including text generation, code generation, and fine-tuning.
 """
 
+# Import the fix module first to ensure all functions are available
+from .import_fix import calculate_metrics, save_metrics, EvaluationMetrics
+
 # Import core components
 from .jarvis_unified import JarvisAI as UnifiedModel
 from .text_generator import TextGenerator
 from .code_generator import CodeGenerator
-from .evaluation_metrics import EvaluationMetrics, save_metrics
 from .dataset_processor import DatasetProcessor
 from .prompt_enhancer import PromptEnhancer, analyze_prompt
-from .train_models import calculate_metrics
 
 # Import Google Drive sync functionality
 from .utils import (
@@ -25,11 +26,9 @@ from .utils import (
     ensure_directory_exists,
     is_paperspace_environment
 )
+
 from .sync_gdrive import sync_all_to_gdrive, sync_all_from_gdrive
-try:
-    from .manage_storage import sync_everything_to_gdrive, clear_local_storage, show_storage_status
-except ImportError:
-    pass  # Not critical if missing
+from .manage_storage import sync_everything_to_gdrive, clear_local_storage, show_storage_status
 
 # Import additional functionality
 try:

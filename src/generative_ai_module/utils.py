@@ -5,6 +5,8 @@ import json
 import logging
 from pathlib import Path
 import datetime
+import shutil
+from typing import Optional, List, Dict, Any, Union
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -127,23 +129,46 @@ def sync_from_gdrive(folder_type=None):
     else:
         logger.info("Not running in Paperspace environment, skipping Google Drive sync.")
 
-def is_zipfile(filepath):
-    return zipfile.is_zipfile(filepath)
+def is_zipfile(file_path: str) -> bool:
+    """
+    Check if a file is a valid ZIP file.
+    
+    Args:
+        file_path: Path to the file to check
+        
+    Returns:
+        bool: True if the file is a valid ZIP file, False otherwise
+    """
+    return zipfile.is_zipfile(file_path) if os.path.exists(file_path) else False
 
-def process_zip(zip_path):
-    texts = []
+def process_zip(zip_path: str, extract_to: str) -> bool:
+    """
+    Process a ZIP file by extracting its contents.
+    
+    Args:
+        zip_path: Path to the ZIP file
+        extract_to: Directory to extract the files to
+        
+    Returns:
+        bool: True if extraction was successful, False otherwise
+    """
     try:
+        if not is_zipfile(zip_path):
+            logger.error(f"File {zip_path} is not a valid ZIP file")
+            return False
+            
+        # Create extraction directory if it doesn't exist
+        os.makedirs(extract_to, exist_ok=True)
+        
+        # Extract the ZIP file
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            for file_info in zip_ref.infolist():
-                if not file_info.is_dir():
-                    with zip_ref.open(file_info) as file:
-                        try:
-                            texts.append(file.read().decode('utf-8'))
-                        except UnicodeDecodeError:
-                            continue
-    except zipfile.BadZipFile as e:
-       raise ValueError("Invalid zip file") from e
-    return texts
+            zip_ref.extractall(extract_to)
+            
+        logger.info(f"Successfully extracted {zip_path} to {extract_to}")
+        return True
+    except Exception as e:
+        logger.error(f"Error extracting ZIP file {zip_path}: {e}")
+        return False
 
 def setup_logging(log_filename=None):
     """
