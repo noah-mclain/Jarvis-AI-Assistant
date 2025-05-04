@@ -11,12 +11,44 @@ from pathlib import Path
 
 from .utils import is_zipfile
 
-# Try to import spaCy with better error handling
+# Try to import spaCy with better error handling and Paperspace compatibility
 SPACY_AVAILABLE = False
 SPACY_MODEL_LOADED = False
+TOKENIZER_ONLY_MODE = False
 NLP = None
 
+def fix_paperspace_spacy_imports():
+    """Fix spaCy imports for Paperspace environments by creating dummy imports"""
+    try:
+        # Create dummy modules to prevent problematic imports
+        class DummyModule:
+            """Dummy module to replace problematic imports"""
+            def __init__(self, name):
+                self.__name__ = name
+            
+            def __getattr__(self, attr):
+                # Return self for nested attributes
+                return self
+        
+        # We'll manipulate sys.modules to prevent problematic imports
+        if 'thinc.api' in sys.modules:
+            del sys.modules['thinc.api']
+        
+        # Insert a dummy module for thinc.api
+        dummy_thinc_api = DummyModule('thinc.api')
+        sys.modules['thinc.api'] = dummy_thinc_api
+        
+        # Add ParametricAttention_v2 to the dummy module
+        dummy_thinc_api.ParametricAttention_v2 = object()
+        
+        return True
+    except Exception as e:
+        logging.error(f"Error fixing Paperspace spaCy imports: {e}")
+        return False
+
+# Try different approaches to load spaCy
 try:
+    # First attempt normal import
     import spacy
     SPACY_AVAILABLE = True
     # Check if the model is also available
@@ -31,7 +63,23 @@ try:
         logging.warning("Or run setup/setup_spacy.py to install spaCy and the model correctly.")
         logging.warning("Using basic text processing fallback for now.")
     except Exception as e:
-        logging.warning(f"Error loading spaCy model: {str(e)}. Using basic text processing fallback.")
+        is_paperspace = os.environ.get('PAPERSPACE', '') == 'true' or 'gradient' in os.environ.get('HOSTNAME', '')
+        if "ParametricAttention_v2" in str(e) or is_paperspace:
+            logging.warning("Detected Paperspace environment with compatibility issues")
+            # Try to fix the imports for Paperspace
+            if fix_paperspace_spacy_imports():
+                try:
+                    # Try loading again with minimal features
+                    NLP = spacy.load("en_core_web_sm")
+                    SPACY_MODEL_LOADED = True
+                    TOKENIZER_ONLY_MODE = True
+                    logging.warning("spaCy loaded in tokenizer-only mode for Paperspace compatibility")
+                except Exception as inner_e:
+                    logging.warning(f"Failed to load spaCy even with Paperspace fixes: {inner_e}")
+            else:
+                logging.warning("Failed to apply Paperspace-specific fixes")
+        else:
+            logging.warning(f"Error loading spaCy model: {str(e)}. Using basic text processing fallback.")
 except ImportError:
     logging.warning("spaCy not available, using basic text processing fallback")
     logging.warning("For optimal text processing, install spaCy by running setup/setup_spacy.py")
@@ -42,8 +90,13 @@ class PromptEnhancer:
         
         # Set up the NLP pipeline based on what's available
         self.nlp = NLP  # This will be None if spaCy or model is not available
+        self.tokenizer_only_mode = TOKENIZER_ONLY_MODE
+        
         if self.nlp:
-            self.logger.info("Using spaCy for enhanced NLP processing")
+            if self.tokenizer_only_mode:
+                self.logger.info("Using spaCy in tokenizer-only mode for Paperspace compatibility")
+            else:
+                self.logger.info("Using spaCy for enhanced NLP processing")
         else:
             self.logger.info("Using basic text processing (no spaCy)")
         
@@ -80,6 +133,11 @@ class PromptEnhancer:
         """Enhance text prompts using NLP techniques or fallback method"""
         if self.nlp:
             try:
+                if self.tokenizer_only_mode:
+                    # Paperspace-safe mode: only use tokenizer
+                    return self._enhance_text_tokenizer_only(text)
+                
+                # Full spaCy mode
                 doc = self.nlp(text)
                 
                 # Extract entities and syntactic features
@@ -103,6 +161,38 @@ class PromptEnhancer:
         
         # Fallback method using basic text processing (no spaCy)
         return self._enhance_text_fallback(text)
+    
+    def _enhance_text_tokenizer_only(self, text: str) -> str:
+        """Enhanced text processing using only the tokenizer (Paperspace-safe)"""
+        try:
+            # Use only the tokenizer component which is safe in Paperspace
+            tokens = [t.text for t in self.nlp.tokenizer(text)]
+            
+            # Get word frequencies
+            word_freq = {}
+            for token in tokens:
+                if len(token) > 3 and token.isalpha():
+                    token = token.lower()
+                    word_freq[token] = word_freq.get(token, 0) + 1
+            
+            # Extract top keywords
+            keywords = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:7]
+            keywords = [word for word, _ in keywords]
+            
+            # Extract potential subjects (capitalized words)
+            potential_subjects = [token for token in tokens if token and token[0].isupper() and len(token) > 3]
+            
+            return (
+                "Generate high-quality output based on these requirements:\n"
+                f"Main focus: {', '.join(potential_subjects[:3]) if potential_subjects else 'general request'}\n"
+                f"Keywords: {', '.join(keywords) if keywords else 'general content'}\n"
+                f"Word count: {len(tokens)} words\n"
+                f"Detailed description: {text}\n"
+                "Include appropriate specifications based on the context."
+            )
+        except Exception as e:
+            self.logger.warning(f"Tokenizer-only processing failed: {str(e)}")
+            return self._enhance_text_fallback(text)
     
     def _enhance_text_fallback(self, text: str) -> str:
         """Basic text processing fallback when spaCy is not available"""
