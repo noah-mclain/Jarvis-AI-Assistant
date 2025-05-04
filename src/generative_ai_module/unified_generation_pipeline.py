@@ -26,9 +26,14 @@ import json
 import datetime
 import matplotlib.pyplot as plt
 import time
+import math
+import functools
 
 from .prompt_enhancer import analyze_prompt
 from .unsloth_deepseek import evaluate_model
+
+# Define infinity for use in the code
+infinity = float('inf')
 
 # Add the parent directory to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -44,6 +49,18 @@ try:
 except ImportError:
     print("Warning: BasicTokenizer not found. Character-level generation will be used.")
     BasicTokenizer = None
+
+# Execution time measurement utility function
+def print_execution_time(func):
+    """Decorator to print the execution time of a function"""
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        end_time = time.time()
+        print(f"Function {func.__name__} took {end_time - start_time:.2f} seconds to execute")
+        return result
+    return wrapper
 
 class TrainingVisualizer:
     """Class to handle visualization of training metrics"""
@@ -1501,11 +1518,20 @@ def train_on_datasets(args: argparse.Namespace, datasets: Dict[str, Dict[str, An
 def interactive_generation(model: torch.nn.Module, 
                          tokenizer: Any = None,
                          model_type: str = "text",
-                         force_gpu: bool = True) -> None:
+                         force_gpu: bool = True,
+                         args: argparse.Namespace = None) -> None:
     """Interactive generation mode for user prompts"""
     print("\nStarting interactive generation mode...")
     print("Type 'quit' to exit")
     print("The system will automatically determine whether to generate a story or dialogue response.")
+    
+    # If args wasn't provided, create default values
+    if args is None:
+        class DefaultArgs:
+            model_dir = "models"
+            length = 100
+            temperature = 0.7
+        args = DefaultArgs()
     
     while True:
         try:
@@ -1604,7 +1630,7 @@ def main():
         model, tokenizer, model_type = load_correct_model(args)
         if model:
             print(f"\nEntering interactive mode with {model_type} model...")
-            interactive_generation(model, tokenizer, model_type, args.force_gpu)
+            interactive_generation(model, tokenizer, model_type, args.force_gpu, args)
         else:
             print("Failed to load model for interactive mode.")
         return

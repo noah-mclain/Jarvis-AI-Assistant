@@ -740,26 +740,38 @@ def train_model(
 
 
 class CustomCallback(TrainerCallback):
-    """Custom callback for syncing checkpoints to Google Drive during training."""
+    """Custom callback for syncing to Google Drive during training"""
     
     def __init__(self, sync_interval=1):
+        """Initialize with sync interval (in steps)"""
         self.sync_interval = sync_interval
         self.last_sync_step = 0
     
     def on_save(self, args, state, control, **kwargs):
-        """Called when the trainer saves a checkpoint."""
-        # Sync metrics and checkpoints to Google Drive
-        sync_to_gdrive("metrics")
-        sync_to_gdrive("checkpoints")
-        logger.info("Synced metrics and checkpoints to Google Drive")
+        """Sync when model is saved"""
+        try:
+            # kwargs["trainer"] contains the trainer instance, and kwargs["model"] contains the model
+            trainer = kwargs.get("trainer", None)
+            model = kwargs.get("model", None)
+            
+            # Sync to GDrive
+            sync_to_gdrive("models")
+            sync_to_gdrive("checkpoints")
+            sync_logs()
+            logger.info(f"Synced models, checkpoints, and logs to Google Drive at step {state.global_step}")
+        except Exception as e:
+            logger.warning(f"Error syncing to Google Drive: {e}")
     
     def on_log(self, args, state, control, logs=None, **kwargs):
-        """Called when the trainer logs metrics."""
-        if (state.global_step - self.last_sync_step) >= self.sync_interval * args.logging_steps:
-            # Sync metrics to Google Drive
-            sync_to_gdrive("metrics")
-            self.last_sync_step = state.global_step
-            logger.info(f"Synced metrics to Google Drive at step {state.global_step}")
+        """Sync logs periodically"""
+        # Determine if we should sync based on interval
+        steps_since_last_sync = state.global_step - self.last_sync_step
+        if steps_since_last_sync >= self.sync_interval:
+            try:
+                sync_logs()
+                self.last_sync_step = state.global_step
+            except Exception as e:
+                logger.warning(f"Error syncing logs to Google Drive: {e}")
 
 
 def main():

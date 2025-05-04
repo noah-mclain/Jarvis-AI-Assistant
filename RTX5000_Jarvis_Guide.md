@@ -580,7 +580,21 @@ python src/generative_ai_module/train_models.py \
     --max-samples 5000 \
     --visualization-dir /notebooks/Jarvis_AI_Assistant/visualizations
 
-# Train text generation models
+# Train on ALL text datasets with RTX 5000 optimized parameters
+python src/generative_ai_module/train_models.py \
+    --model-type text \
+    --datasets all \
+    --batch-size 4 \
+    --epochs 3 \
+    --learning-rate 3e-5 \
+    --early-stopping 3 \
+    --sequence-length 512 \
+    --max-samples 2000 \
+    --visualization-dir /notebooks/Jarvis_AI_Assistant/visualizations \
+    --model-dir /notebooks/Jarvis_AI_Assistant/models \
+    --warmup-steps 50
+
+# Train on specific text datasets (if you don't want all)
 python src/generative_ai_module/train_models.py \
     --model-type text \
     --datasets writing_prompts persona_chat \
@@ -687,33 +701,78 @@ python src/generative_ai_module/unified_generation_pipeline.py \
 
 ### 5. Optimized Storage and Dataset Handling
 
-For better performance with large datasets on limited storage:
+For the RTX 5000 with limited 16GB VRAM, efficient storage management is critical. Use these approaches:
 
 ```bash
-# Use storage optimization for models and datasets
+# Create a script to optimize storage for DeepSeek models
 cd /notebooks
-python src/generative_ai_module/storage_optimization.py \
-    --optimize-models \
-    --model-dir /notebooks/Jarvis_AI_Assistant/models \
-    --compress-datasets \
-    --dataset-dir /notebooks/Jarvis_AI_Assistant/datasets \
-    --cleanup-checkpoints \
-    --max-checkpoints 2
+cat > optimize_storage.py << 'EOL'
+#!/usr/bin/env python3
+import os
+import sys
+import logging
+from pathlib import Path
 
-# Sync data to Google Drive for persistence
-python src/generative_ai_module/sync_gdrive.py \
-    --sync-all \
-    --models-dir /notebooks/Jarvis_AI_Assistant/models \
-    --datasets-dir /notebooks/Jarvis_AI_Assistant/datasets \
-    --metrics-dir /notebooks/Jarvis_AI_Assistant/metrics
+# Add the project root to the path
+project_root = os.path.abspath(os.path.dirname(__file__))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+from src.generative_ai_module.storage_optimization import (
+    optimize_storage_for_model,
+    compress_dataset,
+    create_checkpoint_strategy,
+    setup_google_drive
+)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# Create required directories
+os.makedirs("/notebooks/Jarvis_AI_Assistant/models", exist_ok=True)
+os.makedirs("/notebooks/Jarvis_AI_Assistant/datasets", exist_ok=True)
+os.makedirs("/notebooks/Jarvis_AI_Assistant/checkpoints", exist_ok=True)
+
+# Optimize a model for RTX 5000
+logger.info("Optimizing model for RTX 5000 (16GB VRAM)")
+optimization_results = optimize_storage_for_model(
+    model_name="deepseek-ai/deepseek-coder-6.7b-base",
+    output_dir="/notebooks/Jarvis_AI_Assistant/models/deepseek_optimized",
+    quantize_bits=4,  # Use 4-bit quantization for maximum memory efficiency
+    use_external_storage=True,
+    storage_type="gdrive",
+    remote_path="DeepSeek_Models"
+)
+
+logger.info(f"Optimization complete: {optimization_results}")
+EOL
+
+# Make the script executable
+chmod +x optimize_storage.py
+
+# Run the optimization script
+python optimize_storage.py
+
+# Sync data to/from Google Drive using the built-in script
+cd /notebooks
+
+# Sync all data to Google Drive
+python -m src.generative_ai_module.sync_gdrive to-gdrive
+
+# Sync only models from Google Drive
+python -m src.generative_ai_module.sync_gdrive from-gdrive --folder models
+
+# Sync in both directions
+python -m src.generative_ai_module.sync_gdrive all
 ```
 
 ### 6. Running the Jarvis AI Assistant
 
-Run the assistant with memory-efficient settings:
+Run the assistant with memory-efficient settings optimized for the RTX 5000:
 
 ```bash
-# Run the Jarvis AI Assistant with optimized memory settings
+# Run the Jarvis AI Assistant in interactive mode
 cd /notebooks
 python src/generative_ai_module/run_jarvis.py \
     --model deepseek-ai/deepseek-coder-6.7b-instruct \
@@ -721,6 +780,20 @@ python src/generative_ai_module/run_jarvis.py \
     --interactive \
     --max-tokens 512 \
     --output /notebooks/Jarvis_AI_Assistant/logs/chat_history.json
+
+# Run the assistant with a single prompt (non-interactive mode)
+python src/generative_ai_module/run_jarvis.py \
+    --model deepseek-ai/deepseek-coder-6.7b-instruct \
+    --prompt "Write a Python function to calculate the Fibonacci sequence" \
+    --max-tokens 256 \
+    --output /notebooks/Jarvis_AI_Assistant/logs/single_response.json
+
+# Load from a previous chat history and continue the conversation
+python src/generative_ai_module/run_jarvis.py \
+    --model deepseek-ai/deepseek-coder-6.7b-instruct \
+    --interactive \
+    --history /notebooks/Jarvis_AI_Assistant/logs/chat_history.json \
+    --output /notebooks/Jarvis_AI_Assistant/logs/continued_chat.json
 ```
 
 ## Performance Optimization Tips for RTX 5000 (16GB)
@@ -891,5 +964,32 @@ pip install gdown google-auth google-auth-oauthlib google-auth-httplib2
 
 # Sync to Google Drive
 python -c "from src.generative_ai_module.sync_gdrive import sync_all_to_gdrive; sync_all_to_gdrive()"
+```
+
+#### Code Quality and Linting Fixes
+
+Several undefined variable issues have been fixed in the codebase to ensure it runs reliably on the RTX 5000:
+
+```bash
+# Fixed variables in storage_optimization.py
+- Added logger definition to fix "logger is not defined" errors
+
+# Fixed variables in train_models.py
+- Updated CustomCallback class to properly handle trainer and model variables
+
+# Fixed variables in unified_generation_pipeline.py
+- Added infinity variable definition
+- Created print_execution_time decorator function
+- Fixed args parameter handling in interactive_generation
+```
+
+These fixes are especially important for the RTX 5000 environment, as undefined variables can cause runtime crashes that waste valuable compute time and GPU memory. The corrections improve the stability of long-running training jobs and interactive sessions.
+
+When working with the codebase, if you encounter similar "undefined variable" errors, you can apply the fixes using the same pattern:
+
+1. Identify the missing variable
+2. Define it at the appropriate scope
+3. Use default values where necessary
+4. Pass required parameters to functions that need them
 ```
 ````

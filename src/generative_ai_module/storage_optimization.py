@@ -27,6 +27,10 @@ import time
 from dataclasses import dataclass
 from enum import Enum
 
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 # For Google Drive integration
 try:
     import gdown
