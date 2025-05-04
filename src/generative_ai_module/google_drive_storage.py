@@ -534,6 +534,15 @@ class GoogleDriveSync:
     GDRIVE_BASE = "gdrive:Jarvis_AI_Assistant"
     LOCAL_BASE = "/notebooks/Jarvis_AI_Assistant"
     
+    # Define all the directories
+    LOCAL_MODELS_DIR = os.path.join(LOCAL_BASE, "models")
+    LOCAL_DATASETS_DIR = os.path.join(LOCAL_BASE, "datasets")
+    LOCAL_METRICS_DIR = os.path.join(LOCAL_BASE, "metrics")
+    LOCAL_EVALS_DIR = os.path.join(LOCAL_BASE, "evaluation_metrics")
+    LOCAL_LOGS_DIR = os.path.join(LOCAL_BASE, "logs")
+    LOCAL_CHECKPOINTS_DIR = os.path.join(LOCAL_BASE, "checkpoints")
+    LOCAL_VISUALIZATIONS_DIR = os.path.join(LOCAL_BASE, "visualizations")
+    
     SYNC_FOLDERS = {
         "metrics": f"{GDRIVE_BASE}/metrics",
         "models": f"{GDRIVE_BASE}/models",

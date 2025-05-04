@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
 Minimal test script that directly imports the problematic files.
-This script avoids importing from __init__.py to test if the files themselves are correct.
+This script properly handles relative imports by setting up the package structure.
 """
 
 import os
 import sys
+import importlib
 
 # Set sys.path to include the project root
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
@@ -17,17 +18,44 @@ print("Testing direct imports...")
 import logging
 logging.disable(logging.CRITICAL)
 
+# First create a mock for the utils module to avoid GoogleDrive issues
+class MockUtils:
+    @staticmethod
+    def get_storage_path(*args, **kwargs):
+        return "/tmp/mock_storage"
+    
+    @staticmethod
+    def sync_to_gdrive(*args, **kwargs):
+        pass
+    
+    @staticmethod
+    def sync_from_gdrive(*args, **kwargs):
+        pass
+    
+    @staticmethod
+    def ensure_directory_exists(*args, **kwargs):
+        return "/tmp/mock_dir"
+    
+    @staticmethod
+    def is_paperspace_environment(*args, **kwargs):
+        return False
+    
+    @staticmethod
+    def setup_logging(*args, **kwargs):
+        pass
+    
+    @staticmethod
+    def sync_logs(*args, **kwargs):
+        pass
+
+# Create the module
+sys.modules['src.generative_ai_module.utils'] = MockUtils()
+
 # Test direct import from evaluation_metrics.py
 print("\nTesting evaluation_metrics.py...")
 try:
-    # Load the file directly using importlib to avoid __init__.py
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "evaluation_metrics", 
-        os.path.join(project_root, "src/generative_ai_module/evaluation_metrics.py")
-    )
-    evaluation_metrics = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(evaluation_metrics)
+    # Import directly using the standard import mechanism
+    import src.generative_ai_module.evaluation_metrics as evaluation_metrics
     
     # Test if EvaluationMetrics class exists
     print(f"EvaluationMetrics class exists: {hasattr(evaluation_metrics, 'EvaluationMetrics')}")
@@ -42,13 +70,8 @@ except Exception as e:
 # Test direct import from train_models.py
 print("\nTesting train_models.py...")
 try:
-    # Load the file directly using importlib to avoid __init__.py
-    spec = importlib.util.spec_from_file_location(
-        "train_models", 
-        os.path.join(project_root, "src/generative_ai_module/train_models.py")
-    )
-    train_models = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(train_models)
+    # Import directly using the standard import mechanism
+    import src.generative_ai_module.train_models as train_models
     
     # Test if calculate_metrics function exists
     print(f"calculate_metrics function exists: {hasattr(train_models, 'calculate_metrics')}")
