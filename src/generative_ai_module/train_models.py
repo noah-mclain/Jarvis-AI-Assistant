@@ -529,53 +529,81 @@ def train_text_model(
     Returns:
         Trained model, tokenizer, training arguments
     """
-    # Import statements inside the function to avoid issues with circular imports
+    # CRITICAL FIX: Ensure GPU usage for all operations
+    # Set environment variables to ensure maximum GPU utilization
     import os
     import torch
+    
+    # Force CUDA to be visible
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+    
+    # Create a seed for reproducibility
+    torch.manual_seed(42)
+    
+    # Check for CUDA
+    if torch.cuda.is_available():
+        # Use CUDA for all operations
+        torch.cuda.manual_seed(42)
+        torch.cuda.manual_seed_all(42)
+        
+        # Force CUDA as default tensor type
+        torch.set_default_tensor_type('torch.cuda.FloatTensor')
+        
+        # Set default device in PyTorch 2.0+
+        if hasattr(torch, 'set_default_device'):
+            torch.set_default_device('cuda')
+        
+        # Create a dummy tensor to ensure CUDA is initialized
+        _ = torch.zeros(1, device="cuda")
+        
+        print(f"Using CUDA GPU for text generation: {torch.cuda.get_device_name(0)}")
+    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        # Use MPS (Apple Silicon) if available
+        device = torch.device("mps")
+        print(f"Using Apple Silicon GPU for text generation")
+    else:
+        print("Warning: No GPU detected. Processing will be slow on CPU.")
+    
+    # Set up tokenizer
+    from transformers import AutoTokenizer, AutoModelForCausalLM, TrainingArguments, Trainer
+    from transformers import DataCollatorForLanguageModeling, DataCollatorWithPadding
     import numpy as np
     from pathlib import Path
-    from transformers import (
-        AutoTokenizer, AutoModelForCausalLM, TrainingArguments, Trainer,
-        DataCollatorForLanguageModeling, DataCollatorWithPadding,
-        DataCollatorForSeq2Seq
-    )
     from datasets import Dataset, DatasetDict
-    
-    # Configure GPU settings
-    use_gpu = torch.cuda.is_available()
-    device = "cuda" if use_gpu else "cpu"
-    
-    if use_gpu:
-        print(f"Using CUDA GPU for text generation: {torch.cuda.get_device_name(0)}")
-    else:
-        print("Using CPU for text generation - this will be slow")
+
+    # Import specific toolkit modules - ensure all imports are explicit
+    from .unified_dataset_handler import UnifiedDatasetHandler
     
     # Create output directories
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(eval_metrics_dir, exist_ok=True)
     
-    # Create a unified dataset handler from the refactored architecture
-    from .unified_dataset_handler import UnifiedDatasetHandler
-    from transformers import AutoTokenizer
-    
-    # Load tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
     
     # Add special tokens if needed
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
         
-    print(f"Vocabulary size: {len(tokenizer)}")
-    special_tokens = [tokenizer.pad_token, tokenizer.unk_token, 
+    # Print vocabulary information
+    vocab_size = len(tokenizer.vocab) if hasattr(tokenizer, 'vocab') else tokenizer.vocab_size
+    print(f"Vocabulary size: {vocab_size}")
+    
+    # Print special tokens
+    special_tokens = [tokenizer.pad_token, tokenizer.eos_token,
                       tokenizer.bos_token, tokenizer.eos_token]
     print(f"Special tokens: {special_tokens}")
     
     # Initialize dataset handler
     dataset_handler = UnifiedDatasetHandler(
-        tokenizer=tokenizer,
-        max_length=max_length,
-        batch_size=batch_size
+        dataset_name=None,
+        cache_dir=cache_dir
     )
+    
+    # Store tokenizer and configuration as attributes
+    dataset_handler.tokenizer = tokenizer
+    dataset_handler.max_length = max_length
+    dataset_handler.batch_size = batch_size
     
     # Check if we have multiple datasets
     if isinstance(dataset, str) and ',' in dataset:
@@ -656,6 +684,38 @@ def train_text_model(
     print(f"Using batch size {batch_size} with gradient accumulation steps {gradient_accumulation_steps}")
     print(f"Effective batch size: {batch_size * gradient_accumulation_steps}")
     
+    # CRITICAL FIX: Ensure we always use CPU generators for data operations
+    # This avoids the "Expected a 'cuda' device type for generator but found 'cpu'" error
+    torch.utils.data.dataloader._DataLoader._DataLoader__initialized = False
+    def force_cpu_generator_for_sampler(loader):
+        """Force the data loader to use CPU generators for samplers"""
+        if hasattr(loader, 'generator') and loader.generator is not None:
+            if str(loader.generator.device) != 'cpu':
+                # Create a CPU generator with same seed
+                seed = loader.generator.initial_seed()
+                loader.generator = torch.Generator().manual_seed(seed)
+                
+        # Also patch any existing samplers
+        if hasattr(loader, 'sampler') and hasattr(loader.sampler, 'generator'):
+            if loader.sampler.generator is not None and str(loader.sampler.generator.device) != 'cpu':
+                seed = loader.sampler.generator.initial_seed()
+                loader.sampler.generator = torch.Generator().manual_seed(seed)
+    
+    # Patch DataLoader's _data_loader_init_args_and_kwargs to enforce CPU generators
+    original_init_args = torch.utils.data.dataloader._DataLoader._data_loader_init_args_and_kwargs
+    def patched_init_args(self, *args, **kwargs):
+        args_dict, kwargs_dict = original_init_args(self, *args, **kwargs)
+        # Force CPU generator
+        if 'generator' in kwargs_dict and kwargs_dict['generator'] is not None:
+            if str(kwargs_dict['generator'].device) != 'cpu':
+                seed = kwargs_dict['generator'].initial_seed()
+                kwargs_dict['generator'] = torch.Generator().manual_seed(seed)
+        return args_dict, kwargs_dict
+    
+    # Apply the patch
+    torch.utils.data.dataloader._DataLoader._data_loader_init_args_and_kwargs = patched_init_args
+    torch.utils.data.dataloader._DataLoader._DataLoader__initialized = True
+    
     # Setup training arguments
     training_args = TrainingArguments(
         output_dir=output_dir,
@@ -726,7 +786,7 @@ def train_text_model(
                 load_in_8bit=use_8bit,
                 load_in_4bit=use_4bit,
                 torch_dtype=torch.bfloat16 if bf16 else torch.float16 if fp16 else None,
-                device_map="auto" if use_gpu else None,
+                device_map="auto" if torch.cuda.is_available() else None,
             )
             
             # Apply QLoRA if requested

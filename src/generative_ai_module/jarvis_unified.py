@@ -116,24 +116,50 @@ _GPU_AVAILABLE = _force_gpu_usage()
 # This patch ensures that PyTorch's random_split and DataLoader will work correctly
 # with CUDA by always using CPU generators for samplers
 def _patch_torch_for_cuda_generator_compatibility():
-    if hasattr(torch.utils.data, 'random_split'):
-        original_random_split = torch.utils.data.random_split
-        
-        def patched_random_split(dataset, lengths, generator=None):
-            """Patched version that ensures CPU generator is used"""
-            cpu_generator = torch.Generator().manual_seed(42 if generator is None else generator.initial_seed())
-            return original_random_split(dataset, lengths, generator=cpu_generator)
-        
-        # Apply the patch
-        torch.utils.data.random_split = patched_random_split
-        
-    # Set global seed for all operations
+    # First set global seed for all operations for reproducibility
     torch.manual_seed(42)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(42)
         torch.cuda.manual_seed_all(42)
     random.seed(42)
     np.random.seed(42)
+    
+    # 1. Patch random_split to always use CPU generators
+    if hasattr(torch.utils.data, 'random_split'):
+        original_random_split = torch.utils.data.random_split
+        
+        def patched_random_split(dataset, lengths, generator=None):
+            """Patched version that ensures CPU generator is used"""
+            # Create a CPU generator with the same seed if provided generator is CUDA
+            # or use a fixed seed if no generator provided
+            if generator is None or str(generator.device) != 'cpu':
+                seed = 42 if generator is None else generator.initial_seed()
+                cpu_generator = torch.Generator().manual_seed(seed)
+            else:
+                # The provided generator is already on CPU, use it directly
+                cpu_generator = generator
+                
+            return original_random_split(dataset, lengths, generator=cpu_generator)
+        
+        # Apply the patch
+        torch.utils.data.random_split = patched_random_split
+    
+    # 2. Also patch DataLoader to ensure it uses CPU generators for samplers
+    original_dataloader_init = torch.utils.data.DataLoader.__init__
+    
+    def patched_dataloader_init(self, *args, **kwargs):
+        # If a generator is provided but is on CUDA, convert to CPU
+        if 'generator' in kwargs and kwargs['generator'] is not None:
+            if str(kwargs['generator'].device) != 'cpu':
+                # Create a CPU generator with the same seed
+                seed = kwargs['generator'].initial_seed()
+                kwargs['generator'] = torch.Generator().manual_seed(seed)
+                
+        # Call the original init
+        original_dataloader_init(self, *args, **kwargs)
+        
+    # Apply the DataLoader patch
+    torch.utils.data.DataLoader.__init__ = patched_dataloader_init
     
     # Log the patch application
     print("Applied critical patch for CUDA generator compatibility")
@@ -501,7 +527,8 @@ class JarvisAI:
             A torch Generator for the appropriate device
         """
         # IMPORTANT: Always use CPU generator for DataLoader/random_split compatibility
-        # The critical issue is that DataLoader's samplers expect CPU generators
+        # DataLoader's samplers require CPU generators, so we always return a CPU generator
+        # regardless of the device being used for model computation
         return torch.Generator().manual_seed(seed)
 
     def load_model(self, dataset_or_path: str, is_path: bool = False) -> Tuple[Any, Any]:
@@ -879,16 +906,6 @@ class JarvisAI:
         test_size = int(len(full_dataset) * test_split)
         train_size = len(full_dataset) - val_size - test_size
         
-        # Use our helper method to get an appropriate generator for the current device
-        generator = self.get_device_generator(seed=42)
-        
-        # Split the dataset using the device-appropriate generator
-        train_dataset, val_dataset, test_dataset = random_split(
-            full_dataset, 
-            [train_size, val_size, test_size],
-            generator=generator
-        )
-
         # CRITICAL FIX: Always use CPU generator for dataset operations
         # The core issue is that DataLoader and Sampler expect CPU generators
         cpu_generator = torch.Generator().manual_seed(42)
