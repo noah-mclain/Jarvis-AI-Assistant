@@ -419,6 +419,9 @@ class JarvisAI:
             return self.models[dataset_or_path], self.tokenizers[dataset_or_path]
         
         # Determine model path or name
+        use_fallback = False
+        original_path = None
+        
         if is_path:
             model_path = dataset_or_path
             logger.info(f"Loading model from path: {model_path}")
@@ -426,9 +429,12 @@ class JarvisAI:
             # Check if model exists in models directory
             model_type = "best" if self.use_best_models else "final"
             model_path = self.models_dir / f"{dataset_or_path}_{model_type}"
+            original_path = str(model_path)
             
-            if not model_path.exists():
-                # Use standard LLM if custom model not found
+            # Check if the model path exists and has a config.json file
+            if not model_path.exists() or not (Path(model_path) / "config.json").exists():
+                use_fallback = True
+                # Get fallback model
                 if dataset_or_path == "pile":
                     model_path = "gpt2"
                 elif dataset_or_path == "openassistant":
@@ -438,52 +444,90 @@ class JarvisAI:
                 else:
                     # Default to deepseek-coder for all other cases
                     model_path = "deepseek-ai/deepseek-coder-6.7b-instruct"
-                    
-                logger.info(f"Model for {dataset_or_path} not found, using {model_path}")
+                
+                logger.info(f"Model for {dataset_or_path} not found at {original_path}, using fallback model: {model_path}")
         
-        # Configure quantization for A100 optimization
-        if self.load_in_4bit and "deepseek" in str(model_path):
-            quantization_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.bfloat16 if self.use_bf16 else torch.float16,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_use_double_quant=True
-            )
-        else:
-            quantization_config = None
+        try:
+            # Configure quantization for optimization
+            if self.load_in_4bit and "deepseek" in str(model_path):
+                quantization_config = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_compute_dtype=torch.bfloat16 if self.use_bf16 else torch.float16,
+                    bnb_4bit_quant_type="nf4",
+                    bnb_4bit_use_double_quant=True
+                )
+            else:
+                quantization_config = None
+                
+            # Load tokenizer based on model path
+            if use_fallback:
+                # When using a fallback model, always use its direct name
+                tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+            else:
+                # For custom models, try to load tokenizer from the path
+                try:
+                    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+                except (OSError, EnvironmentError) as e:
+                    logger.warning(f"Failed to load tokenizer from {model_path}: {e}")
+                    # Fall back to a default tokenizer if custom one can't be loaded
+                    logger.info(f"Falling back to gpt2 tokenizer")
+                    model_path = "gpt2"
+                    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+                    use_fallback = True
             
-        # Load tokenizer based on model path
-        tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
+            # Ensure pad token exists
+            if tokenizer.pad_token is None:
+                tokenizer.pad_token = tokenizer.eos_token
+                
+            # Load model with optimizations based on hardware
+            if self.use_unsloth and "deepseek" in str(model_path) and unsloth_available:
+                # Use Unsloth optimizations for DeepSeek models
+                logger.info(f"Loading {model_path} with Unsloth optimizations")
+                model, tokenizer = FastLanguageModel.from_pretrained(
+                    model_name=model_path,
+                    max_seq_length=2048,
+                    quantization_config=quantization_config,
+                    device_map="auto",
+                    trust_remote_code=True
+                )
+            else:
+                # Standard model loading
+                model = AutoModelForCausalLM.from_pretrained(
+                    model_path,
+                    device_map="auto" if self.device == "cuda" else None,
+                    quantization_config=quantization_config,
+                    torch_dtype=torch.bfloat16 if self.use_bf16 else torch.float16,
+                    trust_remote_code=True
+                )
+                
+            # Cache model if it's a named dataset
+            if not is_path:
+                self.models[dataset_or_path] = model
+                self.tokenizers[dataset_or_path] = tokenizer
+                
+            return model, tokenizer
+        
+        except Exception as e:
+            logger.error(f"Error loading model from {model_path}: {e}")
+            logger.info("Falling back to GPT2 as a last resort")
             
-        # Load model with optimizations based on hardware
-        if self.use_unsloth and "deepseek" in str(model_path) and unsloth_available:
-            # Use Unsloth optimizations for DeepSeek models
-            logger.info(f"Loading {model_path} with Unsloth optimizations")
-            model, tokenizer = FastLanguageModel.from_pretrained(
-                model_name=model_path,
-                max_seq_length=2048,
-                quantization_config=quantization_config,
-                device_map="auto",
-                trust_remote_code=True
-            )
-        else:
-            # Standard model loading
+            # Last resort fallback - always use GPT2
+            tokenizer = AutoTokenizer.from_pretrained("gpt2", trust_remote_code=True)
+            if tokenizer.pad_token is None:
+                tokenizer.pad_token = tokenizer.eos_token
+                
             model = AutoModelForCausalLM.from_pretrained(
-                model_path,
+                "gpt2",
                 device_map="auto" if self.device == "cuda" else None,
-                quantization_config=quantization_config,
-                torch_dtype=torch.bfloat16 if self.use_bf16 else torch.float16,
-                trust_remote_code=True
+                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32
             )
             
-        # Cache model if it's a named dataset
-        if not is_path:
-            self.models[dataset_or_path] = model
-            self.tokenizers[dataset_or_path] = tokenizer
-            
-        return model, tokenizer
+            # Cache the fallback model
+            if not is_path:
+                self.models[dataset_or_path] = model
+                self.tokenizers[dataset_or_path] = tokenizer
+                
+            return model, tokenizer
         
     def determine_best_dataset(self, prompt: str) -> str:
         """
