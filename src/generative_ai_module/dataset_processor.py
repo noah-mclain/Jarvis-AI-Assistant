@@ -37,6 +37,17 @@ class DatasetProcessor:
         """
         combined_text = ""
         
+        # Check if source is a HuggingFace dataset (contains a slash)
+        if isinstance(source, str) and '/' in source:
+            # This is a HuggingFace dataset identifier, handle differently
+            try:
+                print(f"Loading HuggingFace dataset: {source}")
+                return self._load_huggingface_dataset(source)
+            except Exception as e:
+                print(f"Error loading HuggingFace dataset {source}: {str(e)}")
+                # Fall back to treating as a regular path
+                pass
+                
         if isinstance(source, str):
             # Single source
             if os.path.isdir(source):
@@ -72,6 +83,154 @@ class DatasetProcessor:
                 combined_text += self.load_data(item) + "\n\n"
                 
         return combined_text
+    
+    def _load_huggingface_dataset(self, dataset_name: str, split="train", max_samples=None):
+        """
+        Load data directly from a HuggingFace dataset
+        
+        Args:
+            dataset_name: Name of the dataset on HuggingFace
+            split: Dataset split to load
+            max_samples: Maximum number of samples to load
+            
+        Returns:
+            Processed text from the dataset
+        """
+        from datasets import load_dataset
+        
+        # Load the dataset
+        dataset = load_dataset(dataset_name, split=split)
+        
+        # Limit samples if specified
+        if max_samples is not None and max_samples < len(dataset):
+            dataset = dataset.select(range(max_samples))
+            
+        # Process the dataset based on common field patterns
+        return self._process_huggingface_dataset(dataset, dataset_name)
+    
+    def _process_huggingface_dataset(self, dataset, dataset_name):
+        """
+        Process HuggingFace dataset based on its structure
+        
+        Args:
+            dataset: HuggingFace dataset
+            dataset_name: Name of the dataset for format detection
+            
+        Returns:
+            Processed text from the dataset
+        """
+        # Print dataset structure to help with debugging
+        if len(dataset) > 0:
+            first_example = dataset[0]
+            print(f"Dataset structure for {dataset_name}: {list(first_example.keys())}")
+        
+        # Process dataset in a memory-efficient way
+        combined_texts = []
+        batch_size = 1000  # Process 1000 examples at a time
+        
+        # Use the right field based on dataset structure
+        if "OpenAssistant" in dataset_name:
+            # Special handling for OpenAssistant
+            desc = f"Processing OpenAssistant"
+            for i in tqdm(range(0, len(dataset), batch_size), desc=desc):
+                batch = dataset[i:min(i+batch_size, len(dataset))]
+                batch_texts = []
+                
+                for item in batch:
+                    # Format as dialogue pairs
+                    if item['role'] == 'assistant' and 'text' in item:
+                        batch_texts.append(f"User: [Previous message]\nAssistant: {item['text']}")
+                    elif item['role'] == 'prompter' and 'text' in item:
+                        batch_texts.append(f"User: {item['text']}\nAssistant:")
+                
+                combined_texts.extend(batch_texts)
+                
+                # Free memory
+                del batch
+                del batch_texts
+                
+        elif "GPTeacher" in dataset_name:
+            # GPTeacher format
+            desc = f"Processing GPTeacher"
+            for i in tqdm(range(0, len(dataset), batch_size), desc=desc):
+                batch = dataset[i:min(i+batch_size, len(dataset))]
+                batch_texts = []
+                
+                for item in batch:
+                    if 'instruction' in item and 'response' in item:
+                        batch_texts.append(f"User: {item['instruction']}\nAssistant: {item['response']}")
+                    
+                combined_texts.extend(batch_texts)
+                
+                # Free memory
+                del batch
+                del batch_texts
+                
+        elif "Persona-Chat" in dataset_name:
+            # Persona Chat format
+            desc = f"Processing Persona Chat"
+            for i in tqdm(range(0, len(dataset), batch_size), desc=desc):
+                batch = dataset[i:min(i+batch_size, len(dataset))]
+                batch_texts = []
+                
+                for item in batch:
+                    if 'personas' in item and 'utterances' in item:
+                        personas = "\n".join(item['personas'])
+                        for utterance in item['utterances']:
+                            if isinstance(utterance, list) and len(utterance) >= 2:
+                                batch_texts.append(f"Persona: {personas}\nUser: {utterance[0]}\nAssistant: {utterance[1]}")
+                    
+                combined_texts.extend(batch_texts)
+                
+                # Free memory
+                del batch
+                del batch_texts
+                
+        elif "writingprompts" in dataset_name.lower():
+            # Writing prompts format
+            desc = f"Processing Writing Prompts"
+            for i in tqdm(range(0, len(dataset), batch_size), desc=desc):
+                batch = dataset[i:min(i+batch_size, len(dataset))]
+                batch_texts = []
+                
+                for item in batch:
+                    if 'prompt' in item and 'story' in item:
+                        batch_texts.append(f"Prompt: {item['prompt']}\nStory: {item['story']}")
+                    
+                combined_texts.extend(batch_texts)
+                
+                # Free memory
+                del batch
+                del batch_texts
+                
+        else:
+            # Generic format - try to extract text based on common field names
+            desc = f"Processing dataset: {dataset_name}"
+            for i in tqdm(range(0, len(dataset), batch_size), desc=desc):
+                batch = dataset[i:min(i+batch_size, len(dataset))]
+                batch_texts = []
+                
+                for item in batch:
+                    # Try different field combinations
+                    if 'text' in item:
+                        batch_texts.append(item['text'])
+                    elif 'content' in item:
+                        batch_texts.append(item['content'])
+                    elif 'input' in item and 'output' in item:
+                        batch_texts.append(f"Input: {item['input']}\nOutput: {item['output']}")
+                    elif 'question' in item and 'answer' in item:
+                        batch_texts.append(f"Question: {item['question']}\nAnswer: {item['answer']}")
+                    elif 'prompt' in item and 'completion' in item:
+                        batch_texts.append(f"Prompt: {item['prompt']}\nCompletion: {item['completion']}")
+                    
+                combined_texts.extend(batch_texts)
+                
+                # Free memory
+                del batch
+                del batch_texts
+        
+        # Join all texts with newlines between examples
+        return "\n\n".join(combined_texts)
     
     def clean_text(self, text: str) -> str:
         """
@@ -470,7 +629,7 @@ ASSISTANT: I'm a software engineer during the week. But on weekends, I play guit
         if source == 'persona_chat':
             raw_text = self.load_persona_chat(split, max_samples, cache_dir)
         elif source == 'writing_prompts':
-            raw_text = self.load_writing_prompts(split, max_samples, cache_dir)
+            raw_text = self.load_writing_prompts(split=split, max_samples=max_samples, cache_dir=cache_dir)
         else:
             # Treat as path to local file or directory
             raw_text = self.load_data(source)
@@ -1039,424 +1198,3 @@ The chain rule is powerful because it allows you to break down complex derivativ
         self.save_tokenized_data(dataset, os.path.dirname(output_path), os.path.basename(output_path))
         
         return dataset
-
-    def _process_huggingface_dataset(self, dataset, source_name):
-        """
-        Process a HuggingFace dataset into a format suitable for training
-        
-        Args:
-            dataset: HuggingFace dataset object
-            source_name: Name of the dataset source
-            
-        Returns:
-            Processed text ready for sequence creation
-        """
-        print(f"Processing HuggingFace dataset with {len(dataset)} samples")
-        
-        # Get metadata about the dataset structure
-        if len(dataset) == 0:
-            print(f"Warning: Dataset {source_name} is empty")
-            return ""
-            
-        sample_item = dataset[0]
-        print(f"Dataset structure for {source_name}: {list(sample_item.keys())}")
-        
-        # Special handling for specific datasets based on their name
-        if any(name in source_name.lower() for name in ['openassistant', 'oasst']):
-            return self._process_openassistant_huggingface(dataset)
-        elif any(name in source_name.lower() for name in ['gpteacher', 'instruct']):
-            return self._process_gpteacher_huggingface(dataset)
-        elif any(name in source_name.lower() for name in ['persona', 'chat', 'conversation', 'dialogue']):
-            return self._process_persona_chat_huggingface(dataset)
-        elif any(name in source_name.lower() for name in ['writing', 'prompt', 'story']):
-            return self._process_writing_prompts_huggingface(dataset)
-        elif any(name in source_name.lower() for name in ['pile', 'corpus']):
-            return self._process_pile_huggingface(dataset)
-        elif any(name in source_name.lower() for name in ['code', 'programming']):
-            return self._process_code_search_net_huggingface(dataset)
-        
-        # Generic processing based on common field names if no special handling matched
-        text_fields = []
-        
-        # Check for common field patterns in datasets
-        field_patterns = {
-            'instruction-response': ['instruction', 'response'],
-            'prompt-completion': ['prompt', 'completion'],
-            'question-answer': ['question', 'answer', 'responses'],
-            'input-output': ['input', 'output'],
-            'text-content': ['text', 'content'],
-            'message-conversation': ['message', 'conversation', 'messages', 'dialog', 'dialogue']
-        }
-        
-        # Try to identify the dataset type based on its fields
-        dataset_type = None
-        for pattern_type, fields in field_patterns.items():
-            if any(field in sample_item for field in fields):
-                dataset_type = pattern_type
-                text_fields.extend([field for field in fields if field in sample_item])
-                break
-                
-        if dataset_type:
-            print(f"Detected dataset type: {dataset_type} with fields: {text_fields}")
-        else:
-            # Fall back to searching for any text fields
-            for key, value in sample_item.items():
-                if isinstance(value, str) and len(value) > 10:  # Minimum length for text fields
-                    text_fields.append(key)
-                    
-        if not text_fields:
-            # Last resort - if we have a 'data' field that's a list or dictionary, try to extract from there
-            if 'data' in sample_item and (isinstance(sample_item['data'], list) or isinstance(sample_item['data'], dict)):
-                print(f"Found 'data' field, attempting to extract content")
-                return self._process_nested_data_field(dataset)
-                
-            raise ValueError(f"Could not identify text fields in dataset {source_name}")
-        
-        print(f"Using text fields: {text_fields}")
-        
-        # Process the dataset based on the identified structure
-        try:
-            if dataset_type == 'instruction-response' or dataset_type == 'prompt-completion' or dataset_type == 'question-answer':
-                # Format as a conversation/QA dataset
-                return self._process_conversational_dataset(dataset, text_fields)
-            else:
-                # Default processing - concatenate text fields
-                return self._process_general_text_dataset(dataset, text_fields)
-        except Exception as e:
-            print(f"Error processing dataset {source_name}: {str(e)}")
-            # Fall back to simple processing
-            return self._fallback_dataset_processing(dataset)
-            
-    def _process_nested_data_field(self, dataset):
-        """Process datasets with nested data structures"""
-        combined_texts = []
-        
-        for item in tqdm(dataset, desc="Processing nested data"):
-            if 'data' not in item:
-                continue
-                
-            data = item['data']
-            if isinstance(data, list):
-                # Try to extract text from list items
-                texts = []
-                for entry in data:
-                    if isinstance(entry, str):
-                        texts.append(entry)
-                    elif isinstance(entry, dict):
-                        # Extract text fields from dictionary
-                        for k, v in entry.items():
-                            if isinstance(v, str) and len(v) > 10:
-                                texts.append(f"{k}: {v}")
-                                
-                if texts:
-                    combined_texts.append("\n".join(texts))
-            elif isinstance(data, dict):
-                # Extract text fields from dictionary
-                texts = []
-                for k, v in data.items():
-                    if isinstance(v, str) and len(v) > 10:
-                        texts.append(f"{k}: {v}")
-                        
-                if texts:
-                    combined_texts.append("\n".join(texts))
-                    
-        return "\n\n".join(combined_texts)
-        
-    def _process_conversational_dataset(self, dataset, text_fields):
-        """Process datasets with a conversational structure (question-answer, prompt-completion, etc.)"""
-        conversations = []
-        
-        # Identify the input and output fields
-        input_field = None
-        output_field = None
-        
-        for field in text_fields:
-            if field in ['instruction', 'prompt', 'question', 'input']:
-                input_field = field
-            elif field in ['response', 'completion', 'answer', 'output', 'responses']:
-                output_field = field
-                
-        if not input_field or not output_field:
-            # If we couldn't clearly identify input/output fields, use the first two fields
-            if len(text_fields) >= 2:
-                input_field = text_fields[0]
-                output_field = text_fields[1]
-            else:
-                # Not enough fields for conversation format
-                return self._process_general_text_dataset(dataset, text_fields)
-                
-        # Process each item as a conversation turn
-        for item in tqdm(dataset, desc="Processing conversations"):
-            if input_field in item and output_field in item:
-                input_text = item[input_field]
-                output_text = item[output_field]
-                
-                # Handle case where output is a list
-                if isinstance(output_text, list):
-                    if len(output_text) > 0:
-                        if isinstance(output_text[0], str):
-                            output_text = output_text[0]  # Use the first response
-                        elif isinstance(output_text[0], dict) and 'text' in output_text[0]:
-                            output_text = output_text[0]['text']  # Common structure
-                        else:
-                            output_text = str(output_text)  # Fallback
-                    else:
-                        output_text = ""  # Empty list
-                
-                # Format as a conversation
-                conversation = f"USER: {input_text.strip()}\nASSISTANT: {output_text.strip()}"
-                conversations.append(conversation)
-                
-        return "\n\n".join(conversations)
-        
-    def _process_general_text_dataset(self, dataset, text_fields):
-        """Process general text datasets by concatenating text fields"""
-        combined_texts = []
-        
-        for item in tqdm(dataset, desc="Processing text data"):
-            item_texts = []
-            for field in text_fields:
-                if field in item and item[field]:
-                    text = item[field]
-                    if isinstance(text, str):
-                        item_texts.append(text)
-                    elif isinstance(text, list) and all(isinstance(t, str) for t in text):
-                        item_texts.append("\n".join(text))
-                    else:
-                        item_texts.append(str(text))
-            
-            if item_texts:
-                combined_texts.append("\n".join(item_texts))
-                
-        return "\n\n".join(combined_texts)
-        
-    def _fallback_dataset_processing(self, dataset):
-        """Last resort processing for datasets with unexpected structures"""
-        texts = []
-        
-        for item in tqdm(dataset, desc="Fallback processing"):
-            # Convert the entire item to a string representation
-            item_str = str(item)
-            # Clean up the string representation
-            item_str = item_str.replace("'", '"').replace("{", "").replace("}", "").replace("[", "").replace("]", "")
-            texts.append(item_str)
-            
-        return "\n\n".join(texts)
-
-    def _process_openassistant_huggingface(self, dataset):
-        """Process OpenAssistant dataset from HuggingFace"""
-        conversations = []
-        
-        # Check the dataset structure to determine the format
-        sample_item = dataset[0] if len(dataset) > 0 else {}
-        
-        # Check if this is OASST1 format
-        if all(field in sample_item for field in ['message_id', 'parent_id', 'role']):
-            # Group by message_tree_id to reconstruct conversations
-            conversation_map = {}
-            
-            for item in tqdm(dataset, desc="Processing OpenAssistant"):
-                message_id = item.get('message_id')
-                parent_id = item.get('parent_id')
-                text = item.get('text', '')
-                role = item.get('role', '')
-                message_tree_id = item.get('message_tree_id')
-                
-                if not message_tree_id or not text:
-                    continue
-                    
-                if message_tree_id not in conversation_map:
-                    conversation_map[message_tree_id] = []
-                
-                conversation_map[message_tree_id].append({
-                    'id': message_id,
-                    'parent_id': parent_id,
-                    'text': text,
-                    'role': role
-                })
-            
-            # Convert to formatted conversations
-            for tree_id, messages in conversation_map.items():
-                # Create a map for quick parent lookup
-                id_to_message = {msg['id']: msg for msg in messages if msg['id']}
-                
-                # Find root messages (no parent)
-                roots = [msg for msg in messages if not msg['parent_id']]
-                
-                if not roots:
-                    continue
-                
-                # Process each conversation tree
-                for root in roots:
-                    conversation = []
-                    conversation.append(f"USER: {root['text']}")
-                    
-                    # Find direct children (responses)
-                    children = [msg for msg in messages if msg.get('parent_id') == root['id']]
-                    
-                    for child in children:
-                        if child['role'] == 'assistant':
-                            conversation.append(f"ASSISTANT: {child['text']}")
-                    
-                    conversations.append("\n".join(conversation))
-        # Check if this is messages format
-        elif 'messages' in sample_item:
-            for item in tqdm(dataset, desc="Processing OpenAssistant messages"):
-                if 'messages' in item and isinstance(item['messages'], list):
-                    conversation = []
-                    for msg in item['messages']:
-                        role = msg.get('role', '').upper()
-                        content = msg.get('content', '')
-                        if role and content:
-                            conversation.append(f"{role}: {content}")
-                    if conversation:
-                        conversations.append("\n".join(conversation))
-        # Otherwise, fall back to generic conversational processing
-        else:
-            return self._process_conversational_dataset(dataset, ['instruction', 'response'])
-                    
-        return "\n\n".join(conversations)
-
-    def _process_gpteacher_huggingface(self, dataset):
-        """Process GPTeacher dataset from HuggingFace"""
-        conversations = []
-        
-        for item in tqdm(dataset, desc="Processing GPTeacher"):
-            # Check for instruction-response format
-            if 'instruction' in item and 'response' in item:
-                instruction = item['instruction']
-                response = item['response']
-                
-                # Check for context
-                if 'context' in item and item['context']:
-                    context = item['context']
-                    conversation = [f"CONTEXT: {context}", f"USER: {instruction}", f"ASSISTANT: {response}"]
-                else:
-                    conversation = [f"USER: {instruction}", f"ASSISTANT: {response}"]
-                
-                conversations.append("\n".join(conversation))
-            # Check for input-output format
-            elif 'input' in item and 'output' in item:
-                input_text = item['input']
-                output_text = item['output']
-                conversations.append(f"USER: {input_text}\nASSISTANT: {output_text}")
-        
-        return "\n\n".join(conversations)
-
-    def _process_persona_chat_huggingface(self, dataset):
-        """Process Persona Chat dataset from HuggingFace"""
-        conversations = []
-        
-        for item in tqdm(dataset, desc="Processing Persona Chat"):
-            # Check for standard persona chat format
-            if 'personas' in item and 'dialogue' in item:
-                # Extract persona information
-                persona_lines = []
-                if isinstance(item['personas'], list):
-                    for p in item['personas']:
-                        persona_lines.append(f"PERSONA: {p}")
-                elif isinstance(item['personas'], dict) and 'persona_1' in item['personas']:
-                    for p in item['personas']['persona_1']:
-                        persona_lines.append(f"PERSONA: {p}")
-                
-                persona_text = "\n".join(persona_lines)
-                
-                # Extract dialogue
-                dialogue_turns = []
-                
-                if isinstance(item['dialogue'], list):
-                    for i, turn in enumerate(item['dialogue']):
-                        speaker = "USER" if i % 2 == 0 else "ASSISTANT"
-                        dialogue_turns.append(f"{speaker}: {turn}")
-                
-                dialogue_text = "\n".join(dialogue_turns)
-                
-                # Combine persona and dialogue
-                full_text = f"{persona_text}\n\n{dialogue_text}"
-                conversations.append(full_text)
-            # Check for alternate format with personality and utterances
-            elif 'personality' in item and 'utterances' in item:
-                # Extract persona information
-                persona_lines = []
-                for p in item['personality']:
-                    persona_lines.append(f"PERSONA: {p}")
-                
-                persona_text = "\n".join(persona_lines)
-                
-                # Extract dialogue from last utterance history
-                dialogue_turns = []
-                if 'history' in item['utterances'][-1]:
-                    history = item['utterances'][-1]['history']
-                    for i, turn in enumerate(history):
-                        speaker = "USER" if i % 2 == 0 else "ASSISTANT"
-                        dialogue_turns.append(f"{speaker}: {turn}")
-                
-                dialogue_text = "\n".join(dialogue_turns)
-                
-                # Combine persona and dialogue
-                full_text = f"{persona_text}\n\n{dialogue_text}"
-                conversations.append(full_text)
-        
-        return "\n\n".join(conversations)
-
-    def _process_writing_prompts_huggingface(self, dataset):
-        """Process Writing Prompts dataset from HuggingFace"""
-        prompt_story_pairs = []
-        
-        for item in tqdm(dataset, desc="Processing Writing Prompts"):
-            if 'prompt' in item and 'story' in item:
-                prompt = item['prompt']
-                story = item['story']
-                
-                # Apply standard format with special tokens
-                formatted_text = f"<PROMPT>\n{prompt}\n<STORY>\n{story}\n<END>"
-                prompt_story_pairs.append(formatted_text)
-        
-        return "\n\n".join(prompt_story_pairs)
-
-    def _process_pile_huggingface(self, dataset):
-        """Process Pile dataset from HuggingFace"""
-        texts = []
-        
-        for item in tqdm(dataset, desc="Processing Pile"):
-            # Check for the standard text field
-            if 'text' in item:
-                text = item['text']
-                
-                # Add source information if available
-                if 'meta' in item and isinstance(item['meta'], dict):
-                    source = item['meta'].get('pile_set_name', 'Unknown')
-                    formatted_text = f"<SOURCE>\n{source}\n<TEXT>\n{text}\n<END>"
-                    texts.append(formatted_text)
-                else:
-                    texts.append(text)
-        
-        return "\n\n".join(texts)
-
-    def _process_code_search_net_huggingface(self, dataset):
-        """Process Code Search Net dataset from HuggingFace"""
-        code_texts = []
-        
-        for item in tqdm(dataset, desc="Processing Code Search Net"):
-            # Check for code and docstring fields
-            if 'code' in item and 'docstring' in item:
-                code = item['code']
-                docstring = item['docstring']
-                
-                # Add language information if available
-                if 'language' in item:
-                    language = item['language']
-                    formatted_text = f"LANGUAGE: {language}\nDOCSTRING:\n{docstring}\n\nCODE:\n{code}"
-                else:
-                    formatted_text = f"DOCSTRING:\n{docstring}\n\nCODE:\n{code}"
-                
-                code_texts.append(formatted_text)
-            # Handle cases where function_tokens is present
-            elif 'function_tokens' in item and isinstance(item['function_tokens'], list):
-                code = ' '.join(item['function_tokens'])
-                docstring = ' '.join(item.get('docstring_tokens', ['No docstring']))
-                
-                formatted_text = f"DOCSTRING:\n{docstring}\n\nCODE:\n{code}"
-                code_texts.append(formatted_text)
-        
-        return "\n\n".join(code_texts)

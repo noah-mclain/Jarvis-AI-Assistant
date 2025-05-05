@@ -459,291 +459,348 @@ def install_dependencies():
             print("You may need to install these packages manually: bert-score rouge-score nltk transformers")
 
 
-def train_text_model(dataset_name: str, args, force_gpu: bool = True):
-    """Train a text generation model on a specific dataset with visualization"""
-    print(f"\n{'='*50}")
-    print(f"Training Text Model on {dataset_name.upper()} dataset")
-    print(f"{'='*50}")
-
-    # Check if model_dir exists
-    if not hasattr(args, 'model_dir') or not args.model_dir:
-        args.model_dir = os.path.join(args.output_dir, 'models')
-        os.makedirs(args.model_dir, exist_ok=True)
-        
-    # Check for early stopping
-    if not hasattr(args, 'early_stopping'):
-        args.early_stopping = 0
-        
-    # Check for validation split
-    if not hasattr(args, 'validation_split'):
-        args.validation_split = 0.1
-        
-    # Check for test split
-    if not hasattr(args, 'test_split'):
-        args.test_split = 0.1
-        
-    # Check for max_samples
-    if not hasattr(args, 'max_samples'):
-        args.max_samples = None
-
-    # Determine gradient accumulation steps based on available memory
-    # This allows simulation of larger batch sizes on limited GPU memory
-    gradient_accumulation_steps = getattr(args, 'gradient_accumulation_steps', 4)
-    effective_batch_size = args.batch_size * gradient_accumulation_steps
-    print(f"Using batch size {args.batch_size} with gradient accumulation steps {gradient_accumulation_steps}")
-    print(f"Effective batch size: {effective_batch_size}")
-
-    # Clear CUDA cache before starting
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-
-    # Create text generator and dataset handler
-    generator = TextGenerator(force_gpu=force_gpu)
-    dataset_handler = UnifiedDatasetHandler()
-    visualizer = TrainingVisualizer(args.eval_metrics_dir)
-
-    # Get device
-    device = generator.device
-    print(f"Using device: {device}")
-
-    # Load dataset
-    print(f"Loading data from {dataset_name}...")
-    data = dataset_handler.load_dataset(
-        dataset_name=dataset_name,
-        max_samples=args.max_samples
-    )
-
-    # Check if we have valid data
-    if not data or not data.get('batches'):
-        print(f"ERROR: No batches found in preprocessed data for {dataset_name}")
-        return None
-
-    # Prepare data for training
-    print("Preparing data for training...")
-    splits = dataset_handler.prepare_for_training(
-        dataset=data,
-        batch_size=args.batch_size,
-        validation_split=args.validation_split,
-        test_split=args.test_split,
-        max_target_idx=generator.model.embedding.num_embeddings - 1  # Ensure target indices stay in range
-    )
-
-    train_data = splits.get("train", {})
-    val_data = splits.get("validation", {})
-    test_data = splits.get("test", {})
-
-    # Initialize metrics tracking
-    metrics = {
-        'loss': [],
-        'val_loss': [],
-        'test_loss': [],
-        'perplexity': [],
-        'val_perplexity': [],
-        'test_perplexity': [],
-        'accuracy': [],
-        'val_accuracy': [],
-        'test_accuracy': []
-    }
-
-    # Setup loss function
-    criterion = get_loss_function(task_type="generation")
-
-    # Training loop
-    print(f"Starting training for {args.epochs} epochs...")
-
-    best_val_loss = float('inf')
-    epochs_without_improvement = 0
-
-    for epoch in range(args.epochs):
-        # Clear CUDA cache before each epoch
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            
-        # Training phase
-        generator.model.train()
-        epoch_loss = 0.0
-        epoch_batches = 0
-        steps_since_update = 0
-
-        # Training progress bar
-        train_progress = tqdm(train_data['batches'], desc=f"Epoch {epoch+1}/{args.epochs} [Train]")
-        for i, (input_batch, target_batch) in enumerate(train_progress):
-            try:
-                # Move data to the model's device
-                input_batch = input_batch.to(device)
-                target_batch = target_batch.to(device)
-                
-                # Get model vocabulary size (n_classes)
-                vocab_size = generator.model.embedding.num_embeddings
-                
-                # Safety check: Ensure target indices are within valid range
-                if target_batch.max() >= vocab_size:
-                    # Clip target indices to valid range
-                    target_batch = torch.clamp(target_batch, 0, vocab_size - 1)
-                
-                # Zero gradients only at the start of accumulation steps
-                if steps_since_update == 0:
-                    generator.optimizer.zero_grad()
-                
-                # Forward pass
-                output, _ = generator.model(input_batch)
-                
-                # Calculate loss - handle different shapes safely
-                if target_batch.dim() == 1:
-                    # For 1D targets, the shape should be [batch_size]
-                    # and output should be [batch_size, vocab_size]
-                    loss = criterion(output, target_batch)
-                else:
-                    # For 2D targets, the shape should be [batch_size, seq_len]
-                    # Reshape as needed
-                    loss = criterion(
-                        output.view(-1, output.size(-1)), 
-                        target_batch.view(-1)
-                    )
-                
-                # Scale loss by gradient accumulation steps
-                if gradient_accumulation_steps > 1:
-                    loss = loss / gradient_accumulation_steps
-                    
-                # Backward pass 
-                loss.backward()
-                
-                steps_since_update += 1
-                
-                # Update weights after accumulating gradients
-                if steps_since_update >= gradient_accumulation_steps:
-                    # Gradient clipping
-                    torch.nn.utils.clip_grad_norm_(generator.model.parameters(), 5.0)
-                    generator.optimizer.step()
-                    generator.optimizer.zero_grad()
-                    steps_since_update = 0
-                
-                # Track metrics (use unscaled loss for logging)
-                batch_loss = loss.item() * (gradient_accumulation_steps if gradient_accumulation_steps > 1 else 1)
-                epoch_loss += batch_loss
-                epoch_batches += 1
-                
-                # Update progress bar
-                train_progress.set_postfix(loss=epoch_loss/max(1, epoch_batches))
-                
-            except RuntimeError as e:
-                if "CUDA out of memory" in str(e):
-                    print("\nCUDA out of memory, clearing cache and continuing...")
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
-                    steps_since_update = 0  # Reset accumulation
-                    continue
-                elif "device-side assert triggered" in str(e):
-                    print(f"\nCUDA Error in batch: {str(e)}")
-                    print(f"Input shape: {input_batch.shape}, Target shape: {target_batch.shape}")
-                    print(f"Target range: min={target_batch.min().item()}, max={target_batch.max().item()}")
-                    steps_since_update = 0  # Reset accumulation
-                    continue
-                else:
-                    # Log the error and continue with the next batch
-                    print(f"\nError processing batch: {str(e)}")
-                    print(f"Input shape: {input_batch.shape}, Target shape: {target_batch.shape}")
-                    if torch.cuda.is_available():
-                        torch.cuda.empty_cache()
-                    steps_since_update = 0  # Reset accumulation
-                    continue
-            
-            except Exception as e:
-                print(f"\nUnexpected error: {str(e)}")
-                steps_since_update = 0  # Reset accumulation
-                continue
-        
-        # Perform final optimization step if there are any remaining gradients
-        if steps_since_update > 0:
-            torch.nn.utils.clip_grad_norm_(generator.model.parameters(), 5.0)
-            generator.optimizer.step()
-            generator.optimizer.zero_grad()
-
-        # Calculate average training loss
-        train_loss = epoch_loss / max(1, epoch_batches)
-
-        # Validation phase
-        if val_data and val_data.get('batches'):
-            val_metrics = calculate_metrics(generator.model, val_data['batches'], device, task_type="generation")
-            val_loss = val_metrics['loss']
-            val_perplexity = val_metrics['perplexity']
-            val_accuracy = val_metrics['accuracy']
-
-            # Check for early stopping
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                epochs_without_improvement = 0
-
-                # Save the best model
-                best_model_path = os.path.join(args.model_dir, f"{dataset_name}_best_model.pt")
-                generator.save_model(best_model_path)
-                print(f"New best model saved to {best_model_path}")
-            else:
-                epochs_without_improvement += 1
-
-            print(f"Epoch {epoch+1}/{args.epochs} - "
-                  f"Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, "
-                  f"Val Perplexity: {val_perplexity:.2f}, Val Accuracy: {val_accuracy:.4f}")
-
-            # Update metrics
-            metrics['val_loss'].append(val_loss)
-            metrics['val_perplexity'].append(val_perplexity)
-            metrics['val_accuracy'].append(val_accuracy)
-        else:
-            print(f"Epoch {epoch+1}/{args.epochs} - Loss: {train_loss:.4f}")
-
-        # Calculate and update training metrics
-        train_metrics = calculate_metrics(generator.model, train_data['batches'], device, task_type="generation")
-        metrics['loss'].append(train_loss)
-        metrics['perplexity'].append(train_metrics['perplexity'])
-        metrics['accuracy'].append(train_metrics['accuracy'])
-
-        # Check early stopping
-        if args.early_stopping > 0 and epochs_without_improvement >= args.early_stopping:
-            print(f"Early stopping triggered after {epoch+1} epochs")
-            break
-
-    # Final test evaluation
-    if test_data and test_data.get('batches'):
-        print("\nEvaluating on test set...")
-        test_metrics = calculate_metrics(generator.model, test_data['batches'], device, task_type="generation")
-        metrics['test_loss'] = [test_metrics['loss']]
-        metrics['test_perplexity'] = [test_metrics['perplexity']]
-        metrics['test_accuracy'] = [test_metrics['accuracy']]
-
-        print(f"Test Loss: {test_metrics['loss']:.4f}")
-        print(f"Test Perplexity: {test_metrics['perplexity']:.2f}")
-        print(f"Test Accuracy: {test_metrics['accuracy']:.4f}")
-
-    # Visualize training progress
-    visualizer.visualize_training(dataset_name, metrics)
-
-    # Save the final model
-    os.makedirs(args.model_dir, exist_ok=True)
-    model_path = os.path.join(args.model_dir, f"{dataset_name}_model.pt")
-    generator.save_model(model_path)
-    print(f"Final model saved to {model_path}")
-
-    # Save the metrics for future reference
-    metrics_dir = get_storage_path("metrics")
-    os.makedirs(metrics_dir, exist_ok=True)
-    metrics_path = os.path.join(metrics_dir, f"{dataset_name}_metrics.json")
-    with open(metrics_path, 'w') as f:
-        # Convert numpy values to Python types for JSON serialization
-        serializable_metrics = {}
-        for key, value in metrics.items():
-            if isinstance(value, list):
-                serializable_metrics[key] = [float(v) if isinstance(v, (np.float32, np.float64)) else v for v in value]
-            else:
-                serializable_metrics[key] = float(value) if isinstance(value, (np.float32, np.float64)) else value
-
-        json.dump(serializable_metrics, f, indent=2)
-    print(f"Training metrics saved to {metrics_path}")
+def train_text_model(
+    dataset: Union[str, List[str]],
+    model_name_or_path: str = "distilgpt2",
+    batch_size: int = 4,
+    epochs: int = 3,
+    learning_rate: float = 3e-5,
+    weight_decay: float = 0.01,
+    max_length: int = 512,
+    output_dir: str = "models/text_gen",
+    eval_metrics_dir: str = "metrics",
+    dataset_subset: Optional[str] = None,
+    max_samples: Optional[int] = None,
+    evaluation_strategy: str = "epoch",
+    save_strategy: str = "epoch",
+    logging_steps: int = 100,
+    eval_steps: Optional[int] = None,
+    visualize_metrics: bool = False,
+    use_deepspeed: bool = False,
+    use_8bit: bool = False,
+    use_4bit: bool = False,
+    use_qlora: bool = False,
+    gradient_accumulation_steps: int = 1,
+    fp16: bool = False,
+    bf16: bool = False,
+    temperature: float = 1.0,
+    resume_from_checkpoint: Union[bool, str] = False,
+    use_mps: bool = False,
+    use_flash_attn: bool = False,
+    use_unsloth: bool = True,
+    cache_dir: Optional[str] = None,
+    trainer_cls=None,
+) -> tuple:
+    """
+    Train a text generation model
     
-    # Sync metrics to Google Drive
-    sync_to_gdrive("metrics")
-
-    return metrics
+    Args:
+        dataset: Dataset name or list of dataset names
+        model_name_or_path: Model name or path
+        batch_size: Training batch size
+        epochs: Number of training epochs
+        learning_rate: Learning rate
+        weight_decay: Weight decay
+        max_length: Maximum sequence length
+        output_dir: Directory to save the model
+        eval_metrics_dir: Directory to save evaluation metrics
+        dataset_subset: Optional subset for specific datasets (e.g., pile)
+        max_samples: Maximum number of samples to load from each dataset
+        evaluation_strategy: Evaluation strategy (epoch, steps)
+        save_strategy: Save strategy (epoch, steps)
+        logging_steps: Logging steps
+        eval_steps: Evaluation steps (if evaluation_strategy is steps)
+        visualize_metrics: Whether to visualize metrics
+        use_deepspeed: Whether to use DeepSpeed
+        use_8bit: Whether to use 8-bit quantization
+        use_4bit: Whether to use 4-bit quantization
+        use_qlora: Whether to use QLoRA
+        gradient_accumulation_steps: Gradient accumulation steps
+        fp16: Whether to use mixed precision (fp16)
+        bf16: Whether to use mixed precision (bf16)
+        temperature: Temperature for generation
+        resume_from_checkpoint: Resume from checkpoint
+        use_mps: Whether to use MPS
+        use_flash_attn: Whether to use Flash Attention
+        use_unsloth: Whether to use Unsloth optimizations
+        cache_dir: Directory to cache models and datasets
+        trainer_cls: Optional custom trainer class
+        
+    Returns:
+        Trained model, tokenizer, training arguments
+    """
+    # Import statements inside the function to avoid issues with circular imports
+    import os
+    import torch
+    import numpy as np
+    from pathlib import Path
+    from transformers import (
+        AutoTokenizer, AutoModelForCausalLM, TrainingArguments, Trainer,
+        DataCollatorForLanguageModeling, DataCollatorWithPadding,
+        DataCollatorForSeq2Seq
+    )
+    from datasets import Dataset, DatasetDict
+    
+    # Configure GPU settings
+    use_gpu = torch.cuda.is_available()
+    device = "cuda" if use_gpu else "cpu"
+    
+    if use_gpu:
+        print(f"Using CUDA GPU for text generation: {torch.cuda.get_device_name(0)}")
+    else:
+        print("Using CPU for text generation - this will be slow")
+    
+    # Create output directories
+    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(eval_metrics_dir, exist_ok=True)
+    
+    # Create a unified dataset handler from the refactored architecture
+    from .unified_dataset_handler import UnifiedDatasetHandler
+    from transformers import AutoTokenizer
+    
+    # Load tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
+    
+    # Add special tokens if needed
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+        
+    print(f"Vocabulary size: {len(tokenizer)}")
+    special_tokens = [tokenizer.pad_token, tokenizer.unk_token, 
+                      tokenizer.bos_token, tokenizer.eos_token]
+    print(f"Special tokens: {special_tokens}")
+    
+    # Initialize dataset handler
+    dataset_handler = UnifiedDatasetHandler(
+        tokenizer=tokenizer,
+        max_length=max_length,
+        batch_size=batch_size
+    )
+    
+    # Check if we have multiple datasets
+    if isinstance(dataset, str) and ',' in dataset:
+        dataset_names = dataset.split(',')
+        print(f"Using multiple datasets: {dataset_names}")
+        combined_dataset = None
+        
+        for dataset_name in dataset_names:
+            dataset_name = dataset_name.strip()
+            print(f"\n{'='*50}\nTraining text generation model on {dataset_name} dataset\n{'='*50}")
+            
+            # Load single dataset
+            print(f"Processing HuggingFace dataset: {dataset_name}")
+            current_dataset = dataset_handler.load_dataset(
+                dataset_name=dataset_name,
+                split="train",
+                max_samples=max_samples,  # Apply sample limit to each dataset
+                subset=dataset_subset,
+                cache_dir=cache_dir,
+                use_cache=True
+            )
+            
+            # Combine datasets
+            if combined_dataset is None:
+                combined_dataset = current_dataset
+            else:
+                # Combine the datasets
+                combined_texts = combined_dataset["train"]["text"] + current_dataset["train"]["text"]
+                
+                # Re-tokenize if needed (to ensure consistent formatting)
+                if tokenizer:
+                    # Process in manageable batches to avoid OOM
+                    input_ids = []
+                    attention_masks = []
+                    batch_size = 1000
+                    
+                    for i in range(0, len(combined_texts), batch_size):
+                        batch_texts = combined_texts[i:min(i+batch_size, len(combined_texts))]
+                        encodings = tokenizer(
+                            batch_texts,
+                            truncation=True,
+                            padding='max_length',
+                            max_length=max_length,
+                            return_tensors='pt'
+                        )
+                        input_ids.extend(encodings['input_ids'].tolist())
+                        attention_masks.extend(encodings['attention_mask'].tolist())
+                    
+                    # Update combined dataset
+                    from datasets import Dataset
+                    combined_dataset = {
+                        "train": Dataset.from_dict({
+                            "text": combined_texts,
+                            "input_ids": input_ids,
+                            "attention_mask": attention_masks
+                        })
+                    }
+        
+        # Use the combined dataset for training
+        train_dataset = combined_dataset["train"]
+        
+    else:
+        # Single dataset case
+        print(f"\n{'='*50}\nTraining Text Model on {dataset.upper()} dataset\n{'='*50}")
+        
+        dataset_dict = dataset_handler.load_dataset(
+            dataset_name=dataset,
+            split="train",
+            max_samples=max_samples,
+            subset=dataset_subset,
+            cache_dir=cache_dir,
+            use_cache=True
+        )
+        
+        train_dataset = dataset_dict["train"]
+    
+    # Print effective batch size information
+    print(f"Using batch size {batch_size} with gradient accumulation steps {gradient_accumulation_steps}")
+    print(f"Effective batch size: {batch_size * gradient_accumulation_steps}")
+    
+    # Setup training arguments
+    training_args = TrainingArguments(
+        output_dir=output_dir,
+        num_train_epochs=epochs,
+        per_device_train_batch_size=batch_size,
+        per_device_eval_batch_size=batch_size,
+        gradient_accumulation_steps=gradient_accumulation_steps,
+        learning_rate=learning_rate,
+        weight_decay=weight_decay,
+        warmup_ratio=0.1,
+        logging_dir=os.path.join(output_dir, "logs"),
+        logging_steps=logging_steps,
+        save_strategy=save_strategy,
+        save_total_limit=3,
+        evaluation_strategy=evaluation_strategy,
+        eval_steps=eval_steps if eval_steps else None,
+        load_best_model_at_end=True,
+        report_to="tensorboard",
+        fp16=fp16,
+        bf16=bf16,
+        dataloader_num_workers=4,
+        dataloader_pin_memory=True,
+        remove_unused_columns=False,
+    )
+    
+    # Load the model
+    try:
+        # Try to use Unsloth for optimization if requested
+        if use_unsloth:
+            try:
+                from unsloth import FastLanguageModel
+                print("Using Unsloth optimizations for text model")
+                model, tokenizer = FastLanguageModel.from_pretrained(
+                    model_name_or_path,
+                    max_seq_length=max_length,
+                    dtype=torch.bfloat16 if bf16 else torch.float16 if fp16 else None,
+                    load_in_4bit=use_4bit,
+                    load_in_8bit=use_8bit,
+                    device_map="auto",
+                )
+                
+                # Prepare the model for QLoRA training if requested
+                if use_qlora:
+                    print("Using QLoRA for parameter-efficient fine-tuning")
+                    from peft import LoraConfig
+                    
+                    lora_config = LoraConfig(
+                        r=16,
+                        lora_alpha=32,
+                        lora_dropout=0.05,
+                        bias="none",
+                        task_type="CAUSAL_LM",
+                    )
+                    
+                    model = FastLanguageModel.get_peft_model(
+                        model,
+                        lora_config,
+                        train_mode=True
+                    )
+            except ImportError:
+                print("Unsloth not available, falling back to standard Transformers")
+                use_unsloth = False
+        
+        # Standard Transformers loading if not using Unsloth or if Unsloth failed
+        if not use_unsloth:
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name_or_path,
+                load_in_8bit=use_8bit,
+                load_in_4bit=use_4bit,
+                torch_dtype=torch.bfloat16 if bf16 else torch.float16 if fp16 else None,
+                device_map="auto" if use_gpu else None,
+            )
+            
+            # Apply QLoRA if requested
+            if use_qlora:
+                print("Using QLoRA for parameter-efficient fine-tuning")
+                from peft import prepare_model_for_kbit_training, LoraConfig, get_peft_model
+                
+                model = prepare_model_for_kbit_training(model)
+                lora_config = LoraConfig(
+                    r=16,
+                    lora_alpha=32,
+                    lora_dropout=0.05,
+                    bias="none",
+                    task_type="CAUSAL_LM",
+                )
+                model = get_peft_model(model, lora_config)
+    
+    except Exception as e:
+        print(f"Error loading model: {e}")
+        raise
+    
+    # Setup data collator
+    data_collator = DataCollatorForLanguageModeling(
+        tokenizer=tokenizer,
+        mlm=False
+    )
+    
+    # Setup trainer
+    if trainer_cls:
+        trainer = trainer_cls(
+            model=model,
+            args=training_args,
+            train_dataset=train_dataset,
+            eval_dataset=train_dataset,  # Using same dataset for eval for simplicity
+            tokenizer=tokenizer,
+            data_collator=data_collator,
+        )
+    else:
+        trainer = Trainer(
+            model=model,
+            args=training_args,
+            train_dataset=train_dataset,
+            eval_dataset=train_dataset,  # Using same dataset for eval for simplicity
+            tokenizer=tokenizer,
+            data_collator=data_collator,
+        )
+    
+    # Train the model
+    if resume_from_checkpoint:
+        trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+    else:
+        trainer.train()
+    
+    # Save model, tokenizer, and config
+    trainer.save_model(output_dir)
+    tokenizer.save_pretrained(output_dir)
+    
+    # Visualize metrics if requested
+    if visualize_metrics:
+        # Import visualization functions
+        from .evaluation_metrics import visualize_training_metrics
+        
+        # Get training logs
+        logs = trainer.state.log_history
+        
+        # Visualize metrics
+        visualize_training_metrics(
+            logs=logs,
+            output_dir=eval_metrics_dir,
+            metric_names=["loss", "eval_loss"],
+            title=f"Training Metrics for {model_name_or_path} on {dataset}",
+        )
+    
+    return model, tokenizer, training_args
 
 
 def train_code_model(args, force_gpu: bool = True):
@@ -1322,172 +1379,151 @@ class CustomCallback(TrainerCallback):
 
 
 def main():
-    """Main entry point for the training script"""
-    args = parse_args()
+    """Main function to parse arguments and run the appropriate training"""
+    import argparse
+    import logging
+    import glob
+    import os
     
-    # Install dependencies if requested
-    if args.install_dependencies:
-        install_dependencies()
+    # Set up logging
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    logger = logging.getLogger(__name__)
     
-    # Initialize logging
-    log_dir = os.path.join("/notebooks/Jarvis_AI_Assistant/logs" if os.path.exists("/notebooks") else os.path.expanduser("~/Jarvis_AI_Assistant/logs"))
-    os.makedirs(log_dir, exist_ok=True)
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(os.path.join(log_dir, f"training_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")),
-            logging.StreamHandler(sys.stdout)
-        ]
-    )
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Train a model on a specific dataset.')
     
-    # Create output directory
-    if not args.output_dir:
-        dataset_name = args.dataset.replace('/', '_') if args.dataset else "unknown"
-        args.output_dir = f"models/{args.model_type}_{dataset_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    os.makedirs(args.output_dir, exist_ok=True)
+    # General arguments
+    parser.add_argument('--model_type', type=str, required=True, choices=['text', 'code', 'image', 'speech', 'multimodal'],
+                      help='Type of model to train')
     
-    # Set up evaluation metrics options
-    use_enhanced_eval = not args.no_enhanced_eval
-    eval_metrics_dir = args.eval_metrics_dir or os.path.join(args.output_dir, "evaluation_metrics")
-    os.makedirs(eval_metrics_dir, exist_ok=True)
+    # Dataset arguments
+    parser.add_argument('--dataset', type=str, required=True,
+                      help='Dataset name(s) to use for training. Can be a single dataset or comma-separated list.')
+    parser.add_argument('--max_samples', type=int, default=None,
+                      help='Maximum number of samples to use from each dataset')
+    parser.add_argument('--dataset_subset', type=str, default=None,
+                      help='Specific subset of the dataset to use (for datasets with subsets)')
     
-    # Process datasets
-    datasets_to_train = []
+    # Training hyperparameters
+    parser.add_argument('--batch_size', type=int, default=4,
+                      help='Training batch size')
+    parser.add_argument('--epochs', type=int, default=3,
+                      help='Number of training epochs')
+    parser.add_argument('--learning_rate', type=float, default=3e-5,
+                      help='Learning rate')
+    parser.add_argument('--weight_decay', type=float, default=0.01,
+                      help='Weight decay')
+    parser.add_argument('--max_length', type=int, default=512,
+                      help='Maximum sequence length')
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
+                      help='Number of gradient accumulation steps')
     
-    # Handle comma-separated HuggingFace datasets
-    if hasattr(args, 'dataset_list') and args.dataset_list:
-        # Use the list of HuggingFace datasets
-        for dataset in args.dataset_list:
-            datasets_to_train.append({
-                'name': dataset,
-                'path': dataset,  # The dataset path is the same as the name for HuggingFace datasets
-                'is_huggingface': True
-            })
-    # Handle single dataset (which could be a HuggingFace dataset with '/' in the name)
-    elif args.dataset:
-        is_huggingface = '/' in args.dataset
-        dataset_path = args.dataset  # Use the dataset name as the path for HuggingFace datasets
+    # Model arguments
+    parser.add_argument('--model_name_or_path', type=str, default="distilgpt2",
+                      help='Base model name or path to use')
+    
+    # Output arguments
+    parser.add_argument('--output_dir', type=str, default="./models",
+                      help='Directory to save the trained model')
+    parser.add_argument('--eval_metrics_dir', type=str, default="./metrics",
+                      help='Directory to save evaluation metrics')
+    parser.add_argument('--save_strategy', type=str, default="epoch", choices=['epoch', 'steps'],
+                      help='When to save model checkpoints')
+    parser.add_argument('--evaluation_strategy', type=str, default="epoch", choices=['epoch', 'steps'],
+                      help='When to run evaluation')
+    parser.add_argument('--logging_steps', type=int, default=100,
+                      help='Steps between logging')
+    parser.add_argument('--eval_steps', type=int, default=None,
+                      help='Steps between evaluation if evaluation_strategy is steps')
+    
+    # Optimization arguments
+    parser.add_argument('--use_deepspeed', action='store_true',
+                      help='Whether to use DeepSpeed')
+    parser.add_argument('--use_8bit', action='store_true',
+                      help='Whether to use 8-bit quantization')
+    parser.add_argument('--use_4bit', action='store_true',
+                      help='Whether to use 4-bit quantization')
+    parser.add_argument('--use_qlora', action='store_true',
+                      help='Whether to use QLoRA')
+    parser.add_argument('--fp16', action='store_true',
+                      help='Whether to use mixed precision (fp16)')
+    parser.add_argument('--bf16', action='store_true',
+                      help='Whether to use mixed precision (bf16)')
+    parser.add_argument('--resume_from_checkpoint', type=str, default=None,
+                      help='Path to checkpoint to resume from')
+    parser.add_argument('--use_flash_attn', action='store_true',
+                      help='Whether to use Flash Attention')
+    parser.add_argument('--use_unsloth', action='store_true', default=True,
+                      help='Whether to use Unsloth optimizations')
+    
+    # Miscellaneous
+    parser.add_argument('--visualize_metrics', action='store_true',
+                      help='Visualize training metrics')
+    parser.add_argument('--cache_dir', type=str, default=None,
+                      help='Directory to cache models and datasets')
+    
+    args = parser.parse_args()
+    
+    # Print all arguments for logging
+    logger.info("Training with the following arguments:")
+    for arg, value in vars(args).items():
+        logger.info(f"  {arg}: {value}")
+    
+    # Handle model training based on model type
+    if args.model_type == 'text':
+        model, tokenizer, training_args = train_text_model(
+            dataset=args.dataset,
+            model_name_or_path=args.model_name_or_path,
+            batch_size=args.batch_size,
+            epochs=args.epochs,
+            learning_rate=args.learning_rate,
+            weight_decay=args.weight_decay,
+            max_length=args.max_length,
+            output_dir=args.output_dir,
+            eval_metrics_dir=args.eval_metrics_dir,
+            dataset_subset=args.dataset_subset,
+            max_samples=args.max_samples,
+            evaluation_strategy=args.evaluation_strategy,
+            save_strategy=args.save_strategy,
+            logging_steps=args.logging_steps,
+            eval_steps=args.eval_steps,
+            visualize_metrics=args.visualize_metrics,
+            use_deepspeed=args.use_deepspeed,
+            use_8bit=args.use_8bit,
+            use_4bit=args.use_4bit,
+            use_qlora=args.use_qlora,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
+            fp16=args.fp16,
+            bf16=args.bf16,
+            resume_from_checkpoint=args.resume_from_checkpoint,
+            use_flash_attn=args.use_flash_attn,
+            use_unsloth=args.use_unsloth,
+            cache_dir=args.cache_dir
+        )
         
-        if not is_huggingface:
-            # Local dataset - check if it exists
-            default_path = f"data/{args.dataset}"
-            if os.path.exists(default_path):
-                dataset_path = default_path
-            elif args.dataset_path:
-                dataset_path = args.dataset_path
-            elif not os.path.exists(args.dataset):
-                print(f"Dataset not found at {default_path}")
-                print("Please provide the dataset path with --dataset_path")
-                return 1
+        # Print success message
+        print(f"\nSuccessfully trained text model!")
+        print(f"Model saved to: {args.output_dir}")
+
+    elif args.model_type == 'code':
+        from .code_generator import train_code_model
         
-        datasets_to_train.append({
-            'name': args.dataset,
-            'path': dataset_path,
-            'is_huggingface': is_huggingface
-        })
+        train_code_model(
+            dataset=args.dataset,
+            model_name_or_path=args.model_name_or_path,
+            batch_size=args.batch_size,
+            epochs=args.epochs,
+            learning_rate=args.learning_rate,
+            weight_decay=args.weight_decay,
+            max_length=args.max_length,
+            output_dir=args.output_dir,
+            eval_metrics_dir=args.eval_metrics_dir,
+            max_samples=args.max_samples
+        )
+        
     else:
-        print("No dataset specified. Please provide a dataset with --dataset.")
-        return 1
-    
-    # Determine model name based on size if not provided
-    model_name = args.model_name
-    if not model_name:
-        if args.model_size == "small":
-            model_name = "gpt2"
-        elif args.model_size == "medium":
-            model_name = "gpt2-medium"
-        elif args.model_size == "large":
-            model_name = "gpt2-large"
-        elif args.model_size == "xl":
-            model_name = "gpt2-xl"
-        elif args.model_size == "deepseek-small":
-            model_name = "deepseek-ai/deepseek-coder-1.3b-base"
-        elif args.model_size == "deepseek-medium":
-            model_name = "deepseek-ai/deepseek-coder-6.7b-base"
-        else:
-            model_name = "gpt2"
-    
-    # Handle specific model types
-    if args.model_type == "text":
-        # Process each dataset
-        all_results = {}
-        
-        for dataset_info in datasets_to_train:
-            dataset_name = dataset_info['name']
-            dataset_path = dataset_info['path']
-            is_huggingface = dataset_info['is_huggingface']
-            
-            print(f"\n{'='*50}")
-            print(f"Training text generation model on {dataset_name} dataset")
-            print(f"{'='*50}")
-            
-            # For HuggingFace datasets, we'll use the dataset processor's ability to handle them
-            if is_huggingface:
-                print(f"Processing HuggingFace dataset: {dataset_name}")
-                # dataset_path is already set to the HuggingFace dataset name
-            else:
-                print(f"Processing local dataset from: {dataset_path}")
-            
-            # Create a dataset-specific output directory
-            dataset_output_dir = os.path.join(args.output_dir, dataset_name.replace('/', '_'))
-            os.makedirs(dataset_output_dir, exist_ok=True)
-            
-            # Train on this dataset
-            dataset_metrics_dir = os.path.join(eval_metrics_dir, dataset_name.replace('/', '_'))
-            os.makedirs(dataset_metrics_dir, exist_ok=True)
-            
-            try:
-                # Process the dataset and train the model
-                result = train_text_model(
-                    dataset_name=dataset_name,
-                    args=args,
-                    force_gpu=not args.cpu_only
-                )
-                
-                if result:
-                    all_results[dataset_name] = result
-                    print(f"Successfully trained on {dataset_name}")
-                else:
-                    print(f"Failed to train on {dataset_name}")
-            except Exception as e:
-                print(f"Error training on {dataset_name}: {str(e)}")
-                import traceback
-                traceback.print_exc()
-        
-        # Summarize results
-        if all_results:
-            print("\n" + "="*50)
-            print("Training Complete!")
-            print("="*50)
-            print(f"\nTrained on {len(all_results)} dataset(s):")
-            for dataset_name in all_results.keys():
-                print(f"  - {dataset_name}")
-            print(f"\nModels saved to: {args.output_dir}")
-            
-            # Sync to Google Drive if in Paperspace
-            if is_paperspace_environment():
-                try:
-                    from src.generative_ai_module.utils import sync_to_gdrive
-                    sync_to_gdrive(args.output_dir)
-                    print(f"Models and evaluation results synced to Google Drive")
-                except Exception as e:
-                    print(f"Error syncing to Google Drive: {e}")
-        else:
-            print("No datasets were successfully trained. Check the logs for details.")
-    
-    elif args.model_type == "code":
-        # Train code generation model
-        print(f"Training code generation model")
-        
-        # Set up enhanced evaluation for code models
-        train_code_model(args, force_gpu=not args.cpu_only)
-    
-    else:
-        print(f"Unknown model type: {args.model_type}")
-        return 1
-    
-    return 0
+        logger.error(f"Model type '{args.model_type}' not implemented yet.")
+        return
 
 
 if __name__ == "__main__":

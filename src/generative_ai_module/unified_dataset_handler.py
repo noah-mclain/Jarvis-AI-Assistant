@@ -25,6 +25,7 @@ import datetime
 from collections import deque
 from typing import Dict, List, Any, Optional, Union, Tuple
 from tqdm import tqdm
+import glob
 
 # Try to import optional dependencies with graceful fallbacks
 try:
@@ -257,145 +258,203 @@ class UnifiedDatasetHandler:
         
         logger.info("Unified Dataset Handler initialized")
     
-    def load_dataset(self, dataset_name: str, split: str = "train", 
-                    max_samples: Optional[int] = None,
-                    subset: Optional[str] = None) -> Dict[str, Any]:
+    def load_dataset(self, dataset_name, split='train', max_samples=None, 
+                   subset=None, cache_dir=None, use_cache=True):
         """
-        Load and preprocess a dataset.
+        Load and process a dataset
         
         Args:
-            dataset_name: Name of the dataset to load
+            dataset_name: Name of the dataset or path to the dataset
             split: Dataset split (train, validation, test)
             max_samples: Maximum number of samples to load
-            subset: Specific subset for datasets that support it (e.g., pile)
+            subset: Optional subset name for datasets with subsets
+            cache_dir: Optional directory to cache preprocessed datasets
+            use_cache: Whether to use cached versions
             
         Returns:
-            Dictionary with preprocessed dataset
+            Processed dataset as DatasetDict
         """
-        # Check if this is a HuggingFace dataset (contains a slash)
-        is_huggingface_dataset = '/' in dataset_name
+        cache_dir = cache_dir or os.path.join(self.data_dir, 'cache')
+        os.makedirs(cache_dir, exist_ok=True)
         
-        if not is_huggingface_dataset and dataset_name not in self.SUPPORTED_DATASETS:
-            logger.error(f"Unsupported dataset: {dataset_name}")
-            raise ValueError(f"Unsupported dataset: {dataset_name}. "
-                           f"Supported datasets: {', '.join(self.SUPPORTED_DATASETS)}")
-
-        logger.info(f"Loading dataset: {dataset_name} (split: {split}, "
-                  f"max_samples: {max_samples}, subset: {subset})")
-
-        # Load dataset using appropriate processor
-        if is_huggingface_dataset:
-            # Handle external HuggingFace datasets
+        # Generate a cache file name that includes dataset name, split, and sample count
+        cache_params = f"{dataset_name.replace('/', '_')}_{split}"
+        if max_samples:
+            cache_params += f"_{max_samples}samples"
+        if subset:
+            cache_params += f"_{subset}"
+            
+        cache_file = os.path.join(cache_dir, f"{cache_params}_cache.pt")
+        
+        # Load from cache if available
+        if use_cache and os.path.exists(cache_file):
+            self.logger.info(f"Loading cached dataset from {cache_file}")
+            try:
+                return torch.load(cache_file)
+            except Exception as e:
+                self.logger.warning(f"Failed to load cached dataset: {e}")
+                # Continue to load from scratch
+        
+        # Check if the dataset is a HuggingFace dataset (contains '/')
+        if '/' in dataset_name:
+            # It's a HuggingFace dataset
+            self.logger.info(f"Loading HuggingFace dataset: {dataset_name} (split: {split}, max_samples: {max_samples}, subset: {subset})")
+            
             try:
                 from datasets import load_dataset
                 
-                # Create an identifier for the processed data file
-                hf_dataset_id = dataset_name.replace('/', '_')
+                # Prepare cache directory for HuggingFace datasets
+                hf_cache_dir = os.path.join(self.data_dir, 'huggingface_cache')
+                os.makedirs(hf_cache_dir, exist_ok=True)
                 
-                # Check if we have a cached processed version
-                cache_dir = get_storage_path(os.path.join("datasets", "processed"))
-                os.makedirs(cache_dir, exist_ok=True)
-                cache_path = os.path.join(cache_dir, f"{hf_dataset_id}_{split}_processed.pt")
+                # Load the dataset with caching
+                dataset = load_dataset(
+                    dataset_name,
+                    name=subset,
+                    split=split,
+                    cache_dir=hf_cache_dir
+                )
                 
-                if os.path.exists(cache_path):
-                    logger.info(f"Loading processed dataset from cache: {cache_path}")
-                    import torch
-                    return torch.load(cache_path)
+                # Limit the number of samples if specified
+                if max_samples is not None and max_samples < len(dataset):
+                    self.logger.info(f"Limiting dataset to {max_samples} samples (from {len(dataset)})")
+                    dataset = dataset.select(range(min(max_samples, len(dataset))))
                 
-                # Load the dataset from HuggingFace
-                logger.info(f"Loading HuggingFace dataset: {dataset_name}")
-                hf_dataset = load_dataset(dataset_name, split=split)
+                # Process the dataset based on its structure
+                return self._process_huggingface_dataset(dataset, dataset_name, cache_file)
                 
-                # Limit samples if specified
-                if max_samples is not None and max_samples < len(hf_dataset):
-                    hf_dataset = hf_dataset.select(range(max_samples))
-                
-                # Process the dataset
-                processor = DatasetProcessor()
-                data = processor._process_huggingface_dataset(hf_dataset, dataset_name)
-                
-                # Create sequences and batches with error handling
-                try:
-                    sequences = processor.create_sequences(data, sequence_length=512)  # default sequence length
-                    batches = processor.create_batches(sequences, batch_size=4)       # default batch size
-                    
-                    # Create dataset dictionary
-                    dataset = {
-                        'batches': batches,
-                        'metadata': {
-                            'source': dataset_name,
-                            'split': split,
-                            'sample_count': len(sequences),
-                            'batch_count': len(batches)
-                        }
-                    }
-                    
-                    # Cache the processed dataset
-                    import torch
-                    torch.save(dataset, cache_path)
-                    logger.info(f"Cached processed dataset to: {cache_path}")
-                    
-                    return dataset
-                except Exception as e:
-                    logger.error(f"Error processing HuggingFace dataset {dataset_name}: {str(e)}")
-                    
-                    # Try alternate approach with a smaller batch of the dataset
-                    try:
-                        logger.info(f"Trying again with a reduced sample size for {dataset_name}")
-                        # Take a smaller subset
-                        reduced_hf_dataset = hf_dataset.select(range(min(1000, len(hf_dataset))))
-                        data = processor._process_huggingface_dataset(reduced_hf_dataset, dataset_name)
-                        sequences = processor.create_sequences(data, sequence_length=512)
-                        batches = processor.create_batches(sequences, batch_size=4)
-                        
-                        dataset = {
-                            'batches': batches,
-                            'metadata': {
-                                'source': dataset_name,
-                                'split': split,
-                                'sample_count': len(sequences),
-                                'batch_count': len(batches),
-                                'note': 'Created from reduced dataset due to processing errors'
-                            }
-                        }
-                        
-                        # Cache the processed dataset
-                        import torch
-                        torch.save(dataset, cache_path)
-                        logger.info(f"Cached processed dataset to: {cache_path} (reduced version)")
-                        
-                        return dataset
-                    except Exception as inner_e:
-                        logger.error(f"Error processing reduced dataset {dataset_name}: {str(inner_e)}")
-                        raise
             except Exception as e:
-                logger.error(f"Error loading HuggingFace dataset {dataset_name}: {str(e)}")
+                self.logger.error(f"Error loading HuggingFace dataset {dataset_name}: {e}")
                 raise
-        elif dataset_name in {"writing_prompts", "persona_chat"}:
-            # These datasets use the improved processor
-            data = self.improved_processor.process_dataset(
-                dataset_name, max_samples=max_samples
-            )
+        
+        # Handle local datasets or standard datasets
+        if os.path.exists(dataset_name):
+            # It's a local path
+            return self._load_local_dataset(dataset_name, split, max_samples, cache_file)
         else:
-            # Other datasets use the standard processor
-            data = self.processor.prepare_dataset(
-                source=dataset_name,
-                split=split,
-                max_samples=max_samples,
-                batch_size=64,  # Default batch size
-                subset=subset
-            )
+            # Try loading as a standard dataset
+            return self._load_standard_dataset(dataset_name, split, max_samples, subset, cache_file)
 
-        # Validate dataset
-        if data:
-            if self._validate_dataset(dataset_name, data):
-                logger.info(f"Successfully loaded and validated {dataset_name} dataset")
+    def _process_huggingface_dataset(self, dataset, dataset_name, cache_file=None):
+        """
+        Process a HuggingFace dataset with memory-efficient batching
+
+        Args:
+            dataset: The HuggingFace dataset object
+            dataset_name: Name of the dataset (for identification)
+            cache_file: Optional path to save the processed dataset
+
+        Returns:
+            Processed dataset
+        """
+        from datasets import Dataset
+        import gc
+        from tqdm import tqdm
+        
+        self.logger.info(f"Processing HuggingFace dataset ({len(dataset)} samples)")
+        
+        # Get dataset structure to determine formatting
+        if len(dataset) > 0:
+            keys = list(dataset[0].keys())
+            self.logger.info(f"Dataset keys: {keys}")
+        else:
+            self.logger.warning(f"Dataset {dataset_name} is empty")
+            return {"train": Dataset.from_dict({"text": [], "input_ids": [], "attention_mask": []})}
+            
+        # Process in batches to avoid memory issues
+        batch_size = 1000  # Process 1000 examples at a time
+        all_texts = []
+        all_input_ids = []
+        all_attention_masks = []
+        
+        # Process based on common dataset formats
+        for i in tqdm(range(0, len(dataset), batch_size), desc=f"Processing {dataset_name}"):
+            batch = dataset[i:min(i+batch_size, len(dataset))]
+            batch_texts = []
+            
+            # Different formatting based on dataset structure
+            if "OpenAssistant" in dataset_name or "oasst" in dataset_name:
+                for item in batch:
+                    if 'text' in item and 'role' in item:
+                        if item['role'] == 'assistant':
+                            batch_texts.append(f"User: [Previous question]\nAssistant: {item['text']}")
+                        elif item['role'] == 'prompter':
+                            batch_texts.append(f"User: {item['text']}\nAssistant:")
+            
+            elif "GPTeacher" in dataset_name:
+                for item in batch:
+                    if 'instruction' in item and 'response' in item:
+                        batch_texts.append(f"User: {item['instruction']}\nAssistant: {item['response']}")
+            
+            elif "Persona-Chat" in dataset_name:
+                for item in batch:
+                    if 'personas' in item and 'utterances' in item:
+                        persona = "\n".join(item['personas']) if isinstance(item['personas'], list) else item['personas']
+                        if isinstance(item['utterances'], list) and len(item['utterances']) > 0:
+                            # Handle different structure variations
+                            utterance = item['utterances'][-1]  # Take last utterance pair
+                            if isinstance(utterance, list) and len(utterance) >= 2:
+                                batch_texts.append(f"Persona: {persona}\nUser: {utterance[0]}\nAssistant: {utterance[1]}")
+            
+            elif "writingprompts" in dataset_name:
+                for item in batch:
+                    if 'prompt' in item and 'story' in item:
+                        batch_texts.append(f"Prompt: {item['prompt']}\nStory: {item['story']}")
+            
             else:
-                logger.warning(f"Dataset {dataset_name} loaded but failed validation")
-        else:
-            logger.error(f"Failed to load dataset: {dataset_name}")
-
-        return data
+                # Generic case - look for common field patterns
+                for item in batch:
+                    if 'input' in item and 'output' in item:
+                        batch_texts.append(f"Input: {item['input']}\nOutput: {item['output']}")
+                    elif 'question' in item and 'answer' in item:
+                        batch_texts.append(f"Question: {item['question']}\nAnswer: {item['answer']}")
+                    elif 'prompt' in item and 'completion' in item:
+                        batch_texts.append(f"Prompt: {item['prompt']}\nCompletion: {item['completion']}")
+                    elif 'text' in item:
+                        batch_texts.append(item['text'])
+                    elif 'content' in item:
+                        batch_texts.append(item['content'])
+            
+            # Process the batch texts through tokenizer
+            if self.tokenizer:
+                encodings = self.tokenizer(
+                    batch_texts,
+                    truncation=True,
+                    padding='max_length',
+                    max_length=self.max_length,
+                    return_tensors='pt'
+                )
+                
+                # Extend the cumulative tensors
+                all_input_ids.extend(encodings['input_ids'].tolist())
+                all_attention_masks.extend(encodings['attention_mask'].tolist())
+            
+            # Always keep texts for future use or debug
+            all_texts.extend(batch_texts)
+            
+            # Force garbage collection after each batch
+            del batch
+            gc.collect()
+        
+        # Create the dataset dictionary
+        processed_dataset = {
+            "text": all_texts,
+            "input_ids": all_input_ids if self.tokenizer else [],
+            "attention_mask": all_attention_masks if self.tokenizer else []
+        }
+        
+        # Convert to Dataset object
+        dataset_dict = {"train": Dataset.from_dict(processed_dataset)}
+        
+        # Cache the processed dataset if cache_file is provided
+        if cache_file:
+            self.logger.info(f"Saving processed dataset to {cache_file}")
+            try:
+                torch.save(dataset_dict, cache_file)
+            except Exception as e:
+                self.logger.warning(f"Failed to cache dataset: {e}")
+        
+        return dataset_dict
     
     def prepare_for_training(self, 
                         dataset: Dict[str, Any], 
@@ -1349,6 +1408,158 @@ class UnifiedDatasetHandler:
             except Exception as e:
                 logger.error(f"Error processing batch at offset {offset}: {e}")
                 break
+
+    def _load_local_dataset(self, dataset_path, split='train', max_samples=None, cache_file=None):
+        """
+        Load a dataset from a local file or directory
+        
+        Args:
+            dataset_path: Path to the dataset file or directory
+            split: Dataset split (train, validation, test)
+            max_samples: Maximum number of samples to load
+            cache_file: Optional path to save the processed dataset
+            
+        Returns:
+            Processed dataset
+        """
+        from datasets import Dataset
+        
+        self.logger.info(f"Loading local dataset from {dataset_path}")
+        
+        # Check if we're loading a directory or a file
+        if os.path.isdir(dataset_path):
+            # It's a directory - gather all text files
+            text_files = []
+            for ext in ['.txt', '.md', '.json', '.csv', '.py', '.js', '.html', '.cpp', '.c', '.java']:
+                text_files.extend(glob.glob(os.path.join(dataset_path, f"**/*{ext}"), recursive=True))
+            
+            self.logger.info(f"Found {len(text_files)} text files in directory")
+            
+            # Limit if max_samples is set
+            if max_samples is not None and max_samples < len(text_files):
+                text_files = text_files[:max_samples]
+                
+            # Read all files
+            texts = []
+            for file_path in tqdm(text_files, desc="Reading files"):
+                try:
+                    with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                        texts.append(f.read())
+                except Exception as e:
+                    self.logger.warning(f"Error reading {file_path}: {e}")
+                    
+        else:
+            # It's a single file
+            try:
+                with open(dataset_path, 'r', encoding='utf-8', errors='replace') as f:
+                    content = f.read()
+                    
+                # Split into chunks for large files
+                if max_samples is not None:
+                    # Split by paragraphs
+                    paragraphs = content.split('\n\n')
+                    # Ensure we don't exceed max_samples
+                    paragraphs = paragraphs[:max_samples]
+                    texts = paragraphs
+                else:
+                    texts = [content]
+            except Exception as e:
+                self.logger.error(f"Error reading file {dataset_path}: {e}")
+                raise
+        
+        # Process the texts into dataset format
+        return self._process_text_list(texts, cache_file)
+        
+    def _load_standard_dataset(self, dataset_name, split='train', max_samples=None, subset=None, cache_file=None):
+        """
+        Load a standard dataset from the supported list
+        
+        Args:
+            dataset_name: Name of the standard dataset
+            split: Dataset split (train, validation, test)
+            max_samples: Maximum number of samples to load
+            subset: Optional subset name
+            cache_file: Optional path to save the processed dataset
+            
+        Returns:
+            Processed dataset
+        """
+        self.logger.info(f"Loading standard dataset: {dataset_name} (split: {split}, subset: {subset})")
+        
+        # Use the existing dataset processor methods
+        if hasattr(self, 'processor') and self.processor:
+            # Use the dataset_processor to prepare the dataset
+            try:
+                data = self.processor.prepare_dataset(
+                    source=dataset_name,
+                    split=split,
+                    max_samples=max_samples,
+                    batch_size=self.batch_size,
+                    subset=subset,
+                    cache_dir=os.path.dirname(cache_file) if cache_file else None,
+                    output_dir=os.path.dirname(cache_file) if cache_file else None
+                )
+                return data
+            except Exception as e:
+                self.logger.error(f"Error loading standard dataset {dataset_name}: {e}")
+                raise
+        else:
+            self.logger.error("Dataset processor not initialized")
+            raise ValueError("Dataset processor not initialized")
+            
+    def _process_text_list(self, texts, cache_file=None):
+        """
+        Process a list of texts into a dataset format
+        
+        Args:
+            texts: List of text strings
+            cache_file: Optional path to save the processed dataset
+            
+        Returns:
+            Processed dataset
+        """
+        from datasets import Dataset
+        
+        self.logger.info(f"Processing {len(texts)} text samples")
+        
+        # Tokenize the texts if tokenizer is available
+        input_ids = []
+        attention_masks = []
+        
+        if self.tokenizer:
+            # Process in batches to avoid memory issues
+            batch_size = 100
+            for i in range(0, len(texts), batch_size):
+                batch_texts = texts[i:i+batch_size]
+                encodings = self.tokenizer(
+                    batch_texts,
+                    truncation=True,
+                    padding='max_length',
+                    max_length=self.max_length,
+                    return_tensors='pt'
+                )
+                input_ids.extend(encodings['input_ids'].tolist())
+                attention_masks.extend(encodings['attention_mask'].tolist())
+        
+        # Create dataset dictionary
+        processed_dataset = {
+            "text": texts,
+            "input_ids": input_ids,
+            "attention_mask": attention_masks
+        }
+        
+        # Create dataset object
+        dataset_dict = {"train": Dataset.from_dict(processed_dataset)}
+        
+        # Cache the processed dataset if cache_file is provided
+        if cache_file:
+            self.logger.info(f"Saving processed dataset to {cache_file}")
+            try:
+                torch.save(dataset_dict, cache_file)
+            except Exception as e:
+                self.logger.warning(f"Failed to cache dataset: {e}")
+        
+        return dataset_dict
 
 # Example usage
 if __name__ == "__main__":
