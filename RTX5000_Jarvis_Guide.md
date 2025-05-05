@@ -6,7 +6,7 @@ This guide provides optimized commands and best practices for running the Jarvis
 
 ## Environment Setup
 
-```bash
+````bash
 # Set up Python environment
 sudo apt-get update
 sudo apt-get install -y make build-essential libssl-dev zlib1g-dev \
@@ -511,148 +511,25 @@ python src/generative_ai_module/fix_jarvis_imports.py --force src/generative_ai_
 
 # Create required directories
 # mkdir -p /notebooks/Jarvis_AI_Assistant/{models,datasets,metrics,logs,checkpoints,evaluation_metrics,visualizations}
-```
-
-## Refactored Module Structure
-
-The Jarvis AI Assistant codebase has been refactored to improve organization, eliminate duplication, and enhance robustness. Key modules you'll be working with:
-
-### Core Refactored Modules
-
-1. **evaluation_metrics.py**: Comprehensive framework for evaluating generative AI outputs
-
-   - Metrics include BERTScore, ROUGE, BLEU, perplexity, and hallucination detection
-   - Visualization and reporting capabilities
-   - Human feedback collection framework
-
-2. **nlp_utils.py**: Centralized natural language processing utilities
-
-   - Safe spaCy initialization with fallbacks for compatibility
-   - Text processing utilities that work across environments
-   - Paperspace-compatible minimal tokenizer implementation
-
-3. **import_utilities.py**: Solutions for import problems throughout the codebase
-
-   - Path fixing and monkey patching for missing modules
-   - Import verification and fixing tools
-   - Standalone implementations of critical functions
-
-4. **deepseek_handler.py**: Unified interface for DeepSeek model operations
-   - Fine-tuning with Unsloth optimization
-   - Storage optimization for different environments
-   - Google Drive integration for model persistence
-
-### Importing the Modules
-
-All modules can be imported directly from the `src.generative_ai_module` package:
-
-```python
-from src.generative_ai_module.evaluation_metrics import EvaluationMetrics
-from src.generative_ai_module.nlp_utils import tokenize_text, process_text_with_spacy_or_fallback
-from src.generative_ai_module.import_utilities import fix_imports, check_imports
-from src.generative_ai_module.deepseek_handler import DeepSeekHandler
-```
-
-### Module Usage Examples
-
-See the `REFACTORING.md` file for detailed usage examples of each module.
-
-## Initial Import Setup
-
-Before running any training or fine-tuning scripts, it's crucial to set up the Python import paths and verify that all necessary modules and functions are properly accessible. This is especially important when running on a GPU with limited memory like the RTX 5000, as import errors during execution can waste valuable compute time.
-
-````bash
-# Create a simple test script to verify imports
-cat > /notebooks/test_imports.py << 'EOL'
-#!/usr/bin/env python3
-"""
-Import Test Script for Jarvis AI Assistant
-
-This script checks if all essential imports are working correctly.
-If any of these imports fail, it will indicate which specific modules need fixing.
-"""
-
-import os
-import sys
-
-# Add project root to path
-project_root = os.path.abspath(os.path.dirname(__file__))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
-def check_imports():
-    """Test all essential imports"""
-    print("Testing critical imports for Jarvis AI Assistant...")
-
-    import_tests = [
-        # Core ML libraries
-        ("torch", "PyTorch is required for all model operations"),
-        ("transformers", "HuggingFace Transformers is required for model loading and training"),
-        ("datasets", "HuggingFace Datasets is required for dataset handling"),
-
-        # Performance optimization
-        ("unsloth", "Unsloth is required for optimized training (optional but recommended)"),
-        ("peft", "PEFT is required for parameter-efficient fine-tuning"),
-        ("bitsandbytes", "BitsAndBytes is required for quantization"),
-
-        # Jarvis AI modules and sub-modules
-        ("src.generative_ai_module", "Main Jarvis module"),
-        ("src.generative_ai_module.import_fix", "Import fix utilities"),
-        ("src.generative_ai_module.text_generator", "Text generation module"),
-        ("src.generative_ai_module.code_generator", "Code generation module"),
-        ("src.generative_ai_module.evaluation_metrics", "Evaluation metrics module"),
-        ("src.generative_ai_module.utils", "Utility functions"),
-    ]
-
-    failed_imports = []
-    for module_name, description in import_tests:
-        try:
-            __import__(module_name)
-            print(f"✅ {module_name}: Successfully imported")
-        except ImportError as e:
-            failed_imports.append((module_name, description, str(e)))
-            print(f"❌ {module_name}: Failed to import - {e}")
-
-    # Test specific function imports
-    print("\nTesting specific function imports...")
-
-    try:
-        from src.generative_ai_module.import_fix import calculate_metrics, save_metrics, EvaluationMetrics
-        print("✅ Key functions from import_fix successfully imported")
-    except ImportError as e:
-        print(f"❌ Failed to import key functions from import_fix: {e}")
-        failed_imports.append(("import_fix functions", "Critical evaluation functions", str(e)))
-
-    # Summary
-    if failed_imports:
-        print("\n⚠️ Some imports failed. Please fix these before proceeding:")
-        for module, desc, error in failed_imports:
-            print(f"  - {module}: {desc}")
-            print(f"    Error: {error}")
-        return False
-    else:
-        print("\n✅ All imports successful! You can proceed with running the model.")
-        return True
-
-if __name__ == "__main__":
-    success = check_imports()
-    sys.exit(0 if success else 1)
-EOL
-
-# Make the test script executable
-chmod +x /notebooks/test_imports.py
-
-# Run the import test
-python /notebooks/test_imports.py
-
-# Set PYTHONPATH to include project root (add to ~/.bashrc for persistence)
-echo 'export PYTHONPATH=$PYTHONPATH:/notebooks' >> ~/.bashrc
-source ~/.bashrc
-
 
 ## Optimal Training Commands for RTX 5000 (16GB GPU)
 
 These commands are specifically optimized for the RTX 5000 GPU with 16GB VRAM, 8 CPUs, and 30GB RAM. They balance performance with memory constraints to get the best results.
+
+### GPU Optimizations for Training
+
+The Jarvis AI system includes several automatic optimizations to ensure maximum GPU utilization on the RTX 5000:
+
+- **GPU Enforcement**: Sets `CUDA_VISIBLE_DEVICES=0` to ensure the GPU is used
+- **Memory Optimizations**: Applies `PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:128"` to reduce memory fragmentation
+- **Performance Tuning**: Enables cuDNN benchmark with `torch.backends.cudnn.benchmark = True` for better performance
+- **Model Quantization**: Forces 4-bit quantization for model loading on RTX5000 to maximize available memory
+- **Adaptive Batch Sizes**: Automatically reduces batch sizes when necessary to accommodate 16GB VRAM limits
+- **Early Detection**: Updates to key files ensure GPU usage is prioritized:
+  - `code_generator.py`: Modified `_get_device()` to detect and prioritize GPU
+  - `finetune_deepseek.py`: Enhanced `setup_environment()` for RTX5000 detection
+  - `train_models.py`: Added GPU setup at the beginning of `main()`
+  - `jarvis_unified.py`: Added early GPU detection during module import
 
 ### 1. Training the Base Models
 
@@ -710,7 +587,7 @@ python src/generative_ai_module/train_models.py \
     --save_strategy steps \
     --logging_steps 50 \
     --visualize_metrics
-```
+````
 
 ### 2. Fine-tuning DeepSeek Models with Unsloth
 
@@ -1147,5 +1024,7 @@ python src/generative_ai_module/train_models.py \
 ```
 
 The core issue is that nll_loss requires target indices to be within the range [0, vocab_size-1]. The latest code includes safeguards to prevent this error by adding index validation and clamping throughout the training pipeline.
+
 ```
-````
+
+```

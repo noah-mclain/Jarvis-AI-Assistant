@@ -1539,7 +1539,7 @@ def main():
             eval_metrics_dir=args.eval_metrics_dir,
             max_samples=args.max_samples
         )
-        
+    
     else:
         logger.error(f"Model type '{args.model_type}' not implemented yet.")
         return

@@ -274,6 +274,9 @@ class JarvisAI:
     # Available datasets, focused on The Pile, OpenAssistant, and GPTeacher
     AVAILABLE_DATASETS = ["pile", "openassistant", "gpteacher"]
     
+    # HuggingFace dataset prefixes for identification
+    HUGGINGFACE_PREFIXES = ["google/", "agie-ai/", "teknium/", "euclaise/"]
+    
     def __init__(
         self,
         models_dir: str = "models",
@@ -323,16 +326,16 @@ class JarvisAI:
         
         # Set up precision based on device capabilities and hardware
         self.use_bf16 = torch.cuda.is_bf16_supported() if torch.cuda.is_available() else False
-        if "RTX5000" in torch.cuda.get_device_name(0) or "RTX 5000" in torch.cuda.get_device_name(0):
+        if torch.cuda.is_available() and ("RTX5000" in torch.cuda.get_device_name(0) or "RTX 5000" in torch.cuda.get_device_name(0)):
             # RTX GPUs work better with FP16
             self.use_bf16 = False
             logger.info("Using FP16 precision for RTX GPU")
         
         # Set batch size based on GPU type for default values in train_models
-        if "RTX5000" in torch.cuda.get_device_name(0) or "RTX 5000" in torch.cuda.get_device_name(0):
+        if torch.cuda.is_available() and ("RTX5000" in torch.cuda.get_device_name(0) or "RTX 5000" in torch.cuda.get_device_name(0)):
             self.default_batch_size = 4  # RTX5000 has less memory
             self.default_seq_length = 1024
-        elif "RTX4000" in torch.cuda.get_device_name(0) or "RTX 4000" in torch.cuda.get_device_name(0):
+        elif torch.cuda.is_available() and ("RTX4000" in torch.cuda.get_device_name(0) or "RTX 4000" in torch.cuda.get_device_name(0)):
             self.default_batch_size = 2  # RTX4000 has even less memory
             self.default_seq_length = 512
         else:
@@ -340,7 +343,8 @@ class JarvisAI:
             self.default_seq_length = 512
         
         logger.info(f"Using device: {self.device}")
-        logger.info(f"Available datasets: {', '.join(self.AVAILABLE_DATASETS)}")
+        logger.info(f"Available built-in datasets: {', '.join(self.AVAILABLE_DATASETS)}")
+        logger.info(f"HuggingFace datasets supported: prefixes {', '.join(self.HUGGINGFACE_PREFIXES)} or with '/' in name")
         logger.info(f"4-bit quantization: {'Enabled' if self.load_in_4bit else 'Disabled'}")
         logger.info(f"Unsloth optimizations: {'Enabled' if self.use_unsloth else 'Disabled'}")
         logger.info(f"BF16 precision: {'Enabled' if self.use_bf16 else 'Disabled'}")
@@ -351,6 +355,27 @@ class JarvisAI:
         # Create models directory
         os.makedirs(self.models_dir, exist_ok=True)
     
+    def is_huggingface_dataset(self, dataset_name: str) -> bool:
+        """
+        Check if a dataset name is a HuggingFace dataset.
+        
+        Args:
+            dataset_name: Name of the dataset
+            
+        Returns:
+            True if it's a HuggingFace dataset, False otherwise
+        """
+        # Check if it has a '/' in it, which is characteristic of HuggingFace dataset names
+        if '/' in dataset_name:
+            return True
+            
+        # Check if it starts with any of the known HuggingFace prefixes
+        for prefix in self.HUGGINGFACE_PREFIXES:
+            if dataset_name.startswith(prefix):
+                return True
+                
+        return False
+
     def load_model(self, dataset_or_path: str, is_path: bool = False) -> Tuple[Any, Any]:
         """
         Load model and tokenizer for a specific dataset or from a path.
@@ -566,9 +591,78 @@ class JarvisAI:
         Returns:
             Tuple of (train_dataset, val_dataset, test_dataset)
         """
+        # Check if it's a HuggingFace dataset
+        if self.is_huggingface_dataset(dataset_name):
+            try:
+                from datasets import load_dataset, Dataset
+                from .unified_dataset_handler import UnifiedDatasetHandler
+                
+                # Load appropriate tokenizer - use a generic one for HF datasets
+                _, tokenizer = self.load_model("pile")  # Use pile tokenizer as a generic one
+                
+                # Initialize unified dataset handler
+                dataset_handler = UnifiedDatasetHandler(
+                    tokenizer=tokenizer,
+                    max_length=self.default_seq_length,
+                    batch_size=self.default_batch_size
+                )
+                
+                logger.info(f"Loading HuggingFace dataset: {dataset_name}")
+                
+                # Load dataset
+                dataset_dict = dataset_handler.load_dataset(
+                    dataset_name=dataset_name,
+                    split="train",
+                    max_samples=max_samples,
+                    use_cache=True
+                )
+                
+                # Get train dataset
+                train_dataset = dataset_dict["train"]
+                
+                # Create validation and test datasets
+                if validation_split > 0 or test_split > 0:
+                    # Split dataset
+                    splits = train_dataset.train_test_split(
+                        test_size=validation_split + test_split,
+                        shuffle=True
+                    )
+                    train_dataset = splits["train"]
+                    
+                    if validation_split > 0 and test_split > 0:
+                        # Split the test portion into validation and test
+                        test_val_ratio = test_split / (validation_split + test_split)
+                        val_test_splits = splits["test"].train_test_split(
+                            test_size=test_val_ratio,
+                            shuffle=True
+                        )
+                        val_dataset = val_test_splits["train"]
+                        test_dataset = val_test_splits["test"]
+                    else:
+                        # Only validation split, no test split
+                        val_dataset = splits["test"]
+                        test_dataset = val_dataset  # Use validation as test too
+                else:
+                    # No splits requested
+                    val_dataset = train_dataset
+                    test_dataset = train_dataset
+                
+                logger.info(f"Loaded HuggingFace dataset: {dataset_name} with {len(train_dataset)} training samples")
+                
+                # Convert to TextDataset format expected by this module
+                train_text_dataset = self._convert_to_text_dataset(train_dataset, tokenizer)
+                val_text_dataset = self._convert_to_text_dataset(val_dataset, tokenizer)
+                test_text_dataset = self._convert_to_text_dataset(test_dataset, tokenizer)
+                
+                return train_text_dataset, val_text_dataset, test_text_dataset
+                
+            except Exception as e:
+                logger.error(f"Error loading HuggingFace dataset {dataset_name}: {e}")
+                raise ValueError(f"Failed to load HuggingFace dataset {dataset_name}: {e}")
+        
         # Check if dataset is supported
         if dataset_name not in self.AVAILABLE_DATASETS:
-            raise ValueError(f"Dataset {dataset_name} not supported. Available datasets: {self.AVAILABLE_DATASETS}")
+            raise ValueError(f"Dataset {dataset_name} not supported. Available built-in datasets: {self.AVAILABLE_DATASETS}")
             
         # Load appropriate tokenizer
         _, tokenizer = self.load_model(dataset_name)
@@ -614,6 +708,57 @@ class JarvisAI:
         logger.info(f"Dataset split: {train_size} train, {val_size} validation, {test_size} test")
         
         return train_dataset, val_dataset, test_dataset
+    
+    def _convert_to_text_dataset(self, hf_dataset, tokenizer):
+        """
+        Convert a HuggingFace dataset to TextDataset format.
+        
+        Args:
+            hf_dataset: HuggingFace dataset
+            tokenizer: Tokenizer to use
+            
+        Returns:
+            TextDataset object
+        """
+        # Extract text from HuggingFace dataset
+        texts = []
+        
+        # Check for common text fields
+        text_fields = ["text", "content", "instruction", "input", "prompt"]
+        response_fields = ["response", "output", "completion", "answer"]
+        
+        # Find the text field
+        text_field = None
+        for field in text_fields:
+            if field in hf_dataset.features:
+                text_field = field
+                break
+        
+        # Find response field if available
+        response_field = None
+        for field in response_fields:
+            if field in hf_dataset.features:
+                response_field = field
+                break
+        
+        # Extract text
+        if text_field and response_field:
+            # Both input and response available - combine them
+            for item in hf_dataset:
+                text = f"{item[text_field]}\n{item[response_field]}"
+                texts.append(text)
+        elif text_field:
+            # Only input available
+            for item in hf_dataset:
+                texts.append(item[text_field])
+        else:
+            # No standard fields found - try first column
+            first_col = list(hf_dataset.features.keys())[0]
+            for item in hf_dataset:
+                texts.append(str(item[first_col]))
+        
+        # Create dataset
+        return TextDataset(texts, tokenizer, max_length=self.default_seq_length)
     
     def train_models(
         self,
@@ -671,11 +816,6 @@ class JarvisAI:
         if sequence_length is None:
             sequence_length = self.default_seq_length
             
-        # Check if datasets are valid
-        for dataset in datasets:
-            if dataset not in self.AVAILABLE_DATASETS:
-                raise ValueError(f"Dataset {dataset} not supported. Available datasets: {self.AVAILABLE_DATASETS}")
-        
         # Create visualization directory if needed
         if visualization_dir:
             os.makedirs(visualization_dir, exist_ok=True)
@@ -683,8 +823,83 @@ class JarvisAI:
         # Store training metrics
         all_metrics = {}
         
-        # Train on each dataset
+        # Check for HuggingFace datasets - handle separately
+        huggingface_datasets = []
+        regular_datasets = []
+        
         for dataset in datasets:
+            if self.is_huggingface_dataset(dataset):
+                huggingface_datasets.append(dataset)
+            elif dataset in self.AVAILABLE_DATASETS:
+                regular_datasets.append(dataset)
+            else:
+                logger.warning(f"Dataset {dataset} not recognized as a built-in or HuggingFace dataset. Skipping.")
+        
+        # Process HuggingFace datasets first if any
+        if huggingface_datasets:
+            try:
+                from .train_models import train_text_model
+                
+                # Group HuggingFace datasets with commas for the train_models.py script
+                hf_dataset_str = ",".join(huggingface_datasets)
+                logger.info(f"Training on HuggingFace datasets: {hf_dataset_str}")
+                
+                # Setup output directory
+                hf_output_dir = os.path.join(str(self.models_dir), "huggingface_model")
+                os.makedirs(hf_output_dir, exist_ok=True)
+                
+                # Use train_text_model function from train_models.py
+                model, tokenizer, training_args = train_text_model(
+                    dataset=hf_dataset_str,
+                    model_name_or_path="gpt2",  # Use a default model
+                    batch_size=batch_size,
+                    epochs=epochs,
+                    learning_rate=learning_rate,
+                    weight_decay=0.01,
+                    max_length=sequence_length,
+                    output_dir=hf_output_dir,
+                    eval_metrics_dir=visualization_dir or os.path.join(hf_output_dir, "metrics"),
+                    dataset_subset=None,
+                    max_samples=max_samples,
+                    evaluation_strategy="steps",
+                    save_strategy="steps",
+                    logging_steps=50,
+                    eval_steps=100,
+                    visualize_metrics=visualization_dir is not None,
+                    use_deepspeed=False,
+                    use_8bit=False,
+                    use_4bit=self.load_in_4bit,
+                    use_qlora=use_lora,
+                    gradient_accumulation_steps=gradient_accumulation_steps,
+                    fp16=not self.use_bf16,
+                    bf16=self.use_bf16,
+                    temperature=0.7,
+                    resume_from_checkpoint=False,
+                    use_mps=False,
+                    use_flash_attn=False,
+                    use_unsloth=self.use_unsloth,
+                    cache_dir=None
+                )
+                
+                # Store metrics for HuggingFace datasets
+                all_metrics["huggingface"] = {
+                    "train_loss": [log["loss"] for log in training_args.logging_history if "loss" in log],
+                    "eval_loss": [log["eval_loss"] for log in training_args.logging_history if "eval_loss" in log],
+                    "epochs": [log.get("epoch", 0) for log in training_args.logging_history if "eval_loss" in log]
+                }
+                
+                # Create visualizations if requested
+                if visualization_dir:
+                    self._visualize_training("huggingface", all_metrics["huggingface"], visualization_dir)
+                
+                logger.info(f"Successfully trained on HuggingFace datasets")
+                
+            except Exception as e:
+                logger.error(f"Error training on HuggingFace datasets: {e}")
+                logger.exception(e)
+        
+        # Train on each regular dataset
+        for dataset in regular_datasets:
             logger.info(f"Training model for {dataset} dataset")
             
             # Load dataset
@@ -946,7 +1161,7 @@ def parse_arguments():
         type=str,
         nargs="+",
         default=None,
-        help="Datasets to train on"
+        help="Datasets to train on. Can include built-in datasets (pile, openassistant, gpteacher) and HuggingFace datasets like 'google/Synthetic-Persona-Chat'"
     )
     parser.add_argument(
         "--max-samples",
@@ -1033,6 +1248,20 @@ def parse_arguments():
         help="Path to save chat history after completion"
     )
     
+    # Visualization arguments
+    parser.add_argument(
+        "--visualize-metrics",
+        action="store_true",
+        default=False,
+        help="Visualize training metrics and save plots"
+    )
+    parser.add_argument(
+        "--visualization-dir",
+        type=str,
+        default="visualizations",
+        help="Directory to save visualizations"
+    )
+    
     return parser.parse_args()
 
 def main():
@@ -1048,6 +1277,17 @@ def main():
     
     # Run in appropriate mode
     if args.mode == "train":
+        # Print available dataset types
+        print("\n===== Available Dataset Types =====")
+        print(f"Built-in datasets: {', '.join(jarvis.AVAILABLE_DATASETS)}")
+        print(f"HuggingFace datasets: Any dataset with '/' in the name or starting with: {', '.join(jarvis.HUGGINGFACE_PREFIXES)}")
+        
+        # Set up visualization directory if needed
+        visualization_dir = args.visualization_dir if args.visualize_metrics else None
+        if visualization_dir:
+            os.makedirs(visualization_dir, exist_ok=True)
+            print(f"Visualizations will be saved to: {visualization_dir}")
+        
         # Train models
         jarvis.train_models(
             datasets=args.datasets,
@@ -1055,8 +1295,13 @@ def main():
             epochs=args.epochs,
             batch_size=args.batch_size,
             gradient_accumulation_steps=args.gradient_accumulation_steps,
-            sequence_length=args.sequence_length
+            sequence_length=args.sequence_length,
+            visualization_dir=visualization_dir
         )
+        
+        print("\n===== Training Complete =====")
+        print(f"Models saved to: {jarvis.models_dir}")
+        
     elif args.mode == "interactive":
         # Run interactive session
         jarvis.run_interactive(load_path=args.model_path or args.model)

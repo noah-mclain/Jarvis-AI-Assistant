@@ -299,7 +299,7 @@ class UnifiedDatasetHandler:
         if '/' in dataset_name:
             # It's a HuggingFace dataset
             self.logger.info(f"Loading HuggingFace dataset: {dataset_name} (split: {split}, max_samples: {max_samples}, subset: {subset})")
-            
+
             try:
                 from datasets import load_dataset
                 
@@ -311,7 +311,7 @@ class UnifiedDatasetHandler:
                 dataset = load_dataset(
                     dataset_name,
                     name=subset,
-                    split=split,
+                split=split,
                     cache_dir=hf_cache_dir
                 )
                 
