@@ -206,33 +206,34 @@ def load_persona_chat(split='train', max_samples=None, cache_dir=None):
         return get_sample_persona_chat()
 
 def load_writing_prompts(split='train', max_samples=None, cache_dir=None):
-    """Load Writing Prompts dataset with better error handling"""
-    try:
-        # Load the dataset
-        dataset = load_dataset("euclaise/writingprompts", split=split, cache_dir=cache_dir)
+    """
+    Load and preprocess the Writing Prompts dataset
+    
+    Args:
+        split: Dataset split ('train', 'test', or 'validation')
+        max_samples: Maximum number of samples to load (None for all)
+        cache_dir: Optional directory to cache the downloaded dataset
         
+    Returns:
+        Preprocessed text ready for sequence creation
+    """
+    # Define a fallback sample in case loading fails
+    if not get_sample_writing_prompts():
+        print("Warning: Failed to generate sample writing prompts data")
+
+    try:
+        # Try loading the dataset with the correct path
+        dataset = load_dataset("euclaise/writingprompts", split=split, cache_dir=cache_dir)
         if max_samples:
             dataset = dataset.select(range(min(max_samples, len(dataset))))
-        
-        # Convert to text format
-        text = ""
-        for item in tqdm(dataset, desc="Processing Writing Prompts"):
-            # Format: <PROMPT> prompt text <STORY> story text <END>
-            prompt = item['prompt'].strip()
-            story = item['story'].strip()
-            
-            # Skip empty prompts or stories
-            if not prompt or not story:
-                continue
-                
-            text += f"<PROMPT> {prompt}\n"
-            text += f"<STORY> {story}\n"
-            text += "<END>\n\n"
-            
-        return text
-            
+
+        return "".join(
+            f"<PROMPT>\n{item['prompt']}\n<STORY>\n{item['story']}\n<END>\n\n"
+            for item in tqdm(dataset, desc="Processing Writing Prompts")
+        )
     except Exception as e:
         print(f"Error loading Writing Prompts dataset: {e}")
+        print("Falling back to sample data")
         return get_sample_writing_prompts()
 
 def get_sample_persona_chat():

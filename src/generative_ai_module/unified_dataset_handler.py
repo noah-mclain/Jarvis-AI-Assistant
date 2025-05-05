@@ -995,7 +995,7 @@ class UnifiedDatasetHandler:
             # Try to load a tiny sample to verify availability
             if dataset_name == "writing_prompts":
                 # Check if HuggingFace has the dataset
-                dataset = load_dataset("writingprompts", split="train", cache_dir=self.cache_dir)
+                dataset = load_dataset("euclaise/writingprompts", split="train", cache_dir=self.cache_dir)
                 return dataset is not None and len(dataset) > 0
             elif dataset_name == "persona_chat":
                 try:

@@ -428,7 +428,7 @@ class DatasetProcessor:
 
         try:
             # Try loading the dataset
-            dataset = load_dataset("writingprompts", split=split, cache_dir=cache_dir)
+            dataset = load_dataset("euclaise/writingprompts", split=split, cache_dir=cache_dir)
             if max_samples:
                 dataset = dataset.select(range(min(max_samples, len(dataset))))
 

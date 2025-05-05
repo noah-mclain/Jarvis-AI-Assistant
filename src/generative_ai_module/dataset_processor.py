@@ -427,8 +427,8 @@ class DatasetProcessor:
             print("Warning: Failed to generate sample writing prompts data")
 
         try:
-            # Try loading the dataset
-            dataset = load_dataset("writingprompts", split=split, cache_dir=cache_dir)
+            # Try loading the dataset with the correct path
+            dataset = load_dataset("euclaise/writingprompts", split=split, cache_dir=cache_dir)
             if max_samples:
                 dataset = dataset.select(range(min(max_samples, len(dataset))))
 
