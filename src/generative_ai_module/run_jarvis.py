@@ -279,6 +279,11 @@ def main():
     
     logger.info("Starting Jarvis AI Assistant")
     
+    # Enable cuDNN benchmark for better GPU performance
+    if torch.cuda.is_available():
+        torch.backends.cudnn.benchmark = True
+        logger.info("Enabled cuDNN benchmark for better GPU performance")
+    
     # If we're in Paperspace, sync models from Google Drive
     if is_paperspace_environment():
         try:

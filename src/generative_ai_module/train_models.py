@@ -1740,15 +1740,16 @@ def main():
         if hasattr(torch, 'set_default_device'):
             torch.set_default_device('cuda')
             
+        # Enable cuDNN benchmark for better performance
+        torch.backends.cudnn.benchmark = True  # Improves performance for fixed-size inputs
+        logger.info("✅ Enabled cuDNN benchmark for better performance")
+            
         # Apply RTX5000-specific optimizations if detected
         if is_paperspace_environment() and ("RTX5000" in gpu_name or "RTX 5000" in gpu_name):
             logger.info(f"✅ RTX5000 GPU detected - applying optimized settings")
             # Set environment variables
             os.environ["CUDA_VISIBLE_DEVICES"] = "0"
             os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
-            
-            # These optimizations will be applied to all subsequent PyTorch operations
-            torch.backends.cudnn.benchmark = True  # May improve performance for fixed-size inputs
     
     # Apply GPU configuration through utility function for detailed setup
     device, gpu_config = setup_gpu_for_training(force_gpu=True)

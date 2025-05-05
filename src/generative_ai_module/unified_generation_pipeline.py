@@ -1920,6 +1920,11 @@ def main():
     # Track execution time
     start_time = time.time()
     
+    # Set GPU performance optimizations
+    if torch.cuda.is_available():
+        torch.backends.cudnn.benchmark = True
+        print("✅ Enabled cuDNN benchmark for better GPU performance")
+    
     # Create pipeline instance
     pipeline = UnifiedGenerationPipeline(
         model_dir=args.model_dir,
