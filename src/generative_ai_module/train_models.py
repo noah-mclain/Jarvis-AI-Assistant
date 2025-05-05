@@ -1851,6 +1851,14 @@ def main():
     parser.add_argument('--cpu', action='store_true', default=False,
                       help='Force CPU usage (this will be ignored if --force_gpu is also set)')
     
+    # Add CNN-specific arguments
+    parser.add_argument('--use_cnn', action='store_true',
+                     help='Use CNN-enhanced text generation model')
+    parser.add_argument('--cnn_layers', type=int, default=2,
+                     help='Number of CNN layers for CNN-enhanced model')
+    parser.add_argument('--cnn_kernel_sizes', type=str, default="3,5,7",
+                     help='Comma-separated list of kernel sizes for CNN layers')
+    
     args = parser.parse_args()
     
     # Override CPU request with GPU force
@@ -1866,42 +1874,81 @@ def main():
     for arg, value in vars(args).items():
         logger.info(f"  {arg}: {value}")
     
-    # Handle model training based on model type
+    # Handle model training based on model type and CNN option
     if args.model_type == 'text':
-        model, tokenizer, training_args = train_text_model(
-            dataset=args.dataset,
-            model_name_or_path=args.model_name_or_path,
-            batch_size=args.batch_size,
-            epochs=args.epochs,
-            learning_rate=args.learning_rate,
-            weight_decay=args.weight_decay,
-            max_length=args.max_length,
-            output_dir=args.output_dir,
-            eval_metrics_dir=args.eval_metrics_dir,
-            dataset_subset=args.dataset_subset,
-            max_samples=args.max_samples,
-            evaluation_strategy=args.evaluation_strategy,
-            save_strategy=args.save_strategy,
-            logging_steps=args.logging_steps,
-            eval_steps=args.eval_steps,
-            visualize_metrics=args.visualize_metrics,
-            use_deepspeed=args.use_deepspeed,
-            use_8bit=args.use_8bit,
-            use_4bit=args.use_4bit,
-            use_qlora=args.use_qlora,
-            gradient_accumulation_steps=args.gradient_accumulation_steps,
-            fp16=args.fp16,
-            bf16=args.bf16,
-            resume_from_checkpoint=args.resume_from_checkpoint,
-            use_flash_attn=args.use_flash_attn,
-            use_unsloth=args.use_unsloth,
-            cache_dir=args.cache_dir
-        )
-        
-        # Print success message
-        print(f"\nSuccessfully trained text model!")
-        print(f"Model saved to: {args.output_dir}")
-
+        if args.use_cnn:
+            # Parse CNN kernel sizes
+            cnn_kernel_sizes = [int(k) for k in args.cnn_kernel_sizes.split(',')]
+            
+            # Train CNN-enhanced text model
+            model, tokenizer, metrics = train_cnn_text_model(
+                dataset=args.dataset,
+                model_name_or_path=args.model_name_or_path,
+                batch_size=args.batch_size,
+                epochs=args.epochs,
+                learning_rate=args.learning_rate,
+                weight_decay=args.weight_decay,
+                max_length=args.max_length,
+                output_dir=args.output_dir,
+                eval_metrics_dir=args.eval_metrics_dir,
+                dataset_subset=args.dataset_subset,
+                max_samples=args.max_samples,
+                evaluation_strategy=args.evaluation_strategy,
+                save_strategy=args.save_strategy,
+                logging_steps=args.logging_steps,
+                eval_steps=args.eval_steps,
+                visualize_metrics=args.visualize_metrics,
+                cnn_layers=args.cnn_layers,
+                cnn_kernel_sizes=cnn_kernel_sizes,
+                cnn_dropout=0.1,
+                gradient_accumulation_steps=args.gradient_accumulation_steps,
+                fp16=args.fp16,
+                bf16=args.bf16,
+                sync_to_gdrive=True,
+                cache_dir=args.cache_dir
+            )
+            
+            # Print success message
+            if model is not None:
+                print(f"\nSuccessfully trained CNN-enhanced text model!")
+                print(f"Model saved to: {args.output_dir}")
+            else:
+                print(f"\nTraining CNN-enhanced text model failed.")
+        else:
+            # Standard text model training
+            model, tokenizer, training_args = train_text_model(
+                dataset=args.dataset,
+                model_name_or_path=args.model_name_or_path,
+                batch_size=args.batch_size,
+                epochs=args.epochs,
+                learning_rate=args.learning_rate,
+                weight_decay=args.weight_decay,
+                max_length=args.max_length,
+                output_dir=args.output_dir,
+                eval_metrics_dir=args.eval_metrics_dir,
+                dataset_subset=args.dataset_subset,
+                max_samples=args.max_samples,
+                evaluation_strategy=args.evaluation_strategy,
+                save_strategy=args.save_strategy,
+                logging_steps=args.logging_steps,
+                eval_steps=args.eval_steps,
+                visualize_metrics=args.visualize_metrics,
+                use_deepspeed=args.use_deepspeed,
+                use_8bit=args.use_8bit,
+                use_4bit=args.use_4bit,
+                use_qlora=args.use_qlora,
+                gradient_accumulation_steps=args.gradient_accumulation_steps,
+                fp16=args.fp16,
+                bf16=args.bf16,
+                resume_from_checkpoint=args.resume_from_checkpoint,
+                use_flash_attn=args.use_flash_attn,
+                use_unsloth=args.use_unsloth,
+                cache_dir=args.cache_dir
+            )
+            
+            # Print success message
+            print(f"\nSuccessfully trained text model!")
+            print(f"Model saved to: {args.output_dir}")
     elif args.model_type == 'code':
         from .code_generator import train_code_model
         
