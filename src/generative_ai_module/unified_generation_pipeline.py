@@ -32,7 +32,19 @@ import functools
 from .utils import get_storage_path
 
 from .prompt_enhancer import analyze_prompt
-from .unsloth_deepseek import evaluate_model
+# Use try/except for importing evaluate_model
+try:
+    from .unsloth_deepseek import evaluate_model
+    UNSLOTH_AVAILABLE = True
+except ImportError as e:
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.warning(f"UnifiedGenerationPipeline: Failed to import evaluate_model: {e}")
+    # Define a fallback evaluate_model function
+    def evaluate_model(*args, **kwargs):
+        logger.warning("evaluate_model not available - using stub version")
+        return {"error": "evaluate_model not available"}
+    UNSLOTH_AVAILABLE = False
 
 # Define infinity for use in the code
 infinity = float('inf')

@@ -15,18 +15,48 @@ Functions:
 # Import unsloth first, before transformers and other libraries
 # This ensures all optimizations are properly applied
 
-from typing import Optional
+from typing import Optional, Dict, List, Any, Union
 import sys
 import logging
+import os
+import time
+import datetime
+import json
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Define minimal dependencies that will always be available
+try:
+    import torch
+    import numpy as np
+except ImportError as e:
+    logger.error(f"Critical dependency missing: {e}")
+    # Create stub versions for torch and numpy to prevent immediate errors
+    class StubModule:
+        def __getattr__(self, _):
+            return lambda *args, **kwargs: None
+    
+    torch = StubModule()
+    torch.cuda = StubModule()
+    torch.cuda.is_available = lambda: False
+    torch.Tensor = list
+    torch.device = lambda x: x
+    torch.nn = StubModule()
+    torch.no_grad = lambda: StubModule()
+    np = StubModule()
+
+# Default flags in case imports fail
+UNSLOTH_AVAILABLE = False
+TRL_HAS_SFT_CONFIG = False
+TRANSFORMERS_AVAILABLE = False
+
 # Import unsloth with fallback mechanisms
 try:
     import unsloth
     from unsloth import FastLanguageModel
+    UNSLOTH_AVAILABLE = True
     # Try to import DeepSeek support - this might fail in minimal installations
     try:
         from unsloth.models import FastDeepseekV2ForCausalLM
@@ -36,29 +66,85 @@ try:
         DEEPSEEK_NATIVE_SUPPORT = False
         logger.warning("Using minimal Unsloth without specialized DeepSeek support")
 except ImportError as e:
-    logger.error(f"Failed to import Unsloth: {e}")
-    raise RuntimeError("Unsloth is required for this module. Please install it with 'pip install unsloth'")
+    logger.warning(f"Unsloth not available: {e}")
+    UNSLOTH_AVAILABLE = False
+    DEEPSEEK_NATIVE_SUPPORT = False
+    # Create stub for FastLanguageModel
+    class FastLanguageModel:
+        @staticmethod
+        def from_pretrained(*args, **kwargs):
+            raise RuntimeError("Unsloth not available")
+        
+        @staticmethod
+        def get_peft_model(*args, **kwargs):
+            raise RuntimeError("Unsloth not available")
 
-# Import other libraries after unsloth
-import os
-import time
-import datetime
-import json
-import torch
-import numpy as np
-from datasets import Dataset
-from tqdm import tqdm
+# Try to import Dataset class or create stub
+try:
+    from datasets import Dataset
+except ImportError:
+    logger.warning("datasets library not available")
+    # Create stub Dataset class
+    class Dataset:
+        def __init__(self, data=None):
+            self.data = data or {}
+        
+        def __getitem__(self, idx):
+            return self.data.get(idx, {})
+        
+        def __len__(self):
+            return len(self.data)
+
+# Try to import tqdm
+try:
+    from tqdm import tqdm
+except ImportError:
+    # Simple tqdm replacement
+    def tqdm(iterable, **kwargs):
+        desc = kwargs.get('desc', '')
+        logger.info(f"Starting: {desc}")
+        for i, item in enumerate(iterable):
+            if i % 10 == 0:
+                logger.info(f"{desc}: {i}/{len(iterable) if hasattr(iterable, '__len__') else '?'}")
+            yield item
 
 # Conditional imports for transformers components
 try:
     from transformers import AutoTokenizer, TrainingArguments
-    from trl import SFTTrainer, SFTConfig
-    from peft import LoraConfig
+    TRANSFORMERS_AVAILABLE = True
+    # Try to import from TRL with version compatibility handling
+    try:
+        import trl
+        from trl import SFTTrainer
+        
+        # Check if SFTConfig exists in this version of TRL
+        try:
+            from trl import SFTConfig
+            TRL_HAS_SFT_CONFIG = True
+            logger.info(f"Using TRL version {getattr(trl, '__version__', 'unknown')} with SFTConfig")
+        except ImportError:
+            TRL_HAS_SFT_CONFIG = False
+            logger.info(f"Using TRL version {getattr(trl, '__version__', 'unknown')} without SFTConfig")
+            
+        from peft import LoraConfig
+    except ImportError as e:
+        logger.warning(f"TRL/PEFT not available: {e}")
+        
+        # Create stub LoraConfig for imports
+        class LoraConfig:
+            def __init__(self, *args, **kwargs):
+                pass
 except ImportError as e:
-    logger.error(f"Failed to import required dependencies: {e}")
-    raise RuntimeError("Required dependencies missing. Please install with 'pip install transformers trl peft'")
+    logger.warning(f"Transformers not available: {e}")
+    TRANSFORMERS_AVAILABLE = False
+    
+    # Create stub AutoTokenizer for imports
+    class AutoTokenizer:
+        @staticmethod
+        def from_pretrained(*args, **kwargs):
+            return None
 
-# Import storage optimization utilities
+# Import storage optimization utilities with fallback stubs
 try:
     from .storage_optimization import (
         create_checkpoint_strategy, manage_checkpoints, 
@@ -363,17 +449,32 @@ def finetune_with_unsloth(
     
     # Create SFT trainer
     # We need to set tokenizer_name explicitly here for DeepSeek
-    trainer = SFTTrainer(
-        model=model,
-        tokenizer=tokenizer,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        dataset_text_field="text",  # Use 'text' field for training
-        max_seq_length=max_seq_length,
-        args=training_args,
-        packing=True,  # Enable packing for more efficient training
-        tokenizer_name=model_name  # Set tokenizer name explicitly
-    )
+    if TRL_HAS_SFT_CONFIG:
+        # Use the newer TRL API with SFTConfig
+        trainer = SFTTrainer(
+            model=model,
+            tokenizer=tokenizer,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            dataset_text_field="text",  # Use 'text' field for training
+            max_seq_length=max_seq_length,
+            args=training_args,
+            packing=True,  # Enable packing for more efficient training
+            tokenizer_name=model_name  # Set tokenizer name explicitly
+        )
+    else:
+        # Use the older TRL API without SFTConfig for TRL 0.7.x
+        logger.info("Using TRL 0.7.x compatibility mode for SFTTrainer")
+        trainer = SFTTrainer(
+            model=model,
+            tokenizer=tokenizer,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            args=training_args,
+            packing=True,  # Enable packing for more efficient training
+            dataset_text_field="text",  # Use 'text' field for training
+            max_seq_length=max_seq_length,
+        )
     
     # Add storage optimization callback if needed
     if use_storage_optimization:
@@ -454,6 +555,15 @@ def evaluate_model(
     Returns:
         Dictionary with evaluation metrics
     """
+    # Check if required dependencies are available
+    if not TRANSFORMERS_AVAILABLE or not torch.cuda.is_available():
+        error_msg = "Transformers or PyTorch CUDA not available for evaluation"
+        logger.error(error_msg)
+        return {
+            "error": error_msg,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+        }
+    
     start_time = time.time()
     
     # If no test dataset was provided, return empty metrics
@@ -496,18 +606,27 @@ def evaluate_model(
             logger.info(f"Using base model: {base_model_name}")
             
             # Load the fine-tuned model
-            model, tokenizer = get_unsloth_model(
-                model_name=base_model_name,
-                model_dir=model_dir,
-                max_seq_length=max_seq_length,
-                load_in_4bit=load_in_4bit,
-                load_in_8bit=load_in_8bit
-            )
-        except Exception as e:
-            logger.error(f"Failed to load model for evaluation: {e}")
-            # Try fallback to standard transformers
-            try:
-                logger.warning("Attempting fallback to standard transformers")
+            if UNSLOTH_AVAILABLE:
+                try:
+                    model, tokenizer = get_unsloth_model(
+                        model_name=base_model_name,
+                        model_dir=model_dir,
+                        max_seq_length=max_seq_length,
+                        load_in_4bit=load_in_4bit,
+                        load_in_8bit=load_in_8bit
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to load with Unsloth: {e}, falling back to transformers")
+                    from transformers import AutoModelForCausalLM, AutoTokenizer
+                    
+                    tokenizer = AutoTokenizer.from_pretrained(model_dir)
+                    model = AutoModelForCausalLM.from_pretrained(
+                        model_dir,
+                        device_map="auto",
+                        torch_dtype=torch.float16,
+                    )
+            else:
+                # Standard transformers loading
                 from transformers import AutoModelForCausalLM, AutoTokenizer
                 
                 tokenizer = AutoTokenizer.from_pretrained(model_dir)
@@ -516,13 +635,12 @@ def evaluate_model(
                     device_map="auto",
                     torch_dtype=torch.float16,
                 )
-            except Exception as e2:
-                logger.error(f"Fallback also failed: {e2}")
-                return {
-                    "error": f"Failed to load model: {str(e)}",
-                    "fallback_error": f"{str(e2)}",
-                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
-                }
+        except Exception as e:
+            logger.error(f"Failed to load model for evaluation: {e}")
+            return {
+                "error": f"Failed to load model: {str(e)}",
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+            }
     
     # Ensure model is in evaluation mode
     model.eval()
