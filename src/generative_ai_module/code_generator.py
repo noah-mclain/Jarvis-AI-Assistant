@@ -291,10 +291,11 @@ class CodeGenerator:
         return self.text_generator.train(batched_data, epochs=epochs)
     
     def freeze_model_layers(self, freeze_proportion=0.7):
-        """Freeze a proportion of the model layers to make training more efficient
+        """
+        Freeze a portion of lower transformer layers for efficient fine-tuning
         
         Args:
-            freeze_proportion: Proportion of layers to freeze (from bottom)
+            freeze_proportion: Proportion of layers to freeze (0-1)
         """
         if not hasattr(self.model, 'base_model'):
             print("Model doesn't have a base_model attribute, skipping layer freezing")
@@ -302,8 +303,36 @@ class CodeGenerator:
             
         base_model = self.model.base_model.model
         
-        # Count total layers
-        transformer_layers = base_model.layers
+        # Get layers based on model architecture
+        if hasattr(base_model, 'layers'):
+            # For models that have direct access to layers
+            transformer_layers = base_model.layers
+        elif hasattr(base_model, 'model') and hasattr(base_model.model, 'layers'):
+            # For nested model structures
+            transformer_layers = base_model.model.layers
+        elif hasattr(base_model, 'transformer') and hasattr(base_model.transformer, 'layers'):
+            # For Llama-type models that use transformer.layers structure
+            transformer_layers = base_model.transformer.layers
+        elif hasattr(self.model, 'model') and hasattr(self.model.model, 'layers'):
+            # Direct access via model.model.layers
+            transformer_layers = self.model.model.layers
+        elif hasattr(self.model.model, 'transformer') and hasattr(self.model.model.transformer, 'h'):
+            # For GPT-2 style models
+            transformer_layers = self.model.model.transformer.h
+        else:
+            # Check if we can find layers directly in base_model
+            found_layers_attr = None
+            for attr_name in dir(base_model):
+                if 'layer' in attr_name.lower() and isinstance(getattr(base_model, attr_name), (list, torch.nn.ModuleList)):
+                    found_layers_attr = attr_name
+                    break
+            
+            if found_layers_attr:
+                transformer_layers = getattr(base_model, found_layers_attr)
+            else:
+                print("Could not find transformer layers in model, skipping layer freezing")
+                return
+        
         num_layers = len(transformer_layers)
         
         # Calculate how many layers to freeze
@@ -311,9 +340,13 @@ class CodeGenerator:
         
         print(f"Freezing {num_to_freeze} out of {num_layers} transformer layers")
         
-        # Freeze embedding layer
-        for param in base_model.embed_tokens.parameters():
-            param.requires_grad = False
+        # Freeze embedding layer if available
+        if hasattr(base_model, 'embed_tokens'):
+            for param in base_model.embed_tokens.parameters():
+                param.requires_grad = False
+        elif hasattr(base_model, 'embeddings'):
+            for param in base_model.embeddings.parameters():
+                param.requires_grad = False
         
         # Freeze lower transformer layers
         for i in range(num_to_freeze):
