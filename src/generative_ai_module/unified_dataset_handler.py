@@ -1512,6 +1512,10 @@ class UnifiedDatasetHandler:
         
         # Use the existing dataset processor methods
         if hasattr(self, 'processor') and self.processor:
+            # Pass the tokenizer to the processor if we have one
+            if hasattr(self, 'tokenizer') and self.tokenizer is not None:
+                self.processor.tokenizer = self.tokenizer
+            
             # Use the dataset_processor to prepare the dataset
             try:
                 data = self.processor.prepare_dataset(

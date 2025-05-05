@@ -702,30 +702,83 @@ ASSISTANT: I'm a software engineer during the week. But on weekends, I play guit
         print(f"Loaded {len(raw_text)} characters from {data_dir}")
         return self.prepare_text_batches(raw_text, sequence_length, batch_size)
     
-    def load_preprocessed_data(self, dataset_name: str) -> Dict[str, Any]:
-        """Load preprocessed data for a specific dataset"""
-        # Define the correct path for preprocessed data
-        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        preprocessed_path = os.path.join(
-            root_dir, "preprocessed_data", f"{dataset_name}_preprocessed.pt"
-        )
+    def load_preprocessed_data(self, dataset_name: str, custom_path: str = None) -> Dict[str, Any]:
+        """
+        Load preprocessed dataset from disk
         
-        # Check if the file exists
-        if not os.path.exists(preprocessed_path):
-            raise FileNotFoundError(f"Preprocessed data not found at {preprocessed_path}")
-        
-        # Load the data
+        Args:
+            dataset_name: Name of the dataset
+            custom_path: Optional custom path to the preprocessed file
+            
+        Returns:
+            Dictionary containing preprocessed data
+        """
         try:
-            data = torch.load(preprocessed_path)
-            print(f"Loaded preprocessed data from {preprocessed_path}")
+            # Determine path
+            if custom_path is not None:
+                path = custom_path
+            else:
+                # Check in standard locations
+                cache_dir = os.environ.get('JARVIS_CACHE_DIR', 'datasets/cache')
+                path = os.path.join(cache_dir, f"{dataset_name}_preprocessed.pt")
+                
+                # Check if file exists
+                if not os.path.exists(path):
+                    # Also check for _preprocessed.pt_preprocessed.pt pattern (double extension)
+                    alternative_path = path + "_preprocessed.pt"
+                    if os.path.exists(alternative_path):
+                        path = alternative_path
+                    else:
+                        raise FileNotFoundError(f"Preprocessed file not found: {path}")
+            
+            # Load the data
+            data = torch.load(path)
+            
+            # Extra checks
+            if not isinstance(data, dict):
+                raise ValueError(f"Preprocessed data is not a dictionary: {path}")
+                
+            if 'batches' not in data or not data['batches']:
+                print(f"Warning: No batches found in preprocessed data: {path}")
+                
             return data
         except Exception as e:
             print(f"Error loading preprocessed data: {e}")
-            return None
-
+            return {'batches': []}
+    
+    def decode_tokens(self, tokens):
+        """
+        Convert token IDs back to text
+        
+        Args:
+            tokens: List of token IDs
+            
+        Returns:
+            Decoded text string
+        """
+        if hasattr(self, 'text_generator') and hasattr(self.text_generator, 'index_to_char'):
+            # Use the text generator's mapping
+            return ''.join(self.text_generator.index_to_char.get(token, "<UNK>") for token in tokens)
+        
+        # If we have a tokenizer with a decode method (HuggingFace style)
+        if hasattr(self, 'tokenizer') and hasattr(self.tokenizer, 'decode'):
+            return self.tokenizer.decode(tokens)
+            
+        # Fallback: try to interpret as character codes
+        try:
+            return ''.join(chr(token) if 0 <= token <= 0x10FFFF else "<UNK>" for token in tokens)
+        except:
+            return f"<Unable to decode tokens: {tokens[:10]}...>"
+    
     def save_tokenized_data(self, data: Dict[str, Any], output_dir: str, dataset_name: str):
-        """Save tokenized data to disk"""
-        # Ensure the output directory exists
+        """
+        Save tokenized dataset and a sample of the text
+        
+        Args:
+            data: Dictionary containing dataset 
+            output_dir: Directory to save the data
+            dataset_name: Name of the dataset
+        """
         os.makedirs(output_dir, exist_ok=True)
         
         # Save the preprocessed data
