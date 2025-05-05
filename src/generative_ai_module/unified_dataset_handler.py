@@ -1589,6 +1589,110 @@ class UnifiedDatasetHandler:
         
         return dataset_dict
 
+    def process_huggingface_dataset(self, dataset, dataset_name, return_batches=True):
+        """Process HuggingFace dataset into model-compatible format"""
+        if not dataset:
+            return {"batches": [], "metadata": {"sample_count": 0, "source": dataset_name}}
+        
+        self.logger.info(f"Processing HuggingFace dataset ({len(dataset)} samples)")
+        self.logger.info(f"Dataset keys: {list(dataset[0].keys())}")
+        
+        # Extract texts based on dataset format
+        texts = []
+        
+        # Handle different dataset formats based on keys
+        keys = dataset[0].keys()
+        
+        # Special handling for specific datasets
+        if dataset_name == "agie-ai/OpenAssistant-oasst1":
+            for item in dataset:
+                if 'text' in item:
+                    texts.append(item['text'])
+        
+        elif dataset_name == "teknium/GPTeacher-General-Instruct":
+            for item in dataset:
+                if 'instruction' in item and 'response' in item:
+                    # Combine instruction and response
+                    combined_text = f"Instruction: {item['instruction']}\n\nResponse: {item['response']}"
+                    texts.append(combined_text)
+        
+        elif dataset_name == "google/Synthetic-Persona-Chat":
+            for item in dataset:
+                if 'Best Generated Conversation' in item:
+                    texts.append(item['Best Generated Conversation'])
+        
+        elif dataset_name == "euclaise/writingprompts":
+            for item in dataset:
+                if 'prompt' in item and 'story' in item:
+                    # Combine prompt and story
+                    combined_text = f"Prompt: {item['prompt']}\n\nStory: {item['story']}"
+                    texts.append(combined_text)
+        
+        # Generic extraction for unknown datasets
+        else:
+            # Try common text field names
+            text_field_candidates = ['text', 'content', 'body', 'story', 'article', 'response']
+            text_field = next((field for field in text_field_candidates if field in keys), None)
+            
+            if text_field:
+                for item in dataset:
+                    if item[text_field]:
+                        texts.append(item[text_field])
+            else:
+                # Try to combine instruction/prompt with response if available
+                instruction_field = next((field for field in ['instruction', 'prompt', 'question'] if field in keys), None)
+                response_field = next((field for field in ['response', 'answer', 'completion'] if field in keys), None)
+                
+                if instruction_field and response_field:
+                    for item in dataset:
+                        if item[instruction_field] and item[response_field]:
+                            combined_text = f"{item[instruction_field]}\n\n{item[response_field]}"
+                            texts.append(combined_text)
+        
+        # Filter out empty texts
+        texts = [text for text in texts if text and len(text) > 10]  # Min 10 chars
+        
+        if not texts:
+            self.logger.warning(f"No texts extracted from dataset {dataset_name}")
+            return {"batches": [], "metadata": {"sample_count": 0, "source": dataset_name}}
+        
+        self.logger.info(f"Extracted {len(texts)} texts from dataset {dataset_name}")
+        
+        # Convert to batches if requested
+        if return_batches:
+            if not hasattr(self, 'tokenizer') or self.tokenizer is None:
+                self.logger.warning("No tokenizer available, using simple batching")
+                # Simple batching without tokenization
+                batch_size = getattr(self, 'batch_size', 4)
+                batches = []
+                for i in range(0, len(texts), batch_size):
+                    batch_texts = texts[i:i+batch_size]
+                    # Create dummy tensors
+                    batch_inputs = torch.zeros((len(batch_texts), 10), dtype=torch.long)
+                    batch_targets = torch.zeros((len(batch_texts), 10), dtype=torch.long)
+                    batches.append((batch_inputs, batch_targets))
+                
+                return {
+                    "batches": batches,
+                    "metadata": {
+                        "sample_count": len(texts),
+                        "batch_count": len(batches),
+                        "source": dataset_name
+                    }
+                }
+            else:
+                # Tokenize and create batches with the tokenizer
+                return self._create_batches_from_texts(texts, dataset_name)
+        else:
+            # Return texts directly
+            return {
+                "texts": texts,
+                "metadata": {
+                    "sample_count": len(texts),
+                    "source": dataset_name
+                }
+            }
+
 # Example usage
 if __name__ == "__main__":
     # Initialize the handler

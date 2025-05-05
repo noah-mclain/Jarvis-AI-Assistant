@@ -746,5 +746,44 @@ class GoogleDriveSync:
         gdrive_dir, _ = cls.SYNC_FOLDERS[folder_type]
         return os.path.join(gdrive_dir, relative_path)
 
+def sync_directory_to_gdrive(local_path, gdrive_path):
+    """
+    Sync a local directory to Google Drive
+    
+    Args:
+        local_path (str): Path to the local directory
+        gdrive_path (str): Path to the Google Drive directory
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    logger.info(f"Syncing {local_path} to gdrive:{gdrive_path}")
+    
+    try:
+        # Check if the local directory exists
+        if not os.path.exists(local_path):
+            logger.error(f"Local directory {local_path} does not exist.")
+            return False
+            
+        # Ensure the Google Drive path exists
+        ensure_gdrive_directory(gdrive_path)
+        
+        # Use rclone to sync the directory
+        command = f"rclone copy {local_path} gdrive:{gdrive_path} --progress"
+        logger.info(f"Running command: {command}")
+        
+        result = subprocess.run(command, shell=True, capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            logger.info(f"Successfully synced {local_path} to Google Drive at {gdrive_path}")
+            return True
+        else:
+            logger.error(f"Failed to sync to Google Drive: {result.stderr}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error syncing directory to Google Drive: {str(e)}")
+        return False
+
 # Initialize directories on module import
 GoogleDriveSync.ensure_local_dirs() 

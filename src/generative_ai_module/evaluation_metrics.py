@@ -2114,3 +2114,104 @@ if __name__ == "__main__":
     import sys
     if len(sys.argv) > 1:
         run_evaluation_from_command_line() 
+
+def visualize_training_metrics(training_logs, output_dir="./metrics"):
+    """
+    Visualize training metrics 
+    
+    Args:
+        training_logs (dict): Dictionary containing training logs
+        output_dir (str): Directory to save visualizations
+    """
+    try:
+        import matplotlib.pyplot as plt
+        import pandas as pd
+        import os
+        import numpy as np
+        
+        logger.info(f"Visualizing training metrics to {output_dir}")
+        
+        # Create output directory if it doesn't exist
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Convert training logs to DataFrame
+        if isinstance(training_logs, list):
+            # List of dictionaries format
+            df = pd.DataFrame(training_logs)
+        elif isinstance(training_logs, dict):
+            # Dictionary of lists format
+            df = pd.DataFrame(training_logs)
+        else:
+            logger.error(f"Unsupported training logs format: {type(training_logs)}")
+            return
+            
+        # Check if DataFrame is empty
+        if df.empty:
+            logger.warning("No training metrics to visualize")
+            return
+            
+        # Plot loss
+        if 'loss' in df.columns:
+            plt.figure(figsize=(10, 6))
+            plt.plot(df['loss'], label='Training Loss')
+            if 'eval_loss' in df.columns:
+                plt.plot(df['eval_loss'], label='Validation Loss')
+            plt.title('Loss During Training')
+            plt.xlabel('Step')
+            plt.ylabel('Loss')
+            plt.legend()
+            plt.grid(True)
+            plt.savefig(os.path.join(output_dir, 'loss.png'))
+            plt.close()
+            
+        # Plot learning rate
+        if 'learning_rate' in df.columns:
+            plt.figure(figsize=(10, 6))
+            plt.plot(df['learning_rate'])
+            plt.title('Learning Rate During Training')
+            plt.xlabel('Step')
+            plt.ylabel('Learning Rate')
+            plt.grid(True)
+            plt.savefig(os.path.join(output_dir, 'learning_rate.png'))
+            plt.close()
+            
+        # Plot other metrics
+        metrics_to_plot = [col for col in df.columns if col not in ['loss', 'eval_loss', 'learning_rate', 'epoch', 'step']]
+        for metric in metrics_to_plot:
+            if df[metric].dtype == np.float64 or df[metric].dtype == np.int64:
+                plt.figure(figsize=(10, 6))
+                plt.plot(df[metric])
+                plt.title(f'{metric.capitalize()} During Training')
+                plt.xlabel('Step')
+                plt.ylabel(metric.capitalize())
+                plt.grid(True)
+                plt.savefig(os.path.join(output_dir, f'{metric}.png'))
+                plt.close()
+                
+        # Combined plot
+        plt.figure(figsize=(12, 8))
+        plt.subplot(2, 1, 1)
+        if 'loss' in df.columns:
+            plt.plot(df['loss'], label='Training Loss')
+        if 'eval_loss' in df.columns:
+            plt.plot(df['eval_loss'], label='Validation Loss')
+        plt.title('Training Metrics')
+        plt.ylabel('Loss')
+        plt.legend()
+        plt.grid(True)
+        
+        plt.subplot(2, 1, 2)
+        if 'learning_rate' in df.columns:
+            plt.plot(df['learning_rate'], color='green')
+            plt.ylabel('Learning Rate')
+        plt.xlabel('Step')
+        plt.grid(True)
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(output_dir, 'training_summary.png'))
+        plt.close()
+        
+        logger.info(f"Training visualizations saved to {output_dir}")
+        
+    except Exception as e:
+        logger.error(f"Error visualizing training metrics: {str(e)}")
