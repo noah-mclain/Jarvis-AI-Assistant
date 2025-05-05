@@ -323,6 +323,16 @@ class JarvisAI:
             self.device = device
         else:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            
+        # Configure PyTorch to use the correct device
+        torch.device(self.device)
+        
+        # Set the default generator for PyTorch operations
+        if self.device == "cuda":
+            # Force CUDA to initialize to avoid potential issues later
+            _ = torch.tensor([1.0], device="cuda")
+            # Set global generator
+            torch.default_generator = torch.Generator(device="cuda").manual_seed(42)
         
         # Set up precision based on device capabilities and hardware
         self.use_bf16 = torch.cuda.is_bf16_supported() if torch.cuda.is_available() else False
@@ -828,6 +838,26 @@ class JarvisAI:
         Returns:
             Dictionary of training metrics per dataset
         """
+        # Set GPU consistency settings to avoid random generator issues
+        if self.device == 'cuda':
+            # Set consistency environment variables for PyTorch
+            os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'
+            os.environ['PYTHONHASHSEED'] = '42'
+            
+            # Set deterministic operations
+            torch.use_deterministic_algorithms(True, warn_only=True)
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
+            
+            # Set all seeds
+            random.seed(42)
+            np.random.seed(42)
+            torch.manual_seed(42)
+            torch.cuda.manual_seed(42)
+            torch.cuda.manual_seed_all(42)
+            
+            logger.info("Set deterministic mode for CUDA operations to ensure consistent results")
+        
         # Use all datasets if none specified
         if datasets is None:
             datasets = self.AVAILABLE_DATASETS
@@ -877,7 +907,16 @@ class JarvisAI:
                 hf_output_dir = os.path.join(str(self.models_dir), "huggingface_model")
                 os.makedirs(hf_output_dir, exist_ok=True)
                 
-                # Use train_text_model function from train_models.py
+                # Use train_text_model function from train_models.py with fixed seeds
+                # First ensure all random seeds are set for reproducibility
+                if self.device == 'cuda':
+                    torch.cuda.manual_seed(42)
+                    torch.cuda.manual_seed_all(42)
+                random.seed(42)
+                np.random.seed(42)
+                torch.manual_seed(42)
+                os.environ['PYTHONHASHSEED'] = '42'
+                
                 model, tokenizer, training_args = train_text_model(
                     dataset=hf_dataset_str,
                     model_name_or_path="gpt2",  # Use a default model
@@ -907,7 +946,9 @@ class JarvisAI:
                     use_mps=False,
                     use_flash_attn=False,
                     use_unsloth=self.use_unsloth,
-                    cache_dir=None
+                    cache_dir=None,
+                    seed=42,  # Fixed seed for reproducibility
+                    data_seed=42  # Fixed seed for data operations
                 )
                 
                 # Store metrics for HuggingFace datasets
@@ -993,7 +1034,12 @@ class JarvisAI:
                 bf16=self.use_bf16,  # Use BF16 on A100
                 fp16=not self.use_bf16,  # Use FP16 when not using BF16
                 optim="adamw_torch_fused",  # Use fused optimizer on NVIDIA GPUs
-                gradient_accumulation_steps=gradient_accumulation_steps  # More steps for RTX GPUs
+                gradient_accumulation_steps=gradient_accumulation_steps,  # More steps for RTX GPUs
+                seed=42,  # Set fixed seed for reproducibility
+                data_seed=42,  # Set fixed seed for data shuffling
+                dataloader_drop_last=False,  # Keep all samples even if last batch is smaller
+                dataloader_num_workers=4,  # Optimize number of workers for RTX5000
+                torch_compile=False  # Disable torch compile as it can cause issues with CUDA generators
             )
             
             # Set up early stopping
@@ -1001,14 +1047,24 @@ class JarvisAI:
                 early_stopping_patience=early_stopping
             )
             
-            # Train model
+            # Force PyTorch to use the right seed for both CPU and CUDA operations
+            # This is needed to avoid generator device mismatch errors
+            if self.device == 'cuda':
+                torch.manual_seed(42)
+                torch.cuda.manual_seed(42)
+                torch.cuda.manual_seed_all(42)
+            else:
+                torch.manual_seed(42)
+            
+            # Train model with device-appropriate settings
             trainer = Trainer(
                 model=model,
                 args=training_args,
                 train_dataset=train_dataset,
                 eval_dataset=val_dataset,
                 tokenizer=tokenizer,
-                callbacks=[early_stopping_callback]
+                callbacks=[early_stopping_callback],
+                data_collator=default_data_collator  # Use default collator to avoid custom samplers
             )
             
             # Start training
