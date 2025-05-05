@@ -1,8 +1,14 @@
-from PyQt5.QtCore import QPropertyAnimation, QEasingCurve, QSequentialAnimationGroup, QParallelAnimationGroup, QPoint, QSize
+from PySide6.QtCore import (
+    QPropertyAnimation, QEasingCurve, QSequentialAnimationGroup,
+    QParallelAnimationGroup, QPoint, QSize, QByteArray
+)
 
 def fade_in(widget, duration=300, ease=QEasingCurve.OutCubic):
     """Fade in animation with customizable easing curve."""
-    animation = QPropertyAnimation(widget, b"windowOpacity")
+    widget.setGraphicsEffect(None)
+    widget.setWindowOpacity(0.0)
+    
+    animation = QPropertyAnimation(widget, QByteArray(b"windowOpacity"))
     animation.setDuration(duration)
     animation.setStartValue(0)
     animation.setEndValue(1)
@@ -11,41 +17,30 @@ def fade_in(widget, duration=300, ease=QEasingCurve.OutCubic):
 
 def fade_out(widget, duration=300, ease=QEasingCurve.InCubic):
     """Fade out animation with customizable easing curve."""
-    animation = QPropertyAnimation(widget, b"windowOpacity")
+    animation = QPropertyAnimation(widget, QByteArray(b"windowOpacity"))
     animation.setDuration(duration)
     animation.setStartValue(1)
     animation.setEndValue(0)
     animation.setEasingCurve(ease)
     return animation
 
-def slide_in(widget, direction='right', distance=100, duration=400, ease=QEasingCurve.OutBack):
-    """
-    Slide in animation with customizable direction, distance, and easing curve.
-    Directions: 'right', 'left', 'up', 'down'
-    """
-    start_pos = widget.pos()
+def slide_in(widget, duration=400, ease=QEasingCurve.OutQuint):
+    """Slide in animation for SidebarWidget."""
+    start_height = 0
+    end_height = widget.sizeHint().height()
     
-    if direction == 'right':
-        widget.move(start_pos.x() - distance, start_pos.y())
-    elif direction == 'left':
-        widget.move(start_pos.x() + distance, start_pos.y())
-    elif direction == 'down':
-        widget.move(start_pos.x(), start_pos.y() - distance)
-    elif direction == 'up':
-        widget.move(start_pos.x(), start_pos.y() + distance)
-        
-    animation = QPropertyAnimation(widget, b"pos")
+    widget.setMinimumHeight(start_height)
+    widget.setMaximumHeight(start_height)
+    
+    animation = QPropertyAnimation(widget, QByteArray(b"maximumHeight"))
     animation.setDuration(duration)
-    animation.setStartValue(widget.pos())
-    animation.setEndValue(start_pos)
+    animation.setStartValue(start_height)
+    animation.setEndValue(end_height)
     animation.setEasingCurve(ease)
+    
     return animation
 
-def slide_out(widget, direction='right', distance=100, duration=400, ease=QEasingCurve.InBack):
-    """
-    Slide out animation with customizable direction, distance, and easing curve.
-    Directions: 'right', 'left', 'up', 'down'
-    """
+def slide_out(widget, direction='right', distance=100, duration=400, ease=QEasingCurve.InQuint):
     start_pos = widget.pos()
     end_pos = QPoint(start_pos)
     
@@ -58,7 +53,7 @@ def slide_out(widget, direction='right', distance=100, duration=400, ease=QEasin
     elif direction == 'up':
         end_pos.setY(start_pos.y() - distance)
         
-    animation = QPropertyAnimation(widget, b"pos")
+    animation = QPropertyAnimation(widget, QByteArray(b"pos"))
     animation.setDuration(duration)
     animation.setStartValue(start_pos)
     animation.setEndValue(end_pos)
@@ -66,11 +61,10 @@ def slide_out(widget, direction='right', distance=100, duration=400, ease=QEasin
     return animation
 
 def scale(widget, start_scale=1.0, end_scale=1.1, duration=200, ease=QEasingCurve.OutQuad):
-    """Scale animation for hovering effects."""
     geo = widget.geometry()
     center = geo.center()
     
-    animation = QPropertyAnimation(widget, b"geometry")
+    animation = QPropertyAnimation(widget, QByteArray(b"geometry"))
     animation.setDuration(duration)
     animation.setStartValue(geo)
     
@@ -86,11 +80,10 @@ def scale(widget, start_scale=1.0, end_scale=1.1, duration=200, ease=QEasingCurv
     return animation
 
 def pulse(widget, scale_factor=1.05, duration=500):
-    """Creates a pulsing animation that scales up and down."""
     geo = widget.geometry()
     center = geo.center()
     
-    scale_up = QPropertyAnimation(widget, b"geometry")
+    scale_up = QPropertyAnimation(widget, QByteArray(b"geometry"))
     scale_up.setDuration(duration // 2)
     scale_up.setStartValue(geo)
     
@@ -104,7 +97,7 @@ def pulse(widget, scale_factor=1.05, duration=500):
     scale_up.setEndValue(new_geo)
     scale_up.setEasingCurve(QEasingCurve.OutQuad)
     
-    scale_down = QPropertyAnimation(widget, b"geometry")
+    scale_down = QPropertyAnimation(widget, QByteArray(b"geometry"))
     scale_down.setDuration(duration // 2)
     scale_down.setStartValue(new_geo)
     scale_down.setEndValue(geo)
@@ -117,8 +110,72 @@ def pulse(widget, scale_factor=1.05, duration=500):
     return animation_group
 
 def combo_animation(animations):
-    """Combine multiple animations to run in parallel."""
     group = QParallelAnimationGroup()
     for animation in animations:
         group.addAnimation(animation)
     return group
+
+def bounce_in(widget, direction='down', distance=20, duration=500):
+    start_pos = widget.pos()
+    temp_pos = QPoint(start_pos)
+    
+    if direction == 'down':
+        widget.move(start_pos.x(), start_pos.y() - distance)
+        overshoot_pos = QPoint(start_pos.x(), start_pos.y() + distance * 0.2)
+    elif direction == 'up':
+        widget.move(start_pos.x(), start_pos.y() + distance)
+        overshoot_pos = QPoint(start_pos.x(), start_pos.y() - distance * 0.2)
+    elif direction == 'right':
+        widget.move(start_pos.x() - distance, start_pos.y())
+        overshoot_pos = QPoint(start_pos.x() + distance * 0.2, start_pos.y())
+    elif direction == 'left':
+        widget.move(start_pos.x() + distance, start_pos.y())
+        overshoot_pos = QPoint(start_pos.x() - distance * 0.2, start_pos.y())
+    
+    anim1 = QPropertyAnimation(widget, QByteArray(b"pos"))
+    anim1.setDuration(int(duration * 0.6))
+    anim1.setStartValue(widget.pos())
+    anim1.setEndValue(overshoot_pos)
+    anim1.setEasingCurve(QEasingCurve.OutQuad)
+    
+    anim2 = QPropertyAnimation(widget, QByteArray(b"pos"))
+    anim2.setDuration(int(duration * 0.4))
+    anim2.setStartValue(overshoot_pos)
+    anim2.setEndValue(start_pos)
+    anim2.setEasingCurve(QEasingCurve.InOutQuad)
+    
+    animation_group = QSequentialAnimationGroup()
+    animation_group.addAnimation(anim1)
+    animation_group.addAnimation(anim2)
+    
+    return animation_group
+
+def ripple_effect(widget, duration=350, scale_factor=1.2):
+    geo = widget.geometry()
+    center = geo.center()
+    
+    scale_anim = QPropertyAnimation(widget, QByteArray(b"geometry"))
+    scale_anim.setDuration(duration)
+    scale_anim.setStartValue(geo)
+    
+    new_width = int(geo.width() * scale_factor)
+    new_height = int(geo.height() * scale_factor)
+    new_geo = geo
+    new_geo.setWidth(new_width)
+    new_geo.setHeight(new_height)
+    new_geo.moveCenter(center)
+    
+    scale_anim.setEndValue(new_geo)
+    scale_anim.setEasingCurve(QEasingCurve.OutQuad)
+    
+    fade_anim = QPropertyAnimation(widget, QByteArray(b"windowOpacity"))
+    fade_anim.setDuration(duration)
+    fade_anim.setStartValue(1.0)
+    fade_anim.setEndValue(0.0)
+    fade_anim.setEasingCurve(QEasingCurve.InQuad)
+    
+    anim_group = QParallelAnimationGroup()
+    anim_group.addAnimation(scale_anim)
+    anim_group.addAnimation(fade_anim)
+    
+    return anim_group

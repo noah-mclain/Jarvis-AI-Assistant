@@ -1,54 +1,112 @@
-from PyQt5.QtWidgets import QWidget, QLabel, QHBoxLayout, QVBoxLayout, QPushButton
-from PyQt5.QtCore import Qt, QSize, QTimer, QPropertyAnimation, QEasingCurve, QPoint
-from PyQt5.QtGui import QPainter, QColor, QLinearGradient, QFont, QIcon
+from PySide6.QtWidgets import (QWidget, QLabel, QHBoxLayout, QVBoxLayout, QPushButton, 
+                        QFrame, QSizePolicy, QSpacerItem, QMenu)
+from PySide6.QtCore import Qt, QSize, QTimer, QPropertyAnimation, QEasingCurve, QPoint, QParallelAnimationGroup
+from PySide6.QtGui import QPainter, QColor, QLinearGradient, QFont, QIcon, QPixmap, QAction
 from styles.colors import Colors
 from styles.animations import fade_in, slide_in, scale
+import time
 
 class ChatMessage(QWidget):
     def __init__(self, text, is_user=True, parent=None):
         super().__init__(parent)
         self.is_user = is_user
         self.text = text
+        self.timestamp = time.strftime("%I:%M %p")
         self.setup_ui(text)
         self.setGraphicsEffect(None)
-        self.animation = fade_in(self)
-        self.animation.start()
+        
+        # Create combined animation for a more fluid appearance
+        self.animation_group = QParallelAnimationGroup(self)
+        
+        # Fade in animation
+        fade_animation = fade_in(self, duration=350)
+        
+        # Subtle slide animation
+        slide_animation = slide_in(self, 
+                                  direction='up' if not is_user else 'right', 
+                                  distance=8, 
+                                  duration=350, 
+                                  ease=QEasingCurve.OutQuint)
+        
+        # Combine animations
+        self.animation_group.addAnimation(fade_animation)
+        self.animation_group.addAnimation(slide_animation)
+        self.animation_group.start()
 
     def setup_ui(self, text):
         self.setMinimumWidth(200)
-        self.setMaximumWidth(800)  # Wider to fit more content
-        self.setContentsMargins(0, 5, 0, 5)
+        self.setMaximumWidth(950)  # Wider to fit more content
+        self.setContentsMargins(0, 4, 0, 4)
         
         main_layout = QHBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        main_layout.setContentsMargins(20, 4, 20, 4)
+        main_layout.setSpacing(14)
         
-        # Create container for message with correct alignment
-        self.container = QWidget()
-        container_layout = QVBoxLayout(self.container)
-        container_layout.setContentsMargins(0, 0, 0, 0)
-        container_layout.setSpacing(5)
+        # Avatar for user or AI - more compact and rounded
+        self.avatar_label = QLabel()
+        self.avatar_label.setFixedSize(36, 36)
+        self.avatar_label.setScaledContents(True)
+        self.avatar_label.setAlignment(Qt.AlignTop)
+        self.avatar_label.setObjectName("avatar_label")
         
-        # Message bubble
+        # Set avatar images
+        if self.is_user:
+            self.avatar_pixmap = QPixmap("styles/svg/user_avatar.svg")
+        else:
+            self.avatar_pixmap = QPixmap("styles/svg/ai_avatar.svg")
+            
+        self.avatar_label.setPixmap(self.avatar_pixmap)
+        
+        # Create message container with improved styling
+        self.message_container = QFrame()
+        self.message_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.message_container.setObjectName("message_container")
+        message_layout = QVBoxLayout(self.message_container)
+        message_layout.setContentsMargins(0, 0, 0, 0)
+        message_layout.setSpacing(4)
+        
+        # Sender name - more subtle with proper spacing
+        name_color = Colors.TEXT if self.is_user else Colors.PRIMARY
+        self.sender_label = QLabel("You" if self.is_user else "Jarvis AI")
+        self.sender_label.setFont(QFont("SF Pro Display, Helvetica Neue, Segoe UI", 11, QFont.DemiBold))
+        self.sender_label.setStyleSheet(f"color: {name_color}; margin-bottom: 1px; opacity: 0.9;")
+        
+        # Message bubble with improved styling and word wrapping
         self.bubble = QLabel(text)
         self.bubble.setWordWrap(True)
         self.bubble.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.bubble.setCursor(Qt.IBeamCursor)
-        self.bubble.setFont(QFont("SF Pro Display, Helvetica Neue, Segoe UI", 12))
+        self.bubble.setFont(QFont("SF Pro Display, Helvetica Neue, Segoe UI", 14))
+        self.bubble.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        self.bubble.setObjectName("message_bubble")
+        self.bubble.setTextFormat(Qt.AutoText)
+        self.bubble.setOpenExternalLinks(True)  # Allow links to be opened
+        
+        # Time label - more subtle and positioned bottom right
+        self.time_label = QLabel(self.timestamp)
+        self.time_label.setFont(QFont("SF Pro Display, Helvetica Neue, Segoe UI", 9))
+        self.time_label.setStyleSheet(f"color: {Colors.TEXT}; opacity: 0.4; margin-top: 2px;")
         
         # Add to container
-        container_layout.addWidget(self.bubble)
+        message_layout.addWidget(self.sender_label)
+        message_layout.addWidget(self.bubble)
+        message_layout.addWidget(self.time_label)
         
-        # Add timestamp or other features below the bubble
-        self.time_label = QLabel("Just now")
-        self.time_label.setFont(QFont("SF Pro Display, Helvetica Neue, Segoe UI", 9))
-        self.time_label.setAlignment(Qt.AlignRight if self.is_user else Qt.AlignLeft)
-        container_layout.addWidget(self.time_label)
+        # Set correct avatar/message ordering with better spacing
+        content_spacing = 80 # Width of the space to create asymmetrical layout
         
-        # Set alignment based on user vs AI
-        main_layout.addStretch(1 if self.is_user else 0)
-        main_layout.addWidget(self.container)
-        main_layout.addStretch(0 if self.is_user else 1)
+        if not self.is_user:
+            # AI messages left-aligned
+            main_layout.addWidget(self.avatar_label, 0, Qt.AlignTop)
+            main_layout.addWidget(self.message_container, 1)
+            main_layout.addSpacerItem(QSpacerItem(content_spacing, 0, QSizePolicy.Fixed, QSizePolicy.Minimum))
+            self.time_label.setAlignment(Qt.AlignLeft)
+        else:
+            # User messages right-aligned
+            main_layout.addSpacerItem(QSpacerItem(content_spacing, 0, QSizePolicy.Fixed, QSizePolicy.Minimum))
+            main_layout.addWidget(self.message_container, 1) 
+            main_layout.addWidget(self.avatar_label, 0, Qt.AlignTop)
+            self.time_label.setAlignment(Qt.AlignRight)
         
         # Add hover effect
         self.setMouseTracking(True)
@@ -58,47 +116,60 @@ class ChatMessage(QWidget):
 
     def update_style(self):
         """Update styling based on current theme colors."""
-        # Determine bubble colors based on user/AI and current theme
-        bubble_color = Colors.USER_BUBBLE if self.is_user else Colors.AI_BUBBLE
-        gradient_color = Colors.SECONDARY if self.is_user else Colors.PRIMARY
-        text_padding = 15
-        
-        # Update bubble style
-        self.bubble.setStyleSheet(f"""
-            QLabel {{
-                color: {Colors.TEXT};
-                padding: {text_padding}px;
+        # Rounded avatar style
+        self.avatar_label.setStyleSheet(f"""
+            QLabel#avatar_label {{
+                background-color: {Colors.BACKGROUND};
                 border-radius: 18px;
-                background: qlineargradient(
-                    x1:0, y1:0, x2:1, y2:0,
-                    stop:0 {bubble_color},
-                    stop:1 {gradient_color}
-                );
+                border: none;
+                margin-top: 4px;
             }}
         """)
         
-        # Update timestamp label
-        self.time_label.setStyleSheet(f"color: {Colors.TEXT}; opacity: 0.6;")
+        # Message container style
+        self.message_container.setStyleSheet(f"""
+            QFrame#message_container {{
+                background-color: transparent;
+                padding: 0px;
+            }}
+        """)
+        
+        # Bubble styles with modern appearance
+        if self.is_user:
+            bubble_bg = Colors.USER_BUBBLE
+            text_color = Colors.TEXT
+        else:
+            bubble_bg = Colors.AI_BUBBLE
+            text_color = Colors.TEXT
+            
+        self.bubble.setStyleSheet(f"""
+            QLabel#message_bubble {{
+                color: {text_color};
+                padding: 16px 18px;
+                border-radius: 16px;
+                background-color: {bubble_bg};
+                margin: 4px 0px;
+                line-height: 1.5;
+            }}
+        """)
         
         # Update container sizing for dynamic content
         self.adjustSize()
 
     def enterEvent(self, event):
         # Subtle scale animation on hover
-        self.scale_animation = scale(self.bubble, end_scale=1.02, duration=150)
+        self.scale_animation = scale(self.bubble, end_scale=1.01, duration=100)
         self.scale_animation.start()
         super().enterEvent(event)
 
     def leaveEvent(self, event):
         # Reset scale on mouse leave
-        self.scale_animation = scale(self.bubble, end_scale=1.0, duration=150)
+        self.scale_animation = scale(self.bubble, end_scale=1.0, duration=100)
         self.scale_animation.start()
         super().leaveEvent(event)
         
     def contextMenuEvent(self, event):
         # Create a custom context menu for interaction
-        from PyQt5.QtWidgets import QMenu, QAction
-        
         menu = QMenu(self)
         menu.setStyleSheet(f"""
             QMenu {{
@@ -106,9 +177,12 @@ class ChatMessage(QWidget):
                 color: {Colors.TEXT};
                 border: 1px solid {Colors.DIVIDER};
                 padding: 5px;
+                border-radius: 10px;
             }}
             QMenu::item {{
-                padding: 5px 20px;
+                padding: 8px 24px;
+                border-radius: 6px;
+                margin: 2px 6px;
             }}
             QMenu::item:selected {{
                 background-color: {Colors.SIDEBAR_ITEM_HOVER};
@@ -116,7 +190,7 @@ class ChatMessage(QWidget):
         """)
         
         # Copy text action
-        copy_action = QAction("Copy", self)
+        copy_action = QAction("Copy message", self)
         copy_action.triggered.connect(self.copy_text)
         menu.addAction(copy_action)
         
@@ -128,16 +202,17 @@ class ChatMessage(QWidget):
             menu.addAction(regenerate_action)
         else:
             # For user messages
-            edit_action = QAction("Edit", self)
+            edit_action = QAction("Edit message", self)
             edit_action.triggered.connect(self.edit_message)
             menu.addAction(edit_action)
             
         # Show context menu
-        menu.exec_(event.globalPos())
+        position = event.globalPos()
+        menu.exec_(position)
         
     def copy_text(self):
         """Copy message text to clipboard."""
-        from PyQt5.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
         QApplication.clipboard().setText(self.text)
         
     def regenerate_response(self):
@@ -164,4 +239,5 @@ class ChatMessage(QWidget):
         """Handle widget resize event."""
         super().resizeEvent(event)
         # Adjust bubble width to fit container
-        self.bubble.setMaximumWidth(self.width() - 40)  # Add some padding
+        container_width = self.message_container.width()
+        self.bubble.setMaximumWidth(container_width - 24)  # Better padding for text

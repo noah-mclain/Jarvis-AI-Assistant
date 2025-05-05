@@ -1,14 +1,14 @@
-from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
                             QComboBox, QTabWidget, QWidget, QColorDialog, QFormLayout,
                             QScrollArea, QFrame, QGridLayout)
-from PyQt5.QtCore import Qt, pyqtSignal, QSize
-from PyQt5.QtGui import QIcon, QFont, QColor, QPainter, QBrush
+from PySide6.QtCore import Qt, Signal, QSize
+from PySide6.QtGui import QIcon, QFont, QColor, QPainter, QBrush
 
 from styles.colors import Colors
 from styles.animations import fade_in
 
 class ColorSwatch(QFrame):
-    clicked = pyqtSignal(str)
+    clicked = Signal(str)
     
     def __init__(self, color_name, color_value, parent=None):
         super().__init__(parent)
@@ -41,10 +41,11 @@ class ColorSwatch(QFrame):
         super().mousePressEvent(event)
 
 class SettingsDialog(QDialog):
-    settings_updated = pyqtSignal()
+    theme_changed = Signal(str)
     
-    def __init__(self, parent=None):
+    def __init__(self, current_theme=None, parent=None):
         super().__init__(parent)
+        self.current_theme = current_theme or "dark"
         self.setup_ui()
         
     def setup_ui(self):
@@ -120,10 +121,10 @@ class SettingsDialog(QDialog):
             display_name = " ".join(word.capitalize() for word in theme_name.split("_"))
             self.theme_combo.addItem(display_name, theme_name)
 
-        if current_theme := self.get_current_theme():
-            index = self.theme_combo.findData(current_theme)
-            if index >= 0:
-                self.theme_combo.setCurrentIndex(index)
+        # Set current theme
+        index = self.theme_combo.findData(self.current_theme)
+        if index >= 0:
+            self.theme_combo.setCurrentIndex(index)
 
         theme_form.addRow(self.theme_label, self.theme_combo)
         theme_layout.addLayout(theme_form)
@@ -197,18 +198,6 @@ class SettingsDialog(QDialog):
         self.animation = fade_in(self)
         self.animation.start()
     
-    def get_current_theme(self):
-        """Try to determine the current theme by comparing with presets."""
-        for theme_name, theme_colors in Colors.THEMES.items():
-            matches = sum(bool(hasattr(Colors, color_name)
-                                      and getattr(Colors, color_name) == color_value)
-                      for color_name, color_value in theme_colors.items())
-            # If most colors match, assume it's this theme
-            if matches > len(theme_colors) * 0.8:
-                return theme_name
-
-        return "dark_blue"  # Default theme
-    
     def get_current_colors(self):
         """Get current color values from Colors class."""
         colors = {}
@@ -244,20 +233,23 @@ class SettingsDialog(QDialog):
                 """)
                 
                 # Emit signal
-                self.settings_updated.emit()
+                self.theme_changed.emit(self.current_theme)
     
     def apply_theme(self):
         """Apply the selected theme."""
         theme_name = self.theme_combo.currentData()
         if theme_name and Colors.apply_theme(theme_name):
-            # Update swatches
-            current_colors = self.get_current_colors()
+            self.current_theme = theme_name
+            self.theme_changed.emit(theme_name)
+            
+            # Update color swatches
             for color_name, swatch in self.color_swatches.items():
-                if color_name in current_colors:
-                    swatch.color_value = current_colors[color_name]
+                if hasattr(Colors, color_name):
+                    new_color = getattr(Colors, color_name)
+                    swatch.color_value = new_color
                     swatch.setStyleSheet(f"""
                         ColorSwatch {{
-                            background-color: {current_colors[color_name]};
+                            background-color: {new_color};
                             border: 2px solid #888888;
                             border-radius: 5px;
                         }}
@@ -265,30 +257,25 @@ class SettingsDialog(QDialog):
                             border: 2px solid white;
                         }}
                     """)
-            
-            # Update dialog appearance
-            self.setup_ui()
-            
-            # Emit signal
-            self.settings_updated.emit()
     
     def reset_to_default(self):
         """Reset to default theme."""
-        Colors.apply_theme("dark_blue")
+        Colors.apply_theme("dark")
+        self.current_theme = "dark"
         
-        # Update theme selector
-        index = self.theme_combo.findData("dark_blue")
+        # Update combo box
+        index = self.theme_combo.findData("dark")
         if index >= 0:
             self.theme_combo.setCurrentIndex(index)
-        
-        # Update swatches
-        current_colors = self.get_current_colors()
+            
+        # Update color swatches
         for color_name, swatch in self.color_swatches.items():
-            if color_name in current_colors:
-                swatch.color_value = current_colors[color_name]
+            if hasattr(Colors, color_name):
+                new_color = getattr(Colors, color_name)
+                swatch.color_value = new_color
                 swatch.setStyleSheet(f"""
                     ColorSwatch {{
-                        background-color: {current_colors[color_name]};
+                        background-color: {new_color};
                         border: 2px solid #888888;
                         border-radius: 5px;
                     }}
@@ -296,6 +283,6 @@ class SettingsDialog(QDialog):
                         border: 2px solid white;
                     }}
                 """)
-        
+                
         # Emit signal
-        self.settings_updated.emit() 
+        self.theme_changed.emit("dark") 

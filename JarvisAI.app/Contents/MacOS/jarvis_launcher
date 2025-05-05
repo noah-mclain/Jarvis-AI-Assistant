@@ -1,0 +1,14 @@
+#!/bin/bash
+# Get directory where this script is located
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+CONTENTS="$( dirname "$DIR" )"
+ROOT="$( dirname "$CONTENTS" )"
+
+# Set environment variables
+export PYTHONPATH="$ROOT/../.."
+export QT_PLUGIN_PATH="$CONTENTS/PlugIns"
+export DYLD_FRAMEWORK_PATH="$CONTENTS/Frameworks"
+
+# Launch the app
+cd "$ROOT/../.."
+"/Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/.env/bin/python3" main.py
