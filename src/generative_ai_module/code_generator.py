@@ -302,8 +302,9 @@ class CodeGenerator:
         if self.use_deepseek:
             # Format the prompt for deepseek model
             formatted_prompt = f"### Instruction: Write code for this task:\n{prompt}\n\n### Response:"
-            inputs = self.tokenizer(formatted_prompt, return_tensors="pt")
-            
+            # Ensure return_tensors="pt" is set to get PyTorch tensors
+            inputs = self.tokenizer(formatted_prompt, return_tensors="pt", padding=True, truncation=True)
+                    
             # Make sure the model and inputs are on the same device
             current_device = next(self.model.parameters()).device
             inputs = {k: v.to(current_device) for k, v in inputs.items()}
@@ -550,7 +551,7 @@ class CodeGenerator:
             local_rank=-1,
             use_cpu=self.device.type == "cpu",
             save_safetensors=True,
-            dataloader_num_workers=4,
+            dataloader_num_workers=0,
             group_by_length=True,
             logging_first_step=True,
             logging_nan_inf_filter=True,

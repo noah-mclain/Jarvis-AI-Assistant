@@ -3,6 +3,7 @@
 # This block was added by the fix_jarvis_imports.py script
 import sys
 import os
+import multiprocessing
 
 # Add the project root to sys.path
 _jarvis_project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
@@ -340,7 +341,10 @@ def create_mini_dataset(sequence_length=512):
     return train_dataset, eval_dataset
 
 def main(args=None):
-    """Main entry point for fine-tuning"""
+    """Main entry point for fine-tuning""" 
+    
+    # Set multiprocessing start method to 'spawn' for CUDA compatibility
+    multiprocessing.set_start_method('spawn', force=True)
     # Set up logging to file
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     log_file = f"finetune_deepseek_{timestamp}.log"
