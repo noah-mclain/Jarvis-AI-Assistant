@@ -29,7 +29,7 @@ import time
 import math
 import functools
 
-from generative_ai_module.utils import get_storage_path
+from .utils import get_storage_path
 
 from .prompt_enhancer import analyze_prompt
 from .unsloth_deepseek import evaluate_model
