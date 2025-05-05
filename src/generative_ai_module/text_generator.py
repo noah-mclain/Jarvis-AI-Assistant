@@ -482,160 +482,193 @@ class TextGenerator:
                 
 class CNNTextGenerator(TextGenerator):
     """
-    Enhanced text generator that uses CNN layers combined with transformer architecture
-    for improved text pattern recognition and generation.
+    CNN-enhanced text generation model
     
-    This hybrid approach can capture local patterns more effectively while
-    maintaining the transformers' ability to handle long-range dependencies.
+    This class extends the TextGenerator with convolutional layers to enhance
+    pattern recognition in text generation tasks. It combines the strengths of
+    CNNs for local feature extraction with transformers for sequence modeling.
+    
+    Optimized for RTX 5000 GPUs with memory-efficient training options.
     """
+    
     def __init__(self, 
-                model_name_or_path="distilgpt2",
-                force_gpu=True, 
+                model_name_or_path="distilgpt2", 
                 cnn_layers=2, 
-                cnn_kernel_sizes=[3, 5],
-                cnn_dropout=0.1):
+                cnn_kernel_sizes=None, 
+                cnn_dropout=0.1, 
+                force_gpu=True,
+                quantization_config=None,
+                use_flash_attention_2=False,
+                gradient_checkpointing=False):
         """
-        Initialize the CNN-enhanced Text Generator
+        Initialize the CNN-enhanced text generator
         
         Args:
-            model_name_or_path: Base transformer model to use
-            force_gpu: Whether to force GPU usage
-            cnn_layers: Number of CNN layers to add
-            cnn_kernel_sizes: Kernel sizes for CNN layers
+            model_name_or_path: Model name or path for the base transformer
+            cnn_layers: Number of CNN layers to use
+            cnn_kernel_sizes: List of kernel sizes for CNN layers (default: [3, 5, 7])
             cnn_dropout: Dropout rate for CNN layers
+            force_gpu: Whether to force GPU usage
+            quantization_config: Quantization configuration for 4-bit or 8-bit precision
+            use_flash_attention_2: Whether to use Flash Attention 2 for faster training
+            gradient_checkpointing: Whether to use gradient checkpointing
         """
-        # Call the parent constructor
-        super().__init__(force_gpu=force_gpu)
-        
-        # Store CNN parameters
+        # Store CNN-specific parameters
         self.cnn_layers = cnn_layers
-        self.cnn_kernel_sizes = cnn_kernel_sizes[:cnn_layers]  # Use only as many as needed
+        self.cnn_kernel_sizes = cnn_kernel_sizes or [3, 5, 7]
         self.cnn_dropout = cnn_dropout
+        self.quantization_config = quantization_config
+        self.use_flash_attention_2 = use_flash_attention_2
+        self.gradient_checkpointing = gradient_checkpointing
         
-        # Initialize both components
+        # Call parent initializer
+        super().__init__(model_name_or_path, force_gpu)
+        
+        # Initialize CNN model
         self._initialize_model(model_name_or_path)
-        
-    def _initialize_model(self, model_name_or_path):
+    
+    def _initialize_model(self, model_name_or_path: str, **kwargs):
         """Initialize the hybrid CNN-Transformer model"""
+        import torch
         import torch.nn as nn
         from transformers import AutoModelForCausalLM, AutoTokenizer
         
-        # Get device
-        self.device = self._get_device()
-        
-        # Load base transformer model
-        print(f"Loading base transformer model: {model_name_or_path}")
-        self.base_model = AutoModelForCausalLM.from_pretrained(model_name_or_path)
+        # Load tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
         
+        # Ensure padding token exists
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         
-        # Get embedding dimension from the model
-        if hasattr(self.base_model, 'get_input_embeddings'):
-            embedding_dim = self.base_model.get_input_embeddings().embedding_dim
-        else:
-            embedding_dim = self.base_model.config.hidden_size
-            
-        # Create CNN layers
+        # Load base model with optimization options
+        load_kwargs = {}
+        
+        # Add quantization configuration if provided
+        if self.quantization_config:
+            load_kwargs['quantization_config'] = self.quantization_config
+        
+        # Add Flash Attention 2 if requested and possible
+        if self.use_flash_attention_2:
+            # Check if flash attention is available
+            try:
+                import flash_attn
+                print("Flash Attention 2 detected - enabling for transformer model")
+                load_kwargs['use_flash_attention_2'] = True
+            except ImportError:
+                print("Flash Attention 2 requested but not installed - continuing without it")
+                print("To install: pip install flash-attn --no-build-isolation")
+        
+        # Load the base transformer model
+        self.base_model = AutoModelForCausalLM.from_pretrained(
+            model_name_or_path,
+            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            device_map="auto" if torch.cuda.is_available() else None,
+            **load_kwargs
+        )
+        
+        # Enable gradient checkpointing if requested
+        if self.gradient_checkpointing and hasattr(self.base_model, "gradient_checkpointing_enable"):
+            self.base_model.gradient_checkpointing_enable()
+            print("Gradient checkpointing enabled for transformer model")
+        
+        # Get the model's config
+        config = self.base_model.config
+        
+        # Get hidden size for dimensionality
+        self.hidden_size = config.hidden_size
+        
+        # Create CNN layers for pattern extraction
         self.cnn_layers_list = nn.ModuleList()
         for i in range(self.cnn_layers):
             kernel_size = self.cnn_kernel_sizes[i] if i < len(self.cnn_kernel_sizes) else 3
             padding = kernel_size // 2  # Same padding to maintain sequence length
             
+            # Create convolutional layer with batch normalization and dropout
             cnn_layer = nn.Sequential(
-                nn.Conv1d(embedding_dim if i == 0 else embedding_dim, 
-                         embedding_dim, 
-                         kernel_size=kernel_size, 
-                         padding=padding),
+                nn.Conv1d(
+                    in_channels=self.hidden_size,
+                    out_channels=self.hidden_size,
+                    kernel_size=kernel_size,
+                    padding=padding
+                ),
+                nn.BatchNorm1d(self.hidden_size),
                 nn.ReLU(),
                 nn.Dropout(self.cnn_dropout)
             )
-            self.cnn_layers_list.append(cnn_layer)
             
-        # Create adapter to match dimensions back to transformer input
-        self.adapter = nn.Linear(embedding_dim, embedding_dim)
+            self.cnn_layers_list.append(cnn_layer)
         
-        # Create the complete model by combining components
-        self.model = nn.Module()
+        # Create adapter to transform CNN outputs back to transformer format
+        self.adapter = nn.Linear(self.hidden_size, self.hidden_size)
         
-        # Move to appropriate device
-        self.base_model.to(self.device)
-        self.cnn_layers_list.to(self.device)
-        self.adapter.to(self.device)
-        
-        # Prepare optimizer
-        self.optimizer = torch.optim.AdamW(
-            list(self.cnn_layers_list.parameters()) + 
-            list(self.adapter.parameters()) + 
-            list(self.base_model.parameters()),
-            lr=2e-5
+        # Move model to appropriate device
+        self.device = (
+            torch.device("cuda") if torch.cuda.is_available() and self.force_gpu
+            else torch.device("mps") if torch.backends.mps.is_available() and self.force_gpu
+            else torch.device("cpu")
         )
         
-    def forward(self, input_ids, attention_mask=None):
-        """Forward pass through the hybrid model"""
-        # Get embeddings from transformer model
-        embeddings = self.base_model.get_input_embeddings()(input_ids)
+        # Initialize optimizer (to be set in train method)
+        self.optimizer = None
         
-        # CNN expects [batch, channels, sequence_length]
-        # Embeddings are [batch, sequence_length, embedding_dim]
-        x = embeddings.transpose(1, 2)  # [batch, embedding_dim, sequence_length]
+        # Print model information
+        num_params = sum(p.numel() for p in self.parameters())
+        print(f"Initialized CNN-enhanced text generator with {self.cnn_layers} CNN layers")
+        print(f"Model has ~{num_params / 1_000_000:.2f}M parameters")
         
-        # Pass through CNN layers
+        # Move model to device
+        self.to(self.device)
+        
+    def forward(self, input_ids, attention_mask=None, labels=None, **kwargs):
+        """
+        Forward pass through the hybrid CNN-Transformer model
+        
+        Args:
+            input_ids: Input token IDs
+            attention_mask: Attention mask
+            labels: Target labels for loss computation
+            
+        Returns:
+            Transformer model outputs with logits
+        """
+        # Get embeddings from base model
+        if hasattr(self.base_model, "transformer") and hasattr(self.base_model.transformer, "wte"):
+            # GPT-2 style models
+            embeddings = self.base_model.transformer.wte(input_ids)
+        elif hasattr(self.base_model, "get_input_embeddings"):
+            # Generic approach for most models
+            embedding_layer = self.base_model.get_input_embeddings()
+            embeddings = embedding_layer(input_ids)
+        else:
+            raise ValueError("Could not get embeddings from model")
+        
+        # Apply CNN layers for feature extraction
+        # First, transpose for CNN (batch_size, hidden_size, seq_len)
+        x = embeddings.transpose(1, 2)
+        
+        # Pass through each CNN layer
         for cnn_layer in self.cnn_layers_list:
             x = cnn_layer(x)
-            
-        # Convert back to transformer format
-        x = x.transpose(1, 2)  # [batch, sequence_length, embedding_dim]
         
-        # Apply adapter
-        x = self.adapter(x)
+        # Transpose back to transformer format (batch_size, seq_len, hidden_size)
+        x = x.transpose(1, 2)
         
-        # Create new inputs for transformer by adding residual connection
-        enhanced_embeddings = embeddings + x
+        # Apply adapter to ensure compatibility with transformer
+        enhanced_embeddings = self.adapter(x)
         
-        # Get transformer outputs
-        outputs = self.base_model(inputs_embeds=enhanced_embeddings, attention_mask=attention_mask)
+        # Add residual connection to preserve original embeddings
+        enhanced_embeddings = enhanced_embeddings + embeddings
+        
+        # Pass through the base model but replace the embeddings
+        # This uses the base model's full forward pass but with our enhanced embeddings
+        outputs = self.base_model(inputs_embeds=enhanced_embeddings, 
+                                 attention_mask=attention_mask, 
+                                 labels=labels, 
+                                 **kwargs)
         
         return outputs
         
-    def generate_text(self, prompt, max_length=100, temperature=0.7, top_k=50, top_p=0.9):
-        """Generate text with the hybrid model"""
-        # Tokenize input
-        input_ids = self.tokenizer.encode(prompt, return_tensors="pt").to(self.device)
-        attention_mask = torch.ones_like(input_ids).to(self.device)
-        
-        # Generate output using the hybrid model
-        with torch.no_grad():
-            # First apply CNN enhancement to the embeddings
-            embeddings = self.base_model.get_input_embeddings()(input_ids)
-            x = embeddings.transpose(1, 2)
-            
-            # Pass through CNN layers
-            for cnn_layer in self.cnn_layers_list:
-                x = cnn_layer(x)
-                
-            x = x.transpose(1, 2)
-            x = self.adapter(x)
-            enhanced_embeddings = embeddings + x
-            
-            # Generate with enhanced embeddings
-            outputs = self.base_model.generate(
-                inputs_embeds=enhanced_embeddings,
-                attention_mask=attention_mask,
-                max_length=max_length + input_ids.shape[1],
-                temperature=temperature,
-                top_k=top_k,
-                top_p=top_p,
-                do_sample=True,
-                pad_token_id=self.tokenizer.pad_token_id
-            )
-            
-        # Decode and return the generated text
-        generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-        return generated_text
-        
-    def train(self, data, epochs=3, gradient_accumulation_steps=8):
+    def train(self, data, epochs=3, gradient_accumulation_steps=8, eval_steps=None, save_steps=None, checkpoint_dir=None):
         """
         Train the hybrid CNN-Transformer model with gradient accumulation
         
@@ -643,6 +676,9 @@ class CNNTextGenerator(TextGenerator):
             data: Training data
             epochs: Number of training epochs
             gradient_accumulation_steps: Number of steps to accumulate gradients
+            eval_steps: How often to evaluate (None = no evaluation)
+            save_steps: How often to save checkpoints (None = no intermediate saves)
+            checkpoint_dir: Directory to save checkpoints
             
         Returns:
             List of losses during training
@@ -664,6 +700,9 @@ class CNNTextGenerator(TextGenerator):
             
         # Ensure data is in right format
         batches = data.get('batches', []) if isinstance(data, dict) else data
+        
+        # Track global step for eval_steps
+        global_step = 0
         
         # Start training
         for epoch in range(epochs):
@@ -710,6 +749,7 @@ class CNNTextGenerator(TextGenerator):
                     steps_since_update += 1
                     epoch_loss += loss.item() * gradient_accumulation_steps
                     batch_count += 1
+                    global_step += 1
                     
                     # Update weights if we've accumulated enough gradients
                     if steps_since_update >= gradient_accumulation_steps:
@@ -725,6 +765,54 @@ class CNNTextGenerator(TextGenerator):
                         self.optimizer.step()
                         self.optimizer.zero_grad()
                         steps_since_update = 0
+                        
+                    # Evaluation
+                    if eval_steps and global_step % eval_steps == 0:
+                        # Compute validation loss on a sample input
+                        self.base_model.eval()
+                        for layer in self.cnn_layers_list:
+                            layer.eval()
+                        self.adapter.eval()
+                        
+                        with torch.no_grad():
+                            val_loss = 0.0
+                            val_count = 0
+                            
+                            # Use first 10 batches for validation
+                            for i, (val_input, val_target) in enumerate(batches[:10]):
+                                val_input = val_input.to(self.device)
+                                val_target = val_target.to(self.device)
+                                
+                                val_outputs = self.forward(val_input)
+                                val_logits = val_outputs.logits
+                                
+                                batch_loss = torch.nn.functional.cross_entropy(
+                                    val_logits.view(-1, val_logits.size(-1)),
+                                    val_target.view(-1)
+                                )
+                                
+                                val_loss += batch_loss.item()
+                                val_count += 1
+                                
+                                if i >= 9:  # Only use 10 batches for eval
+                                    break
+                            
+                            avg_val_loss = val_loss / max(1, val_count)
+                            losses.append(avg_val_loss)
+                            print(f"Step {global_step}: Validation loss = {avg_val_loss:.4f}")
+                        
+                        # Back to training mode
+                        self.base_model.train()
+                        for layer in self.cnn_layers_list:
+                            layer.train()
+                        self.adapter.train()
+                        
+                    # Save checkpoint if requested
+                    if checkpoint_dir and save_steps and global_step % save_steps == 0:
+                        checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint-{global_step}")
+                        os.makedirs(checkpoint_path, exist_ok=True)
+                        self.save_model(os.path.join(checkpoint_path, "model.pt"))
+                        print(f"Checkpoint saved at step {global_step}")
                         
                 except RuntimeError as e:
                     if "CUDA out of memory" in str(e):
@@ -786,55 +874,32 @@ class CNNTextGenerator(TextGenerator):
         
         print(f"Model saved to {path}")
         print(f"Tokenizer saved to {tokenizer_path}")
-        
-    def load_model(self, path="models/cnn_text_model"):
-        """Load a saved hybrid model from disk"""
-        import os
-        
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"Model file not found: {path}")
-            
-        # Load state dict
-        state_dict = torch.load(path, map_location=self.device)
-        
-        # Extract configuration
-        cnn_config = state_dict.get('cnn_config', {})
-        self.cnn_layers = cnn_config.get('cnn_layers', 2)
-        self.cnn_kernel_sizes = cnn_config.get('cnn_kernel_sizes', [3, 5])
-        self.cnn_dropout = cnn_config.get('cnn_dropout', 0.1)
-        
-        # Re-initialize the model structure
-        self._initialize_model(self.model_name)
-        
-        # Load weights
-        self.base_model.load_state_dict(state_dict['base_model'])
-        for i, layer_state in enumerate(state_dict['cnn_layers']):
-            if i < len(self.cnn_layers_list):
-                self.cnn_layers_list[i].load_state_dict(layer_state)
-        self.adapter.load_state_dict(state_dict['adapter'])
-        
-        # Load tokenizer
-        tokenizer_path = os.path.join(os.path.dirname(path), "tokenizer")
-        if os.path.exists(tokenizer_path):
-            self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
-            if self.tokenizer.pad_token is None:
-                self.tokenizer.pad_token = self.tokenizer.eos_token
-        
-        print(f"Model loaded from {path}")
-        
-        # Set to evaluation mode
-        self.base_model.eval()
-        for layer in self.cnn_layers_list:
-            layer.eval()
-        self.adapter.eval()
 
-def create_cnn_text_generator(model_name="distilgpt2", force_gpu=True, cnn_layers=2):
-    """Helper function to create a CNN-enhanced text generator"""
+def create_cnn_text_generator(model_name="distilgpt2", force_gpu=True, cnn_layers=2, 
+                             quantization_config=None, use_flash_attention_2=False,
+                             gradient_checkpointing=False):
+    """
+    Helper function to create a CNN-enhanced text generator
+    
+    Args:
+        model_name: Base model name or path
+        force_gpu: Whether to force GPU usage
+        cnn_layers: Number of CNN layers to use
+        quantization_config: Configuration for 4-bit or 8-bit quantization
+        use_flash_attention_2: Whether to use Flash Attention 2
+        gradient_checkpointing: Whether to use gradient checkpointing
+        
+    Returns:
+        Initialized CNNTextGenerator
+    """
     return CNNTextGenerator(
         model_name_or_path=model_name,
         force_gpu=force_gpu,
         cnn_layers=cnn_layers,
         cnn_kernel_sizes=[3, 5, 7][:cnn_layers],
-        cnn_dropout=0.1
+        cnn_dropout=0.1,
+        quantization_config=quantization_config,
+        use_flash_attention_2=use_flash_attention_2,
+        gradient_checkpointing=gradient_checkpointing
     )
                 

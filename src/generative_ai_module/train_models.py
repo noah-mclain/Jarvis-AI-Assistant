@@ -1150,42 +1150,48 @@ def train_text_model(
 def train_cnn_text_model(
     dataset: Union[str, List[str]],
     model_name_or_path: str = "distilgpt2",
-    batch_size: int = 2,
+    batch_size: int = 8,
     epochs: int = 3,
     learning_rate: float = 3e-5,
-    weight_decay: float = 0.01,
-    max_length: int = 512,
+    weight_decay: float = 0.05,
+    max_length: int = 1024,
     output_dir: str = "models/text_gen",
     eval_metrics_dir: str = "metrics",
     dataset_subset: Optional[str] = None,
     max_samples: Optional[int] = None,
-    evaluation_strategy: str = "epoch",
-    save_strategy: str = "epoch",
+    evaluation_strategy: str = "steps",
+    save_strategy: str = "steps",
     logging_steps: int = 100,
-    eval_steps: Optional[int] = None,
+    eval_steps: Optional[int] = 500,
+    save_steps: Optional[int] = 1000,
     visualize_metrics: bool = False,
     cnn_layers: int = 2,
     cnn_kernel_sizes: List[int] = None,
     cnn_dropout: float = 0.1,
-    gradient_accumulation_steps: int = 8,
+    gradient_accumulation_steps: int = 4,
     fp16: bool = False,
     bf16: bool = False,
+    use_4bit: bool = False,
+    use_flash_attention_2: bool = False,
+    gradient_checkpointing: bool = False,
+    optim: str = "adamw_bnb_8bit",
     temperature: float = 1.0,
     resume_from_checkpoint: Union[bool, str] = False,
     sync_to_gdrive: bool = True,
     cache_dir: Optional[str] = None,
+    sequence_packing: bool = False,
 ) -> tuple:
     """
-    Train a CNN-enhanced text generation model
+    Train a CNN-enhanced text generation model optimized for RTX 5000 GPU
     
     Args:
         dataset: Dataset name or list of dataset names
         model_name_or_path: Base transformer model name or path
-        batch_size: Training batch size
+        batch_size: Training batch size (recommended: 8 for text)
         epochs: Number of training epochs
-        learning_rate: Learning rate
-        weight_decay: Weight decay
-        max_length: Maximum sequence length
+        learning_rate: Learning rate (recommended: 3e-5 for text)
+        weight_decay: Weight decay (recommended: 0.05 for creative tasks)
+        max_length: Maximum sequence length (recommended: 1024 for text)
         output_dir: Directory to save the model
         eval_metrics_dir: Directory to save evaluation metrics
         dataset_subset: Optional subset for specific datasets
@@ -1193,80 +1199,55 @@ def train_cnn_text_model(
         evaluation_strategy: Evaluation strategy (epoch, steps)
         save_strategy: Save strategy (epoch, steps)
         logging_steps: Logging steps
-        eval_steps: Evaluation steps (if evaluation_strategy is steps)
+        eval_steps: Evaluation steps (recommended: 500 for text)
+        save_steps: How often to save model checkpoints when using steps strategy
         visualize_metrics: Whether to visualize metrics
         cnn_layers: Number of CNN layers to use
         cnn_kernel_sizes: Kernel sizes for CNN layers
         cnn_dropout: Dropout rate for CNN layers
-        gradient_accumulation_steps: Gradient accumulation steps
+        gradient_accumulation_steps: Gradient accumulation steps (recommended: 4 for text)
         fp16: Whether to use mixed precision (fp16)
         bf16: Whether to use mixed precision (bf16)
+        use_4bit: Whether to use 4-bit quantization for memory efficiency
+        use_flash_attention_2: Whether to use Flash Attention 2 for faster training
+        gradient_checkpointing: Whether to use gradient checkpointing for memory efficiency
+        optim: Optimizer to use (recommended: adamw_bnb_8bit for memory efficiency)
         temperature: Temperature for generation
         resume_from_checkpoint: Resume from checkpoint
         sync_to_gdrive: Whether to sync to Google Drive
         cache_dir: Directory to cache models and datasets
+        sequence_packing: Whether to use sequence packing to maximize batch efficiency
         
     Returns:
         Trained model, tokenizer, training metrics
     """
-    # CRITICAL FIX: Ensure GPU usage for all operations
+    # Import necessary modules
     import os
-    import torch
     import gc
     import math
+    import torch
     from datetime import datetime
-    
-    # Force CUDA to be visible
-    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
-    
-    # Set default kernel sizes if None
-    if cnn_kernel_sizes is None:
-        cnn_kernel_sizes = [3, 5, 7]
-    
-    # Create a seed for reproducibility
-    torch.manual_seed(42)
-    
-    # Check for CUDA
-    if torch.cuda.is_available():
-        # Use CUDA for all operations
-        torch.cuda.manual_seed(42)
-        torch.cuda.manual_seed_all(42)
-        
-        # Force CUDA as default tensor type
-        torch.set_default_tensor_type('torch.cuda.FloatTensor')
-        
-        # Set default device in PyTorch 2.0+
-        if hasattr(torch, 'set_default_device'):
-            torch.set_default_device('cuda')
-        
-        # Create a dummy tensor to ensure CUDA is initialized
-        _ = torch.zeros(1, device="cuda")
-        
-        # Enable cuDNN benchmark for better performance
-        torch.backends.cudnn.benchmark = True
-        
-        print(f"Using CUDA GPU for CNN text generation: {torch.cuda.get_device_name(0)}")
-        
-        # Log memory available
-        memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-        print(f"GPU Memory: {memory_gb:.2f} GB")
-        
-        # Apply RTX5000-specific optimizations if detected
-        gpu_name = torch.cuda.get_device_name(0)
-        if "RTX5000" in gpu_name or "RTX 5000" in gpu_name:
-            print(f"RTX5000 GPU detected - applying CNN-specific optimizations")
-            # Reduce number of CNN layers if on RTX5000 to save memory
-            if cnn_layers > 2 and batch_size > 1:
-                print(f"Reducing CNN layers from {cnn_layers} to 2 for RTX5000")
-                cnn_layers = 2
-    else:
-        print("Warning: No GPU detected. Processing will be slow on CPU.")
-    
-    # Import necessary modules
     from pathlib import Path
     from .text_generator import CNNTextGenerator, create_cnn_text_generator
     from .unified_dataset_handler import UnifiedDatasetHandler
+    from transformers import BitsAndBytesConfig
+    
+    # Check for GPU and print info
+    if torch.cuda.is_available():
+        gpu_name = torch.cuda.get_device_name(0)
+        gpu_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+        print(f"Training on GPU: {gpu_name} with {gpu_memory:.2f} GB VRAM")
+        
+        # Set memory optimization environment variables
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+        if "RTX 5000" in gpu_name:
+            print("RTX 5000 GPU detected - applying recommended optimizations")
+            if not use_4bit:
+                print("Warning: For optimal RTX 5000 performance, 4-bit quantization is recommended")
+            if not use_flash_attention_2:
+                print("Warning: For optimal RTX 5000 performance, Flash Attention 2 is recommended")
+            if not gradient_checkpointing:
+                print("Warning: For optimal RTX 5000 performance, gradient checkpointing is recommended")
     
     # Create output directories
     os.makedirs(output_dir, exist_ok=True)
@@ -1278,37 +1259,67 @@ def train_cnn_text_model(
         cache_dir=cache_dir
     )
     
+    # Determine dataset name for logging
+    if isinstance(dataset, str) and ',' in dataset:
+        dataset_name = "combined_datasets"
+    else:
+        dataset_name = dataset
+    
     # Handle multiple datasets
     if isinstance(dataset, str) and ',' in dataset:
         dataset_names = dataset.split(',')
         print(f"Using multiple datasets for CNN-enhanced model: {dataset_names}")
         combined_dataset = None
+        combined_texts = []
         
         for dataset_name in dataset_names:
             dataset_name = dataset_name.strip()
-            print(f"\n{'='*50}\nTraining CNN text model on {dataset_name} dataset\n{'='*50}")
+            print(f"\n{'='*50}\nProcessing dataset: {dataset_name}\n{'='*50}")
             
             # Load single dataset
-            current_dataset = dataset_handler.load_dataset(
+            current_dataset = dataset_handler.process_huggingface_dataset(
+                dataset_handler.load_dataset(
+                    dataset_name=dataset_name,
+                    split="train",
+                    max_samples=max_samples,
+                    subset=dataset_subset,
+                    cache_dir=cache_dir,
+                    use_cache=True
+                ),
                 dataset_name=dataset_name,
-                split="train",
-                max_samples=max_samples,
-                subset=dataset_subset,
-                cache_dir=cache_dir,
-                use_cache=True
+                return_batches=False  # Get raw texts for sequence packing
             )
             
-            # Combine datasets (simple concatenation for CNN model)
-            if combined_dataset is None:
-                combined_dataset = current_dataset
-            else:
-                if "batches" in combined_dataset and "batches" in current_dataset:
-                    combined_dataset["batches"].extend(current_dataset["batches"])
+            # Extract texts for sequence packing
+            if 'texts' in current_dataset:
+                if sequence_packing:
+                    combined_texts.extend(current_dataset['texts'])
+                else:
+                    # Convert to batches the traditional way
+                    if combined_dataset is None:
+                        combined_dataset = dataset_handler.process_huggingface_dataset(
+                            current_dataset,
+                            dataset_name=dataset_name
+                        )
+                    else:
+                        current_batches = dataset_handler.process_huggingface_dataset(
+                            current_dataset,
+                            dataset_name=dataset_name
+                        )
+                        if 'batches' in current_batches and 'batches' in combined_dataset:
+                            combined_dataset['batches'].extend(current_batches['batches'])
+        
+        # If using sequence packing, create packed dataset
+        if sequence_packing and combined_texts:
+            print(f"Creating packed dataset from {len(combined_texts)} texts")
+            combined_dataset = create_packed_dataset(combined_texts, max_length)
     else:
         # Single dataset
         dataset_name = dataset
-        print(f"\n{'='*50}\nTraining CNN Text Model on {dataset} dataset\n{'='*50}")
-        combined_dataset = dataset_handler.load_dataset(
+        print(f"\n{'='*50}\nLoading dataset: {dataset_name}\n{'='*50}")
+        
+        # Load dataset
+        dataset_dict = dataset_handler.load_dataset(
             dataset_name=dataset,
             split="train",
             max_samples=max_samples,
@@ -1316,30 +1327,86 @@ def train_cnn_text_model(
             cache_dir=cache_dir,
             use_cache=True
         )
+        
+        # Process for sequence packing if enabled
+        if sequence_packing:
+            raw_dataset = dataset_handler.process_huggingface_dataset(
+                dataset_dict,
+                dataset_name=dataset_name,
+                return_batches=False
+            )
+            if 'texts' in raw_dataset:
+                combined_dataset = create_packed_dataset(raw_dataset['texts'], max_length)
+            else:
+                print("Warning: Couldn't extract texts for sequence packing. Using traditional batching.")
+                combined_dataset = dataset_handler.process_huggingface_dataset(
+                    dataset_dict,
+                    dataset_name=dataset_name
+                )
+        else:
+            combined_dataset = dataset_handler.process_huggingface_dataset(
+                dataset_dict,
+                dataset_name=dataset_name
+            )
     
-    # Initialize CNN-enhanced text generator
+    # Configure model loading options based on quantization settings
+    quantization_config = None
+    if use_4bit:
+        print("Using 4-bit quantization for memory efficiency")
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type="nf4"
+        )
+    
+    # Initialize CNN-enhanced text generator with quantization if specified
     print(f"Initializing CNN text generator with {cnn_layers} CNN layers")
     model = create_cnn_text_generator(
         model_name=model_name_or_path,
         force_gpu=True,
-        cnn_layers=cnn_layers
+        cnn_layers=cnn_layers,
+        quantization_config=quantization_config,
+        use_flash_attention_2=use_flash_attention_2,
+        gradient_checkpointing=gradient_checkpointing
     )
     
     # Set model parameters
-    model.cnn_kernel_sizes = cnn_kernel_sizes[:cnn_layers]
+    model.cnn_kernel_sizes = cnn_kernel_sizes[:cnn_layers] if cnn_kernel_sizes else [3, 5, 7][:cnn_layers]
     model.cnn_dropout = cnn_dropout
     
     # Re-initialize the model with updated parameters
     model._initialize_model(model_name_or_path)
     
-    # Set optimizer with appropriate learning rate
-    model.optimizer = torch.optim.AdamW(
-        list(model.cnn_layers_list.parameters()) + 
-        list(model.adapter.parameters()) + 
-        list(model.base_model.parameters()),
-        lr=learning_rate,
-        weight_decay=weight_decay
-    )
+    # Set optimizer with appropriate learning rate using 8-bit AdamW if requested
+    if optim == "adamw_bnb_8bit":
+        try:
+            from bitsandbytes.optim import AdamW8bit
+            model.optimizer = AdamW8bit(
+                list(model.cnn_layers_list.parameters()) + 
+                list(model.adapter.parameters()) + 
+                list(model.base_model.parameters()),
+                lr=learning_rate,
+                weight_decay=weight_decay
+            )
+            print("Using 8-bit AdamW optimizer for memory efficiency")
+        except ImportError:
+            print("Warning: bitsandbytes not available, falling back to regular AdamW")
+            model.optimizer = torch.optim.AdamW(
+                list(model.cnn_layers_list.parameters()) + 
+                list(model.adapter.parameters()) + 
+                list(model.base_model.parameters()),
+                lr=learning_rate,
+                weight_decay=weight_decay
+            )
+    else:
+        model.optimizer = torch.optim.AdamW(
+            list(model.cnn_layers_list.parameters()) + 
+            list(model.adapter.parameters()) + 
+            list(model.base_model.parameters()),
+            lr=learning_rate,
+            weight_decay=weight_decay
+        )
     
     # Print effective batch size information
     print(f"Using batch size {batch_size} with gradient accumulation steps {gradient_accumulation_steps}")
@@ -1350,6 +1417,12 @@ def train_cnn_text_model(
     checkpoint_dir = os.path.join(output_dir, f"cnn_{Path(model_name_or_path).name}_{timestamp}")
     os.makedirs(checkpoint_dir, exist_ok=True)
     
+    # Print memory usage before training
+    if torch.cuda.is_available():
+        memory_allocated = torch.cuda.memory_allocated() / (1024**3)
+        memory_reserved = torch.cuda.memory_reserved() / (1024**3)
+        print(f"GPU memory before training: {memory_allocated:.2f} GB allocated, {memory_reserved:.2f} GB reserved")
+    
     # Train the model
     print(f"Starting CNN-enhanced model training for {epochs} epochs...")
     try:
@@ -1358,18 +1431,28 @@ def train_cnn_text_model(
             torch.cuda.empty_cache()
             gc.collect()  # Force garbage collection
         
+        # Enable gradient checkpointing if requested
+        if gradient_checkpointing and hasattr(model.base_model, "gradient_checkpointing_enable"):
+            model.base_model.gradient_checkpointing_enable()
+            print("Gradient checkpointing enabled")
+        
         # Track metrics
         metrics = {
             'loss': [],
             'val_loss': [],
-            'perplexity': []
+            'perplexity': [],
+            'learning_rate': [],
+            'step': []
         }
         
         # Train the model
         losses = model.train(
             combined_dataset,
             epochs=epochs,
-            gradient_accumulation_steps=gradient_accumulation_steps
+            gradient_accumulation_steps=gradient_accumulation_steps,
+            eval_steps=eval_steps,
+            save_steps=save_steps,
+            checkpoint_dir=checkpoint_dir
         )
         
         # Store training metrics
@@ -1387,8 +1470,8 @@ def train_cnn_text_model(
                 from src.generative_ai_module.google_drive_storage import sync_directory_to_gdrive
                 print(f"Syncing model to Google Drive...")
                 sync_directory_to_gdrive(
-                    local_dir=checkpoint_dir,
-                    remote_dir=f"Jarvis_AI_Assistant/models/cnn_models/{Path(model_name_or_path).name}_{timestamp}"
+                    local_path=checkpoint_dir,
+                    gdrive_path=f"Jarvis_AI_Assistant/models/cnn_models/{Path(model_name_or_path).name}_{timestamp}"
                 )
                 print(f"Model synced to Google Drive successfully")
             except Exception as e:
@@ -1402,9 +1485,8 @@ def train_cnn_text_model(
                 
                 # Visualize metrics
                 visualize_training_metrics(
-                    metrics=metrics,
-                    output_dir=eval_metrics_dir,
-                    title=f"CNN Model Training Metrics for {model_name_or_path} on {dataset}"
+                    training_logs=metrics,
+                    output_dir=eval_metrics_dir
                 )
                 
                 # Sync metrics to Google Drive if requested
@@ -1413,8 +1495,8 @@ def train_cnn_text_model(
                         from src.generative_ai_module.google_drive_storage import sync_directory_to_gdrive
                         print(f"Syncing metrics to Google Drive...")
                         sync_directory_to_gdrive(
-                            local_dir=eval_metrics_dir,
-                            remote_dir=f"Jarvis_AI_Assistant/metrics/cnn_models"
+                            local_path=eval_metrics_dir,
+                            gdrive_path=f"Jarvis_AI_Assistant/metrics/cnn_models"
                         )
                     except Exception as e:
                         print(f"Error syncing metrics to Google Drive: {e}")
@@ -1434,8 +1516,85 @@ def train_cnn_text_model(
         # Return None for the model to indicate failure
         return None, model.tokenizer, None
     
+    # Print final GPU memory usage
+    if torch.cuda.is_available():
+        memory_allocated = torch.cuda.memory_allocated() / (1024**3)
+        memory_reserved = torch.cuda.memory_reserved() / (1024**3)
+        print(f"GPU memory after training: {memory_allocated:.2f} GB allocated, {memory_reserved:.2f} GB reserved")
+    
     # Return the model, tokenizer, and metrics
     return model, model.tokenizer, metrics
+
+def create_packed_dataset(texts, max_length):
+    """
+    Create a packed dataset by combining multiple sequences to maximize efficiency
+    
+    Args:
+        texts: List of text samples
+        max_length: Maximum sequence length
+        
+    Returns:
+        Dictionary with batches for training
+    """
+    from transformers import AutoTokenizer
+    import torch
+    from torch.nn.utils.rnn import pad_sequence
+    
+    # Initialize tokenizer
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    
+    # Tokenize all texts
+    tokenized_texts = [tokenizer.encode(text, return_tensors="pt")[0] for text in texts]
+    
+    # Add EOS token to each sequence for proper separation
+    tokenized_texts = [
+        torch.cat([seq, torch.tensor([tokenizer.eos_token_id])]) 
+        for seq in tokenized_texts
+    ]
+    
+    # Pack sequences to maximize efficiency
+    packed_batches = []
+    current_batch = []
+    current_length = 0
+    
+    for seq in tokenized_texts:
+        seq_length = len(seq)
+        
+        # If adding this sequence would exceed max_length, create a new packed sequence
+        if current_length + seq_length > max_length:
+            if current_batch:  # Only create batch if we have sequences
+                # Combine sequences
+                packed_sequence = torch.cat(current_batch)
+                
+                # Create input_batch (all tokens except the last)
+                input_batch = packed_sequence[:-1].unsqueeze(0)
+                
+                # Create target_batch (all tokens except the first)
+                target_batch = packed_sequence[1:].unsqueeze(0)
+                
+                # Add batch
+                packed_batches.append((input_batch, target_batch))
+            
+            # Start a new batch with the current sequence
+            current_batch = [seq]
+            current_length = seq_length
+        else:
+            # Add to current batch
+            current_batch.append(seq)
+            current_length += seq_length
+    
+    # Handle any remaining sequences
+    if current_batch:
+        packed_sequence = torch.cat(current_batch)
+        input_batch = packed_sequence[:-1].unsqueeze(0)
+        target_batch = packed_sequence[1:].unsqueeze(0)
+        packed_batches.append((input_batch, target_batch))
+    
+    print(f"Created {len(packed_batches)} packed batches from {len(texts)} texts")
+    
+    return {"batches": packed_batches}
 
 
 def train_code_model(args, force_gpu: bool = True):
@@ -2116,7 +2275,7 @@ def main():
     parser.add_argument('--use_8bit', action='store_true',
                       help='Whether to use 8-bit quantization')
     parser.add_argument('--use_4bit', action='store_true',
-                      help='Whether to use 4-bit quantization')
+                      help='Whether to use 4-bit quantization (recommended for RTX 5000)')
     parser.add_argument('--use_qlora', action='store_true',
                       help='Whether to use QLoRA')
     parser.add_argument('--fp16', action='store_true',
@@ -2127,8 +2286,25 @@ def main():
                       help='Path to checkpoint to resume from')
     parser.add_argument('--use_flash_attn', action='store_true',
                       help='Whether to use Flash Attention')
+    parser.add_argument('--use_flash_attention_2', action='store_true',
+                      help='Whether to use Flash Attention 2 (faster and more memory-efficient)')
+    parser.add_argument('--gradient_checkpointing', action='store_true',
+                      help='Whether to use gradient checkpointing for memory efficiency')
+    parser.add_argument('--sequence_packing', action='store_true',
+                      help='Whether to use sequence packing to maximize batch efficiency')
+    parser.add_argument('--optim', type=str, default='adamw_torch',
+                      choices=['adamw_torch', 'adamw_bnb_8bit', 'adamw_hf', 'adamw_apex_fused', 'adafactor'],
+                      help='Optimizer to use for training')
+    parser.add_argument('--save_steps', type=int, default=None,
+                      help='Steps between saving model checkpoints if save_strategy is steps')
     parser.add_argument('--use_unsloth', action='store_true', default=True,
                       help='Whether to use Unsloth optimizations')
+    parser.add_argument('--fim_rate', type=float, default=0.0,
+                      help='Fill-in-middle rate for code models (0.0 to disable, 0.5 recommended for code)')
+    parser.add_argument('--pad_token_id', type=int, default=None,
+                      help='Pad token ID (e.g., 50256 for GPT-2 <|endoftext|> token)')
+    parser.add_argument('--num_workers', type=int, default=4,
+                      help='Number of workers for data preprocessing')
     
     # Miscellaneous
     parser.add_argument('--visualize_metrics', action='store_true',
@@ -2188,6 +2364,7 @@ def main():
                 save_strategy=args.save_strategy,
                 logging_steps=args.logging_steps,
                 eval_steps=args.eval_steps,
+                save_steps=args.save_steps if hasattr(args, 'save_steps') else None,
                 visualize_metrics=args.visualize_metrics,
                 cnn_layers=args.cnn_layers,
                 cnn_kernel_sizes=cnn_kernel_sizes,
@@ -2195,6 +2372,11 @@ def main():
                 gradient_accumulation_steps=args.gradient_accumulation_steps,
                 fp16=args.fp16,
                 bf16=args.bf16,
+                use_4bit=args.use_4bit if hasattr(args, 'use_4bit') else False,
+                use_flash_attention_2=args.use_flash_attention_2 if hasattr(args, 'use_flash_attention_2') else args.use_flash_attn if hasattr(args, 'use_flash_attn') else False,
+                gradient_checkpointing=args.gradient_checkpointing if hasattr(args, 'gradient_checkpointing') else False,
+                optim=args.optim if hasattr(args, 'optim') else 'adamw_torch',
+                sequence_packing=args.sequence_packing if hasattr(args, 'sequence_packing') else False,
                 sync_to_gdrive=True,
                 cache_dir=args.cache_dir
             )
