@@ -64,6 +64,203 @@ def print_execution_time(func):
         return result
     return wrapper
 
+class UnifiedGenerationPipeline:
+    """
+    Unified Generation Pipeline for text and code generation.
+    
+    This class provides a unified interface for training models, preprocessing data,
+    and generating text/code using various approaches.
+    """
+    
+    def __init__(self, model_dir="models", force_gpu=True):
+        """
+        Initialize the pipeline with specified configuration.
+        
+        Args:
+            model_dir: Directory to save/load models
+            force_gpu: Whether to force GPU usage if available
+        """
+        self.model_dir = model_dir
+        self.force_gpu = force_gpu
+        self.device = torch.device('cuda' if torch.cuda.is_available() and force_gpu else 'cpu')
+        self.visualizer = TrainingVisualizer()
+        
+        # Create necessary directories
+        os.makedirs(model_dir, exist_ok=True)
+        
+        # Initialize to None, will be set when models are loaded/trained
+        self.text_model = None
+        self.code_model = None
+        self.tokenizer = None
+        self.vocab_size = None
+    
+    def train(self, dataset_name, train_type="text", epochs=50, 
+              learning_rate=0.002, batch_size=16, sequence_length=2048,
+              gradient_accumulation_steps=4, save_model=True,
+              validation_split=0.2, use_deepseek=False, deepseek_batch_size=1,
+              code_subset=None, all_subsets=False, max_samples=None):
+        """
+        Train a model on the specified dataset.
+        
+        Args:
+            dataset_name: Name of the dataset to train on
+            train_type: Type of model to train ("text" or "code")
+            epochs: Number of training epochs
+            learning_rate: Learning rate for training
+            batch_size: Batch size for training
+            sequence_length: Maximum sequence length
+            gradient_accumulation_steps: Steps for gradient accumulation
+            save_model: Whether to save the model after training
+            validation_split: Percentage of data to use for validation
+            use_deepseek: Whether to use DeepSeek models
+            deepseek_batch_size: Batch size for DeepSeek models
+            code_subset: Subset of code data to use (python, java, etc.)
+            all_subsets: Whether to use all code subsets
+            max_samples: Maximum number of samples to use from dataset
+            
+        Returns:
+            Trained model and training metrics
+        """
+        if train_type.lower() == "text":
+            model, metrics = train_text_generator(
+                dataset_name=dataset_name,
+                epochs=epochs,
+                learning_rate=learning_rate,
+                force_gpu=self.force_gpu,
+                validation_split=validation_split,
+                create_visualizations=True,
+                batch_size=batch_size,
+                sequence_length=sequence_length,
+                gradient_accumulation_steps=gradient_accumulation_steps
+            )
+            self.text_model = model
+            
+            # Save the model if requested
+            if save_model:
+                model_path = os.path.join(self.model_dir, f"text_model_{dataset_name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pt")
+                torch.save(model.state_dict(), model_path)
+                print(f"Model saved to {model_path}")
+            
+            return model, metrics
+            
+        elif train_type.lower() == "code":
+            # Here we would call the code_generator training function
+            # Currently using a placeholder that calls the existing function
+            print(f"Training code generator on {dataset_name}")
+            model, metrics = train_code_generator(
+                dataset_name=dataset_name,
+                epochs=epochs,
+                model_path=None  # We'll save it ourselves if needed
+            )
+            self.code_model = model
+            
+            # Save the model if requested
+            if save_model:
+                model_path = os.path.join(self.model_dir, f"code_model_{dataset_name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pt")
+                torch.save(model.state_dict(), model_path)
+                print(f"Model saved to {model_path}")
+            
+            return model, metrics
+        
+        else:
+            raise ValueError(f"Unknown train_type: {train_type}. Must be 'text' or 'code'.")
+    
+    def load_model(self, model_path, model_type="text"):
+        """
+        Load a model from disk.
+        
+        Args:
+            model_path: Path to the model file
+            model_type: Type of model ("text" or "code")
+            
+        Returns:
+            Loaded model
+        """
+        model, vocab_size = load_model(model_path, model_type)
+        
+        if model_type.lower() == "text":
+            self.text_model = model
+        else:
+            self.code_model = model
+            
+        self.vocab_size = vocab_size
+        return model
+    
+    def generate(self, prompt, model_type="text", max_length=100, 
+                 temperature=0.7, top_p=0.9, use_tokenizer=True):
+        """
+        Generate text or code from a prompt.
+        
+        Args:
+            prompt: Input prompt for generation
+            model_type: Type of model to use ("text" or "code")
+            max_length: Maximum length of generated output
+            temperature: Temperature for sampling
+            top_p: Top-p probability for nucleus sampling
+            use_tokenizer: Whether to use tokenizer-based generation
+            
+        Returns:
+            Generated text
+        """
+        model = self.text_model if model_type.lower() == "text" else self.code_model
+        
+        if model is None:
+            raise ValueError(f"No {model_type} model loaded. Please load or train a model first.")
+        
+        if use_tokenizer and self.tokenizer:
+            return generate_with_tokenizer(
+                model=model,
+                tokenizer=self.tokenizer,
+                prompt=prompt,
+                max_length=max_length,
+                temperature=temperature
+            )
+        else:
+            # Fall back to character-level generation
+            if self.vocab_size is None:
+                raise ValueError("Vocabulary size not set. Please load a model first.")
+                
+            return generate_with_char_model(
+                model=model,
+                prompt=prompt,
+                vocab_size=self.vocab_size,
+                max_length=max_length,
+                temperature=temperature
+            )
+    
+    def interactive_mode(self, model_type="text"):
+        """
+        Start an interactive generation session.
+        
+        Args:
+            model_type: Type of model to use ("text" or "code")
+        """
+        model = self.text_model if model_type.lower() == "text" else self.code_model
+        
+        if model is None:
+            raise ValueError(f"No {model_type} model loaded. Please load or train a model first.")
+            
+        interactive_generation(model, self.tokenizer, model_type, self.force_gpu)
+    
+    def preprocess_dataset(self, dataset_name, output_dir=None):
+        """
+        Preprocess a dataset for training.
+        
+        Args:
+            dataset_name: Name of the dataset to preprocess
+            output_dir: Directory to save preprocessed data
+            
+        Returns:
+            Preprocessed dataset
+        """
+        args = argparse.Namespace()
+        args.dataset = dataset_name
+        args.output_dir = output_dir or os.path.join("datasets", "processed")
+        
+        return preprocess_data(args)
+
+
+# The rest of the file remains unchanged
 class TrainingVisualizer:
     """Class to handle visualization of training metrics"""
     
@@ -1711,13 +1908,21 @@ def main():
     # Track execution time
     start_time = time.time()
     
+    # Create pipeline instance
+    pipeline = UnifiedGenerationPipeline(
+        model_dir=args.model_dir,
+        force_gpu=args.force_gpu
+    )
+    
     # Check for interactive mode first
     if args.interactive:
         # Load the correct model for interactive generation
         model, tokenizer, model_type = load_correct_model(args)
         if model:
+            pipeline.text_model = model  # Set the model in our pipeline
+            pipeline.tokenizer = tokenizer  # Set the tokenizer in our pipeline
             print(f"\nEntering interactive mode with {model_type} model...")
-            interactive_generation(model, tokenizer, model_type, args.force_gpu, args)
+            pipeline.interactive_mode(model_type)
         else:
             print("Failed to load model for interactive mode.")
         return
@@ -1783,13 +1988,8 @@ def main():
                         print(f"Failed to load preprocessed data for {dataset_name}. Run with --preprocess first.")
         
         # Initialize training visualizer for comparing results
-        visualizer = TrainingVisualizer(output_dir="visualizations")
+        visualizer = pipeline.visualizer  # Use the visualizer from our pipeline
         all_metrics = {}
-        
-        # Batch size and sequence length settings
-        batch_size = 16  # Optimized batch size
-        sequence_length = 2048  # Optimized sequence length
-        gradient_accumulation_steps = 4  # Gradient accumulation steps
         
         with print_execution_time("Training"):
             for dataset_name, dataset in datasets.items():
@@ -1798,27 +1998,23 @@ def main():
                 if args.skip and dataset_name in args.skip:
                     print(f"Skipping training on {dataset_name} as requested")
                     continue
-                    
-                # Determine model path
-                model_dir = os.path.join("models", dataset_name)
-                os.makedirs(model_dir, exist_ok=True)
-                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                model_path = os.path.join(model_dir, f"{dataset_name}_model_{timestamp}.pt")
                 
-                # Train model with improved parameters
-                model, metrics = train_text_generator(
+                # Train model using our pipeline
+                model, metrics = pipeline.train(
                     dataset_name=dataset_name,
+                    train_type=args.train_type,
                     epochs=args.epochs,
-                    model_path=model_path,
                     learning_rate=args.learning_rate,
-                    clip_value=args.clip_value,
-                    use_scheduler=args.use_scheduler,
-                    force_gpu=args.force_gpu,
+                    batch_size=args.batch_size,
+                    sequence_length=args.sequence_length,
+                    gradient_accumulation_steps=args.gradient_accumulation_steps or 4,
+                    save_model=args.save_model,
                     validation_split=args.validation_split,
-                    create_visualizations=True,
-                    batch_size=batch_size,
-                    sequence_length=sequence_length,
-                    gradient_accumulation_steps=gradient_accumulation_steps
+                    use_deepseek=args.use_deepseek,
+                    deepseek_batch_size=args.deepseek_batch_size,
+                    code_subset=args.code_subset,
+                    all_subsets=args.all_subsets,
+                    max_samples=args.max_samples
                 )
                 
                 if metrics:
@@ -1837,42 +2033,26 @@ def main():
             print("Error: Model path is required for generation. Use --model_path to specify the model.")
             return
         
-        model_type = "deepseek" if args.use_deepseek else "text"
-        if model_type == "text":
-            # Load the model
-            model, vocab_size = load_model(args.model_path, model_type="text")
-            if model is None:
-                print(f"Failed to load model from {args.model_path}")
-                return
-                
-            # Load the tokenizer info
-            dataset_processor = DatasetProcessor()
-            dataset_name = os.path.basename(args.model_path).split('_model_')[0]
-            data = dataset_processor.load_preprocessed_data(dataset_name)
-            if not data:
-                print(f"Failed to load preprocessed data for {dataset_name}")
-                return
-            
-            # Generate text
-            print(f"\nGenerating text from prompt: {args.prompt}")
-            generated_text = generate_with_char_model(
-                model, 
-                args.prompt, 
-                vocab_size, 
-                max_length=args.max_length,
-                temperature=args.temperature
-            )
-            print(f"\nGenerated text:\n{generated_text}")
-        else:
-            # For DeepSeek model, we use a different approach
-            print("Using DeepSeek model for generation...")
-            generator = CodeGenerator(use_deepseek=True)
-            generated_code = generator.generate_code(
-                args.prompt, 
-                length=args.max_length, 
-                temperature=args.temperature
-            )
-            print(f"\nGenerated code:\n{generated_code}")
+        # Load the model using our pipeline
+        model_type = "deepseek" if args.use_deepseek else ("code" if args.gen_type == "code" else "text")
+        model = pipeline.load_model(args.model_path, model_type=model_type)
+        
+        if model is None:
+            print(f"Failed to load model from {args.model_path}")
+            return
+        
+        # Generate text using our pipeline
+        print(f"\nGenerating {'code' if model_type == 'code' else 'text'} from prompt: {args.prompt}")
+        generated_content = pipeline.generate(
+            prompt=args.prompt,
+            model_type=model_type,
+            max_length=args.max_length,
+            temperature=args.temperature,
+            top_p=args.top_p,
+            use_tokenizer=args.tokenizer is not None
+        )
+        
+        print(f"\nGenerated {'code' if model_type == 'code' else 'text'}:\n{generated_content}")
     
     # Total execution time
     total_time = time.time() - start_time
