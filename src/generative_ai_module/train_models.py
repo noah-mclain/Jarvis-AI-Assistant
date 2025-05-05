@@ -878,7 +878,39 @@ def train_text_model(
     torch.randperm = patched_randperm
     
     # 2. Patch DataLoader to ensure it always uses CPU generators
-    torch.utils.data.dataloader._DataLoader._DataLoader__initialized = False
+    # Modern approach that doesn't rely on internal PyTorch attributes
+    # Instead of patching _DataLoader directly, we'll monkey-patch the DataLoader class
+    # and create a wrapper that ensures all generators are on CPU
+
+    # Replace these lines:
+    # torch.utils.data.dataloader._DataLoader._DataLoader__initialized = False
+    # original_init_args = torch.utils.data.dataloader._DataLoader._data_loader_init_args_and_kwargs
+    # ...
+    # torch.utils.data.dataloader._DataLoader._data_loader_init_args_and_kwargs = patched_init_args
+    # torch.utils.data.dataloader._DataLoader._DataLoader__initialized = True
+
+    # With this more compatible approach:
+    original_dataloader_init = torch.utils.data.DataLoader.__init__
+
+    def patched_dataloader_init(self, *args, **kwargs):
+        # Ensure generator is on CPU if provided
+        if 'generator' in kwargs and kwargs['generator'] is not None:
+            if hasattr(kwargs['generator'], 'device') and kwargs['generator'].device.type != 'cpu':
+                seed = kwargs['generator'].initial_seed()
+                kwargs['generator'] = torch.Generator().manual_seed(seed)
+        
+        # Call original init
+        original_dataloader_init(self, *args, **kwargs)
+        
+        # Also patch sampler if it exists
+        if hasattr(self, 'sampler') and hasattr(self.sampler, 'generator'):
+            if self.sampler.generator is not None and hasattr(self.sampler.generator, 'device') and self.sampler.generator.device.type != 'cpu':
+                seed = self.sampler.generator.initial_seed()
+                self.sampler.generator = torch.Generator().manual_seed(seed)
+
+    # Apply the patch
+    torch.utils.data.DataLoader.__init__ = patched_dataloader_init
+
     def force_cpu_generator_for_sampler(loader):
         """Force the data loader to use CPU generators for samplers"""
         if hasattr(loader, 'generator') and loader.generator is not None:
@@ -892,21 +924,6 @@ def train_text_model(
             if loader.sampler.generator is not None and hasattr(loader.sampler.generator, 'device') and str(loader.sampler.generator.device) != 'cpu':
                 seed = loader.sampler.generator.initial_seed()
                 loader.sampler.generator = torch.Generator().manual_seed(seed)
-    
-    # Patch DataLoader's _data_loader_init_args_and_kwargs to enforce CPU generators
-    original_init_args = torch.utils.data.dataloader._DataLoader._data_loader_init_args_and_kwargs
-    def patched_init_args(self, *args, **kwargs):
-        args_dict, kwargs_dict = original_init_args(self, *args, **kwargs)
-        # Force CPU generator
-        if 'generator' in kwargs_dict and kwargs_dict['generator'] is not None:
-            if hasattr(kwargs_dict['generator'], 'device') and str(kwargs_dict['generator'].device) != 'cpu':
-                seed = kwargs_dict['generator'].initial_seed()
-                kwargs_dict['generator'] = torch.Generator().manual_seed(seed)
-        return args_dict, kwargs_dict
-    
-    # Apply the patch
-    torch.utils.data.dataloader._DataLoader._data_loader_init_args_and_kwargs = patched_init_args
-    torch.utils.data.dataloader._DataLoader._DataLoader__initialized = True
     
     # 3. Override random_split to always use CPU generators
     original_random_split = torch.utils.data.random_split
