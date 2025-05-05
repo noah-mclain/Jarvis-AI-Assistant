@@ -56,10 +56,9 @@ def _force_gpu_usage():
             # Set CUDA device
             torch.cuda.set_device(0)
             
-            # Force CUDA as default tensor type
-            torch.set_default_tensor_type('torch.cuda.FloatTensor')
-            
-            # In PyTorch 2.0+, also set the default device
+            # IMPORTANT: Don't force CUDA as default tensor type
+            # This causes issues with DataLoader workers
+            # Instead, only set the default device in PyTorch 2.0+
             if hasattr(torch, 'set_default_device'):
                 torch.set_default_device('cuda')
             
@@ -86,30 +85,9 @@ def _force_gpu_usage():
             except:
                 pass
             
-            # CRITICAL: Force all tensor operations to use CUDA
-            # By monkey-patching key functions
-            
-            # 1. Override tensor creation to always use CUDA
-            original_tensor = torch.Tensor
-            def cuda_tensor(*args, **kwargs):
-                t = original_tensor(*args, **kwargs)
-                return t.cuda()
-            
-            # Only apply to specific contexts carefully to avoid breaking other functionality
-            torch._paperspace_tensor = cuda_tensor
-            
-            # 2. Make randperm always return CPU tensors for compatibility
-            original_randperm = torch.randperm
-            def safe_randperm(*args, **kwargs):
-                # Force CPU device for the operation then move result as needed
-                kwargs['device'] = 'cpu'
-                result = original_randperm(*args, **kwargs)
-                # Only in contexts where we know the tensor should be on GPU
-                # result = result.cuda()  # commented to avoid conflicts
-                return result
-            
-            # Apply cautiously
-            torch._paperspace_randperm = safe_randperm
+            # DO NOT override tensor creation to always use CUDA
+            # This causes issues with DataLoader workers
+            # Instead, explicitly move tensors to GPU where needed in the code
                 
             print(f"✅ GPU enforcement successful. Using CUDA device: {gpu_name} (CUDA {cuda_version})")
             return True
@@ -432,17 +410,24 @@ class TextDataset(Dataset):
             tokenizer: Tokenizer for encoding text
             max_length: Maximum sequence length
         """
-        self.encodings = tokenizer(
-            texts, 
-            truncation=True, 
-            padding="max_length", 
-            max_length=max_length,
-            return_tensors="pt"
-        )
+        # Force tensors to stay on CPU for DataLoader compatibility
+        with torch.device('cpu'):
+            self.encodings = tokenizer(
+                texts, 
+                truncation=True, 
+                padding="max_length", 
+                max_length=max_length,
+                return_tensors="pt"
+            )
+            
+            # Explicitly ensure tensors are on CPU
+            for key, val in self.encodings.items():
+                if isinstance(val, torch.Tensor) and val.device.type != 'cpu':
+                    self.encodings[key] = val.cpu()
     
     def __getitem__(self, idx):
         """Get encoded item by index."""
-        item = {key: val[idx] for key, val in self.encodings.items()}
+        item = {key: val[idx].clone() for key, val in self.encodings.items()}
         item["labels"] = item["input_ids"].clone()
         return item
     

@@ -378,7 +378,7 @@ class UnifiedDatasetHandler:
             batch = dataset[i:min(i+batch_size, len(dataset))]
             batch_texts = []
             
-            # Different formatting based on dataset structure
+            # Process based on common dataset formats
             if "OpenAssistant" in dataset_name or "oasst" in dataset_name:
                 for item in batch:
                     if 'text' in item and 'role' in item:
@@ -392,9 +392,16 @@ class UnifiedDatasetHandler:
                     if 'instruction' in item and 'response' in item:
                         batch_texts.append(f"User: {item['instruction']}\nAssistant: {item['response']}")
             
-            elif "Persona-Chat" in dataset_name:
+            elif "Persona-Chat" in dataset_name or "Synthetic-Persona-Chat" in dataset_name:
                 for item in batch:
-                    if 'personas' in item and 'utterances' in item:
+                    if 'user 1 personas' in item and 'Best Generated Conversation' in item:
+                        # Handle Synthetic-Persona-Chat format
+                        persona = "\n".join(item['user 1 personas']) if isinstance(item['user 1 personas'], list) else item['user 1 personas']
+                        conversation = item['Best Generated Conversation']
+                        if conversation:
+                            batch_texts.append(f"Persona: {persona}\nConversation: {conversation}")
+                    elif 'personas' in item and 'utterances' in item:
+                        # Handle regular Persona-Chat format
                         persona = "\n".join(item['personas']) if isinstance(item['personas'], list) else item['personas']
                         if isinstance(item['utterances'], list) and len(item['utterances']) > 0:
                             # Handle different structure variations
@@ -421,19 +428,30 @@ class UnifiedDatasetHandler:
                     elif 'content' in item:
                         batch_texts.append(item['content'])
             
-            # Process the batch texts through tokenizer
-            if self.tokenizer:
-                encodings = self.tokenizer(
-                    batch_texts,
-                    truncation=True,
-                    padding='max_length',
-                    max_length=self.max_length,
-                    return_tensors='pt'
-                )
+            # Process the batch texts through tokenizer - but check if we have any texts first
+            if not batch_texts:
+                self.logger.warning(f"No texts extracted from batch in dataset {dataset_name}")
+                continue
                 
-                # Extend the cumulative tensors
-                all_input_ids.extend(encodings['input_ids'].tolist())
-                all_attention_masks.extend(encodings['attention_mask'].tolist())
+            if self.tokenizer:
+                try:
+                    encodings = self.tokenizer(
+                        batch_texts,
+                        truncation=True,
+                        padding='max_length',
+                        max_length=self.max_length,
+                        return_tensors='pt'
+                    )
+                    
+                    # CRITICAL: Keep tensors on CPU - this is essential for DataLoader compatibility
+                    # They'll be moved to GPU during the training loop
+                    
+                    # Extend the cumulative tensors
+                    all_input_ids.extend(encodings['input_ids'].cpu().tolist())
+                    all_attention_masks.extend(encodings['attention_mask'].cpu().tolist())
+                except Exception as e:
+                    self.logger.error(f"Error tokenizing batch in dataset {dataset_name}: {e}")
+                    continue
             
             # Always keep texts for future use or debug
             all_texts.extend(batch_texts)

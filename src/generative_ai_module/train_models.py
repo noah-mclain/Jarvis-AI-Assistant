@@ -788,29 +788,59 @@ def train_text_model(
     # Apply the patch
     torch.utils.data.random_split = safe_random_split
     
-    # Setup training arguments
+    # Set up training arguments with GPU optimizations
+    output_dir = os.path.join(output_dir, model_name_or_path.split("/")[-1] + "_" + dataset_name)
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # CRITICAL FIX: Set CUDA_LAUNCH_BLOCKING=1 to get better error messages
+    os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+    
+    # Patch DataLoader to work better with CUDA
+    # The core issue is that DataLoader workers cannot access CUDA memory
+    
+    # 1. Ensure all tensors in the dataset are on CPU 
+    print("Ensuring dataset tensors are on CPU for DataLoader compatibility")
+    cpu_device = torch.device('cpu')
+    
+    class CpuPrefetchDataLoader(torch.utils.data.DataLoader):
+        """DataLoader that ensures all tensors stay on CPU until moved to GPU in the training loop"""
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            
+        def __iter__(self):
+            iterator = super().__iter__()
+            for batch in iterator:
+                # Ensure all tensors are on CPU
+                yield {k: v.to(cpu_device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
+    
+    # Set up training arguments
     training_args = TrainingArguments(
         output_dir=output_dir,
+        overwrite_output_dir=True,
         num_train_epochs=epochs,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size,
-        gradient_accumulation_steps=gradient_accumulation_steps,
         learning_rate=learning_rate,
         weight_decay=weight_decay,
-        warmup_ratio=0.1,
-        logging_dir=os.path.join(output_dir, "logs"),
-        logging_steps=logging_steps,
-        save_strategy=save_strategy,
-        save_total_limit=3,
+        gradient_accumulation_steps=gradient_accumulation_steps,
         evaluation_strategy=evaluation_strategy,
-        eval_steps=eval_steps if eval_steps else None,
+        eval_steps=eval_steps,
+        save_strategy=save_strategy,
+        save_steps=500,
+        save_total_limit=2,
+        logging_steps=logging_steps,
         load_best_model_at_end=True,
-        report_to="tensorboard",
-        fp16=fp16,
+        ddp_find_unused_parameters=False,
+        optim="adamw_torch" if use_unsloth else "adamw_hf",
+        resume_from_checkpoint=resume_from_checkpoint,
+        report_to=["tensorboard"],
         bf16=bf16,
-        dataloader_num_workers=4,
-        dataloader_pin_memory=True,
-        remove_unused_columns=False,
+        fp16=fp16,
+        # Important: Use our custom dataloader
+        dataloader_num_workers=4,  # Use multiple workers
+        dataloader_pin_memory=True,  # Pin memory for faster transfers
+        torch_compile=False,  # Disable torch compile
+        seed=42  # Set fixed seed for reproducibility
     )
     
     # Load the model
@@ -880,31 +910,59 @@ def train_text_model(
         print(f"Error loading model: {e}")
         raise
     
-    # Setup data collator
+    # Create data collator for language modeling
     data_collator = DataCollatorForLanguageModeling(
         tokenizer=tokenizer,
         mlm=False
     )
     
-    # Setup trainer
-    if trainer_cls:
-        trainer = trainer_cls(
-            model=model,
-            args=training_args,
-            train_dataset=train_dataset,
-            eval_dataset=train_dataset,  # Using same dataset for eval for simplicity
-            tokenizer=tokenizer,
-            data_collator=data_collator,
-        )
-    else:
-        trainer = Trainer(
-            model=model,
-            args=training_args,
-            train_dataset=train_dataset,
-            eval_dataset=train_dataset,  # Using same dataset for eval for simplicity
-            tokenizer=tokenizer,
-            data_collator=data_collator,
-        )
+    # Create custom DataLoader class
+    class GPUSafeTrainer(Trainer):
+        """Custom Trainer class that ensures tensors are properly handled with GPU"""
+        def get_train_dataloader(self):
+            """Create a safe train dataloader that keeps tensors on CPU until needed"""
+            if self.train_dataset is None:
+                raise ValueError("Trainer: training requires a train_dataset.")
+
+            train_sampler = self._get_train_sampler()
+            return CpuPrefetchDataLoader(
+                self.train_dataset,
+                batch_size=self.args.train_batch_size,
+                sampler=train_sampler,
+                collate_fn=self.data_collator,
+                drop_last=self.args.dataloader_drop_last,
+                num_workers=self.args.dataloader_num_workers,
+                pin_memory=self.args.dataloader_pin_memory,
+            )
+            
+        def get_eval_dataloader(self, eval_dataset=None):
+            """Create a safe eval dataloader that keeps tensors on CPU until needed"""
+            eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
+            if eval_dataset is None:
+                raise ValueError("Trainer: evaluation requires an eval_dataset.")
+
+            eval_sampler = self._get_eval_sampler(eval_dataset)
+            return CpuPrefetchDataLoader(
+                eval_dataset,
+                batch_size=self.args.eval_batch_size,
+                sampler=eval_sampler,
+                collate_fn=self.data_collator,
+                drop_last=self.args.dataloader_drop_last,
+                num_workers=self.args.dataloader_num_workers,
+                pin_memory=self.args.dataloader_pin_memory,
+            )
+    
+    # Create trainer
+    trainer_class = GPUSafeTrainer if trainer_cls is None else trainer_cls
+    
+    trainer = trainer_class(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=train_dataset,  # Using same dataset for eval for simplicity
+        tokenizer=tokenizer,
+        data_collator=data_collator,
+    )
     
     # Train the model
     if resume_from_checkpoint:
