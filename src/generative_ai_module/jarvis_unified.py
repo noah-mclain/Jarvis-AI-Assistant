@@ -376,6 +376,23 @@ class JarvisAI:
                 
         return False
 
+    def get_device_generator(self, seed=42):
+        """
+        Get a generator appropriate for the current device.
+        
+        Args:
+            seed: Random seed to use
+            
+        Returns:
+            A torch Generator for the appropriate device
+        """
+        if self.device == 'cuda':
+            # Create a CUDA generator for GPU
+            return torch.Generator(device='cuda').manual_seed(seed)
+        else:
+            # Use CPU generator
+            return torch.Generator().manual_seed(seed)
+
     def load_model(self, dataset_or_path: str, is_path: bool = False) -> Tuple[Any, Any]:
         """
         Load model and tokenizer for a specific dataset or from a path.
@@ -626,21 +643,22 @@ class JarvisAI:
                 
                 # Create validation and test datasets
                 if validation_split > 0 or test_split > 0:
-                    # Split dataset
+                    # Split dataset with fixed seed for reproducibility
                     splits = train_dataset.train_test_split(
                         test_size=validation_split + test_split,
                         shuffle=True,
-                        seed=42  # Use fixed seed
+                        seed=42  # Fixed seed for reproducibility
                     )
                     train_dataset = splits["train"]
                     
                     if validation_split > 0 and test_split > 0:
-                        # Split the test portion into validation and test
+                        # Split the test portion into validation and test with fixed seed
+                        # Calculate ratio of test to validation from the combined test+validation split
                         test_val_ratio = test_split / (validation_split + test_split)
                         val_test_splits = splits["test"].train_test_split(
                             test_size=test_val_ratio,
                             shuffle=True,
-                            seed=43  # Use a different fixed seed
+                            seed=43  # Use a different fixed seed for this split
                         )
                         val_dataset = val_test_splits["train"]
                         test_dataset = val_test_splits["test"]
@@ -706,9 +724,10 @@ class JarvisAI:
         test_size = int(len(full_dataset) * test_split)
         train_size = len(full_dataset) - val_size - test_size
         
-        # Create a CPU generator for random_split to avoid CUDA device errors
-        generator = torch.Generator().manual_seed(42)
+        # Use our helper method to get an appropriate generator for the current device
+        generator = self.get_device_generator(seed=42)
         
+        # Split the dataset using the device-appropriate generator
         train_dataset, val_dataset, test_dataset = random_split(
             full_dataset, 
             [train_size, val_size, test_size],
