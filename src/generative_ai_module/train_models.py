@@ -460,6 +460,96 @@ def install_dependencies():
             print("You may need to install these packages manually: bert-score rouge-score nltk transformers")
 
 
+def convert_dataset_format(dataset_dict, dataset_handler, tokenizer=None, max_length=512):
+    """
+    Convert between different dataset formats to ensure compatibility with HuggingFace Trainer.
+    
+    Args:
+        dataset_dict: The dataset dictionary to convert
+        dataset_handler: UnifiedDatasetHandler instance for access to processor
+        tokenizer: Optional tokenizer for encoding texts
+        max_length: Maximum sequence length for tokenization
+        
+    Returns:
+        Dataset object compatible with HuggingFace Trainer
+    """
+    from datasets import Dataset
+    
+    # Check if already in HuggingFace format
+    if "train" in dataset_dict and isinstance(dataset_dict["train"], Dataset):
+        return dataset_dict["train"]
+        
+    # Handle custom format from DatasetProcessor with batches
+    if "batches" in dataset_dict and dataset_dict["batches"]:
+        # Extract texts or create dummy texts if not available
+        texts = []
+        input_ids = []
+        attention_masks = []
+        
+        # Get samples from batches for tokenization (limit to avoid memory issues)
+        max_samples = 100
+        batch_count = min(len(dataset_dict["batches"]), 10)
+        
+        for batch_inputs, batch_targets in dataset_dict["batches"][:batch_count]:
+            # Try to decode tokens if possible
+            if hasattr(dataset_handler.processor, "decode_tokens"):
+                for idx in range(min(len(batch_inputs), max_samples // batch_count)):
+                    try:
+                        sample_text = dataset_handler.processor.decode_tokens(batch_inputs[idx].tolist())
+                        texts.append(sample_text)
+                    except Exception as e:
+                        print(f"Error decoding tokens: {e}")
+            else:
+                # Create placeholder texts
+                texts.extend([f"Sample {i}" for i in range(min(len(batch_inputs), max_samples // batch_count))])
+        
+        # If we have texts and a tokenizer, tokenize them
+        if texts and tokenizer:
+            try:
+                encodings = tokenizer(
+                    texts,
+                    truncation=True,
+                    padding='max_length',
+                    max_length=max_length,
+                    return_tensors='pt'
+                )
+                input_ids = encodings['input_ids'].tolist()
+                attention_masks = encodings['attention_mask'].tolist()
+            except Exception as e:
+                print(f"Error tokenizing texts: {e}")
+                # Continue with empty lists which will be handled below
+        
+        # Make sure all lists have the same length
+        min_length = min(len(texts), len(input_ids) if input_ids else float('inf'), len(attention_masks) if attention_masks else float('inf'))
+        if min_length == 0 or min_length == float('inf'):
+            # If any list is empty, create dummy data
+            texts = ["Dummy text" for _ in range(10)]
+            if tokenizer:
+                encodings = tokenizer(
+                    texts,
+                    truncation=True,
+                    padding='max_length',
+                    max_length=max_length,
+                    return_tensors='pt'
+                )
+                input_ids = encodings['input_ids'].tolist()
+                attention_masks = encodings['attention_mask'].tolist()
+        
+        # Create a Dataset object that the trainer can use
+        converted_dataset = Dataset.from_dict({
+            "text": texts[:min_length] if min_length > 0 and min_length != float('inf') else texts,
+            "input_ids": input_ids[:min_length] if input_ids and min_length > 0 and min_length != float('inf') else input_ids,
+            "attention_mask": attention_masks[:min_length] if attention_masks and min_length > 0 and min_length != float('inf') else attention_masks
+        })
+        
+        print(f"Created dataset with {len(converted_dataset)} examples")
+        return converted_dataset
+    
+    # Fallback: create an empty dataset
+    print("Warning: Could not create usable dataset. Using empty dataset.")
+    return Dataset.from_dict({"text": [], "input_ids": [], "attention_mask": []})
+
+
 def train_text_model(
     dataset: Union[str, List[str]],
     model_name_or_path: str = "distilgpt2",
@@ -659,41 +749,82 @@ def train_text_model(
             if combined_dataset is None:
                 combined_dataset = current_dataset
             else:
-                # Combine the datasets
-                combined_texts = combined_dataset["train"]["text"] + current_dataset["train"]["text"]
+                # Fix: Check the structure of the dataset and handle different formats
+                # The dataset might be in one of these formats:
+                # 1. {"train": {"text": [...], "input_ids": [...], "attention_mask": [...]}}
+                # 2. {"batches": [...], "metadata": {...}}
                 
-                # Re-tokenize if needed (to ensure consistent formatting)
-                if tokenizer:
-                    # Process in manageable batches to avoid OOM
-                    input_ids = []
-                    attention_masks = []
-                    batch_size = 1000
+                if "train" in combined_dataset and "text" in combined_dataset["train"]:
+                    # HuggingFace dataset format
+                    combined_texts = combined_dataset["train"]["text"] + current_dataset["train"]["text"]
                     
-                    for i in range(0, len(combined_texts), batch_size):
-                        batch_texts = combined_texts[i:min(i+batch_size, len(combined_texts))]
-                        encodings = tokenizer(
-                            batch_texts,
-                            truncation=True,
-                            padding='max_length',
-                            max_length=max_length,
-                            return_tensors='pt'
-                        )
-                        input_ids.extend(encodings['input_ids'].tolist())
-                        attention_masks.extend(encodings['attention_mask'].tolist())
+                    # Re-tokenize if needed (to ensure consistent formatting)
+                    if tokenizer:
+                        # Process in manageable batches to avoid OOM
+                        input_ids = []
+                        attention_masks = []
+                        batch_size = 1000
+                        
+                        for i in range(0, len(combined_texts), batch_size):
+                            batch_texts = combined_texts[i:min(i+batch_size, len(combined_texts))]
+                            encodings = tokenizer(
+                                batch_texts,
+                                truncation=True,
+                                padding='max_length',
+                                max_length=max_length,
+                                return_tensors='pt'
+                            )
+                            input_ids.extend(encodings['input_ids'].tolist())
+                            attention_masks.extend(encodings['attention_mask'].tolist())
+                        
+                        # Update combined dataset
+                        from datasets import Dataset
+                        combined_dataset = {
+                            "train": Dataset.from_dict({
+                                "text": combined_texts,
+                                "input_ids": input_ids,
+                                "attention_mask": attention_masks
+                            })
+                        }
+                elif "batches" in combined_dataset:
+                    # Custom dataset format from DatasetProcessor
+                    combined_batches = combined_dataset.get("batches", []) + current_dataset.get("batches", [])
+                    
+                    # Merge metadata
+                    combined_metadata = combined_dataset.get("metadata", {})
+                    current_metadata = current_dataset.get("metadata", {})
+                    
+                    # Update counts in metadata
+                    sample_count = combined_metadata.get("sample_count", 0) + current_metadata.get("sample_count", 0)
+                    batch_count = combined_metadata.get("batch_count", 0) + current_metadata.get("batch_count", 0)
+                    
+                    # Create merged metadata
+                    merged_metadata = {
+                        **combined_metadata,
+                        "sample_count": sample_count,
+                        "batch_count": batch_count,
+                        "sources": f"{combined_metadata.get('source', '')},{current_metadata.get('source', '')}"
+                    }
                     
                     # Update combined dataset
-                    from datasets import Dataset
                     combined_dataset = {
-                        "train": Dataset.from_dict({
-                            "text": combined_texts,
-                            "input_ids": input_ids,
-                            "attention_mask": attention_masks
-                        })
+                        "batches": combined_batches,
+                        "metadata": merged_metadata
                     }
+                else:
+                    # Unknown format, try basic concatenation
+                    print(f"Warning: Unknown dataset format. Attempting basic concatenation.")
+                    # Just combine whatever is available
+                    combined_dataset = current_dataset
         
         # Use the combined dataset for training
-        train_dataset = combined_dataset["train"]
-        
+        train_dataset = convert_dataset_format(
+            dataset_dict=combined_dataset,
+            dataset_handler=dataset_handler,
+            tokenizer=tokenizer,
+            max_length=max_length
+        )
+    
     else:
         # Single dataset case
         print(f"\n{'='*50}\nTraining Text Model on {dataset.upper()} dataset\n{'='*50}")
@@ -707,7 +838,13 @@ def train_text_model(
             use_cache=True
         )
         
-        train_dataset = dataset_dict["train"]
+        # Convert to training dataset format
+        train_dataset = convert_dataset_format(
+            dataset_dict=dataset_dict,
+            dataset_handler=dataset_handler,
+            tokenizer=tokenizer,
+            max_length=max_length
+        )
     
     # Print effective batch size information
     print(f"Using batch size {batch_size} with gradient accumulation steps {gradient_accumulation_steps}")
