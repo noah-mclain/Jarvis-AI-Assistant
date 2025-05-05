@@ -468,30 +468,27 @@ class CodeGenerator:
             learning_rate=learning_rate,
             logging_dir=f"{output_dir}/logs",
             logging_steps=10,
-            eval_strategy="steps",            # Changed from "epoch" to more frequent "steps"
-            eval_steps=100,                   # Evaluate every 100 steps
-            save_strategy="steps",            # Changed from "epoch" to more frequent "steps"
-            save_steps=100,                   # Save every 100 steps
-            save_total_limit=5,               # Keep up to 5 checkpoints (increased from 3)
+            evaluation_strategy="steps",
+            eval_steps=100,
+            save_strategy="steps",
+            save_steps=100,
+            save_total_limit=5,
             load_best_model_at_end=True,
             metric_for_best_model="eval_loss",
             greater_is_better=False,
             warmup_steps=warmup_steps,
             weight_decay=0.01,
-            fp16=use_fp16,                    # Only use fp16 when not on MPS
-            report_to="none",                 # Disable TensorBoard reporting
-            gradient_accumulation_steps=8,    # Updated to 8 as requested
-            gradient_checkpointing=use_gradient_checkpointing,  # Only enable for non-MPS devices
-            # Disable distributed training on MPS 
-            local_rank=-1,  # Default to -1, meaning no distributed training
-            # Use correct param for CPU/GPU
-            use_cpu=self.device.type == "cpu",  # Use use_cpu instead of no_cuda
-            # Additional checkpointing
-            save_safetensors=True,            # Save in safetensors format
-            dataloader_num_workers=4,         # Use multiple workers for data loading
-            group_by_length=True,             # Group similar length sequences for efficiency
-            logging_first_step=True,          # Log the first step
-            logging_nan_inf_filter=True,      # Filter NaN/Inf values from logs
+            fp16=use_fp16,
+            report_to="none",
+            gradient_accumulation_steps=8,
+            gradient_checkpointing=use_gradient_checkpointing,
+            local_rank=-1,
+            use_cpu=self.device.type == "cpu",
+            save_safetensors=True,
+            dataloader_num_workers=4,
+            group_by_length=True,
+            logging_first_step=True,
+            logging_nan_inf_filter=True,
         )
 
         # Initialize trainer

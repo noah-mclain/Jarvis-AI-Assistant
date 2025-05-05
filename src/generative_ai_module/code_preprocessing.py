@@ -416,14 +416,33 @@ def load_and_preprocess_all_subsets(max_samples=None, sequence_length=512, retur
 
             # Limit samples if specified
             if max_samples:
-                samples_per_lang = max_samples // len(all_subsets)
-                train_data = train_data.select(range(min(samples_per_lang, len(train_data))))
-                val_size = min(max(int(samples_per_lang * val_split), 50), len(valid_data))
-                valid_data = valid_data.select(range(val_size))
+                # Calculate per-language sample sizes based on total max_samples
+                # Allow for more flexible distribution - allocate more to training
+                train_ratio = 0.8  # Use 80% for training
+                val_ratio = 0.1    # Use 10% for validation
+                test_ratio = 0.1   # Use 10% for testing
                 
+                # Calculate per-language sample limits
+                # We want the total (across all languages) to respect max_samples
+                max_per_lang = max_samples // len(all_subsets)
+                max_train = int(max_per_lang * train_ratio)
+                max_val = int(max_per_lang * val_ratio)
+                max_test = int(max_per_lang * test_ratio)
+                
+                # Ensure minimum sample sizes for validation and test
+                max_train = max(1, max_train)
+                max_val = max(1, max_val)
+                max_test = max(1, max_test)
+                
+                # Limit training samples
+                train_data = train_data.select(range(min(max_train, len(train_data))))
+                
+                # Limit validation samples
+                valid_data = valid_data.select(range(min(max_val, len(valid_data))))
+                
+                # Limit test samples if present
                 if test_data:
-                    test_size = min(max(int(samples_per_lang * test_split), 50), len(test_data))
-                    test_data = test_data.select(range(test_size))
+                    test_data = test_data.select(range(min(max_test, len(test_data))))
 
             print(f"  - Loaded {len(train_data)} training, {len(valid_data)} validation, and {len(test_data) if test_data else 0} test samples")
             
