@@ -16,9 +16,28 @@ Functions:
 # This ensures all optimizations are properly applied
 
 from typing import Optional
-import unsloth
-from unsloth import FastLanguageModel
-from unsloth.models import FastDeepseekV2ForCausalLM  # For DeepSeek support
+import sys
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# Import unsloth with fallback mechanisms
+try:
+    import unsloth
+    from unsloth import FastLanguageModel
+    # Try to import DeepSeek support - this might fail in minimal installations
+    try:
+        from unsloth.models import FastDeepseekV2ForCausalLM
+        DEEPSEEK_NATIVE_SUPPORT = True
+        logger.info("Loaded Unsloth with native DeepSeek support")
+    except ImportError:
+        DEEPSEEK_NATIVE_SUPPORT = False
+        logger.warning("Using minimal Unsloth without specialized DeepSeek support")
+except ImportError as e:
+    logger.error(f"Failed to import Unsloth: {e}")
+    raise RuntimeError("Unsloth is required for this module. Please install it with 'pip install unsloth'")
 
 # Import other libraries after unsloth
 import os
@@ -29,16 +48,35 @@ import torch
 import numpy as np
 from datasets import Dataset
 from tqdm import tqdm
-from transformers import AutoTokenizer, TrainingArguments
-from trl import SFTTrainer, SFTConfig
-from peft import LoraConfig
+
+# Conditional imports for transformers components
+try:
+    from transformers import AutoTokenizer, TrainingArguments
+    from trl import SFTTrainer, SFTConfig
+    from peft import LoraConfig
+except ImportError as e:
+    logger.error(f"Failed to import required dependencies: {e}")
+    raise RuntimeError("Required dependencies missing. Please install with 'pip install transformers trl peft'")
 
 # Import storage optimization utilities
-from .storage_optimization import (
-    create_checkpoint_strategy, manage_checkpoints, 
-    setup_streaming_dataset, compress_dataset, optimize_storage_for_model,
-    setup_google_drive, setup_s3_storage, upload_to_gdrive, upload_to_s3
-)
+try:
+    from .storage_optimization import (
+        create_checkpoint_strategy, manage_checkpoints, 
+        setup_streaming_dataset, compress_dataset, optimize_storage_for_model,
+        setup_google_drive, setup_s3_storage, upload_to_gdrive, upload_to_s3
+    )
+except ImportError as e:
+    logger.warning(f"Storage optimization utilities not available: {e}")
+    # Define placeholder functions for storage optimization
+    def create_checkpoint_strategy(*args, **kwargs): return {"mode": "none"}
+    def manage_checkpoints(*args, **kwargs): pass
+    def setup_streaming_dataset(*args, **kwargs): return None
+    def compress_dataset(*args, **kwargs): return None
+    def optimize_storage_for_model(*args, **kwargs): return None
+    def setup_google_drive(*args, **kwargs): return None
+    def setup_s3_storage(*args, **kwargs): return None
+    def upload_to_gdrive(*args, **kwargs): return None
+    def upload_to_s3(*args, **kwargs): return None
 
 def get_unsloth_model(
     model_name: str = "deepseek-ai/deepseek-coder-6.7b-base",
@@ -70,40 +108,78 @@ def get_unsloth_model(
     Returns:
         Tuple of (model, tokenizer)
     """
-    # Load model and tokenizer with Unsloth optimization
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=model_name,
-        max_seq_length=max_seq_length,
-        load_in_4bit=load_in_4bit,
-        load_in_8bit=load_in_8bit,
-        # Set device_map to auto to let Unsloth handle device placement
-        device_map="auto"
-    )
+    # Check if we have GPU support
+    if not torch.cuda.is_available():
+        logger.warning("CUDA not available. This will be extremely slow.")
+    else:
+        logger.info(f"Using GPU: {torch.cuda.get_device_name(0)}")
     
-    # Apply LoRA if using PEFT
-    if use_peft:
-        lora_config = LoraConfig(
-            r=r,
-            target_modules=target_modules,
-            lora_alpha=alpha,
-            lora_dropout=dropout,
-            task_type="CAUSAL_LM",
+    try:
+        # Load model and tokenizer with Unsloth optimization
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            model_name=model_name,
+            max_seq_length=max_seq_length,
+            load_in_4bit=load_in_4bit,
+            load_in_8bit=load_in_8bit,
+            # Set device_map to auto to let Unsloth handle device placement
+            device_map="auto"
         )
         
-        # Apply LoRA config
-        model = FastLanguageModel.get_peft_model(
-            model, 
-            lora_config,
-            # For inference, we can disable gradient checkpointing to save memory
-            inference_mode=(model_dir is not None)
-        )
+        # Apply LoRA if using PEFT
+        if use_peft:
+            lora_config = LoraConfig(
+                r=r,
+                target_modules=target_modules,
+                lora_alpha=alpha,
+                lora_dropout=dropout,
+                task_type="CAUSAL_LM",
+            )
+            
+            # Apply LoRA config
+            model = FastLanguageModel.get_peft_model(
+                model, 
+                lora_config,
+                # For inference, we can disable gradient checkpointing to save memory
+                inference_mode=(model_dir is not None)
+            )
+        
+        # Load fine-tuned weights if provided
+        if model_dir and os.path.exists(model_dir):
+            model.load_adapter(model_dir, adapter_name="default")
+            logger.info(f"Loaded fine-tuned weights from {model_dir}")
+        
+        return model, tokenizer
     
-    # Load fine-tuned weights if provided
-    if model_dir and os.path.exists(model_dir):
-        model.load_adapter(model_dir, adapter_name="default")
-        print(f"Loaded fine-tuned weights from {model_dir}")
-    
-    return model, tokenizer
+    except Exception as e:
+        logger.error(f"Error loading model with Unsloth: {e}")
+        logger.warning("Falling back to standard transformers loading")
+        
+        try:
+            from transformers import AutoTokenizer, AutoModelForCausalLM
+            
+            # Load with standard transformers
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                device_map="auto",
+                load_in_4bit=load_in_4bit,
+                load_in_8bit=load_in_8bit
+            )
+            
+            # Load LoRA weights if provided
+            if model_dir and os.path.exists(model_dir) and use_peft:
+                try:
+                    from peft import PeftModel
+                    model = PeftModel.from_pretrained(model, model_dir)
+                    logger.info(f"Loaded fine-tuned weights from {model_dir}")
+                except Exception as peft_error:
+                    logger.error(f"Error loading LoRA weights: {peft_error}")
+            
+            return model, tokenizer
+        
+        except Exception as fallback_error:
+            logger.error(f"Fallback loading also failed: {fallback_error}")
+            raise RuntimeError("Failed to load model in any way. Please check your installation.")
 
 def finetune_with_unsloth(
     train_dataset: Dataset,
@@ -353,96 +429,221 @@ def finetune_with_unsloth(
     return metrics
 
 def evaluate_model(
-    model_dir: str,
-    test_dataset: Dataset,
+    model_dir: str = None,
+    test_dataset: Dataset = None,
     max_seq_length: int = 2048,
     batch_size: int = 4,
     load_in_4bit: bool = True,
     load_in_8bit: bool = False,
+    model=None,
+    tokenizer=None,
 ) -> dict[str, float]:
     """
     Evaluate a fine-tuned model on test data.
     
     Args:
-        model_dir: Directory containing fine-tuned model
-        test_dataset: Test dataset
+        model_dir: Directory containing fine-tuned model (if model not provided)
+        test_dataset: Test dataset (can be dict or Dataset object)
         max_seq_length: Maximum sequence length for the model
         batch_size: Batch size for evaluation
         load_in_4bit: Whether to load the model in 4-bit quantization
         load_in_8bit: Whether to load the model in 8-bit quantization
+        model: Pre-loaded model (optional)
+        tokenizer: Pre-loaded tokenizer (optional)
         
     Returns:
         Dictionary with evaluation metrics
     """
-    # Load the model and tokenizer
-    base_model_name = "deepseek-ai/deepseek-coder-6.7b-base"  # Default base model
-
-    # Try to load the model config to get the actual base model name
-    try:
-        with open(os.path.join(model_dir, "adapter_config.json"), 'r') as f:
-            config = json.load(f)
-            if "base_model_name_or_path" in config:
-                base_model_name = config["base_model_name_or_path"]
-    except Exception:
-        print(f"Could not load adapter_config.json, using default base model: {base_model_name}")
-
-    # Load the fine-tuned model
-    model, tokenizer = get_unsloth_model(
-        model_name=base_model_name,
-        model_dir=model_dir,
-        max_seq_length=max_seq_length,
-        load_in_4bit=load_in_4bit,
-        load_in_8bit=load_in_8bit
-    )
-
-    # Put model in evaluation mode
+    start_time = time.time()
+    
+    # If no test dataset was provided, return empty metrics
+    if test_dataset is None:
+        logger.warning("No test dataset provided for evaluation")
+        return {
+            "error": "No test dataset provided",
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+        }
+    
+    # Load the model and tokenizer if not provided
+    if model is None or tokenizer is None:
+        if model_dir is None:
+            logger.error("Either model or model_dir must be provided")
+            return {"error": "Either model or model_dir must be provided"}
+            
+        try:
+            # Try to get base model name from config
+            base_model_name = "deepseek-ai/deepseek-coder-6.7b-base"  # Default
+            config_file = None
+            
+            # Look for adapter config file
+            for filename in ["adapter_config.json", "config.json", "base_model_info.json"]:
+                path = os.path.join(model_dir, filename)
+                if os.path.exists(path):
+                    config_file = path
+                    break
+                    
+            if config_file:
+                try:
+                    with open(config_file, 'r') as f:
+                        config = json.load(f)
+                        if "base_model_name_or_path" in config:
+                            base_model_name = config["base_model_name_or_path"]
+                        elif "base_model" in config:
+                            base_model_name = config["base_model"]
+                except Exception as e:
+                    logger.warning(f"Error loading config file {config_file}: {e}")
+            
+            logger.info(f"Using base model: {base_model_name}")
+            
+            # Load the fine-tuned model
+            model, tokenizer = get_unsloth_model(
+                model_name=base_model_name,
+                model_dir=model_dir,
+                max_seq_length=max_seq_length,
+                load_in_4bit=load_in_4bit,
+                load_in_8bit=load_in_8bit
+            )
+        except Exception as e:
+            logger.error(f"Failed to load model for evaluation: {e}")
+            # Try fallback to standard transformers
+            try:
+                logger.warning("Attempting fallback to standard transformers")
+                from transformers import AutoModelForCausalLM, AutoTokenizer
+                
+                tokenizer = AutoTokenizer.from_pretrained(model_dir)
+                model = AutoModelForCausalLM.from_pretrained(
+                    model_dir,
+                    device_map="auto",
+                    torch_dtype=torch.float16,
+                )
+            except Exception as e2:
+                logger.error(f"Fallback also failed: {e2}")
+                return {
+                    "error": f"Failed to load model: {str(e)}",
+                    "fallback_error": f"{str(e2)}",
+                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+                }
+    
+    # Ensure model is in evaluation mode
     model.eval()
-
+    
+    # Get device
+    device = model.device if hasattr(model, 'device') else next(model.parameters()).device
+    logger.info(f"Evaluating on device: {device}")
+    
     # Initialize metrics
     total_loss = 0.0
     num_samples = 0
-
-    # Process dataset in batches
-    for i in range(0, len(test_dataset), batch_size):
-        batch = test_dataset[i:i+batch_size]
-        batch_texts = batch["text"] if "text" in batch else batch
-
-        # Tokenize inputs
-        inputs = tokenizer(
-            batch_texts, 
-            return_tensors="pt", 
-            padding=True, 
-            truncation=True,
-            max_length=max_seq_length
-        ).to(model.device)
-
-        # Calculate loss
-        with torch.no_grad():
-            outputs = model(**inputs, labels=inputs["input_ids"])
-            loss = outputs.loss
-
-        # Update metrics
-        total_loss += loss.item() * len(batch)
-        num_samples += len(batch)
-
-        if i % 10 == 0:
-            print(f"Processed {num_samples} samples, current avg loss: {total_loss / num_samples:.4f}")
-
+    
+    # Convert test_dataset to Dataset if it's a dictionary
+    if isinstance(test_dataset, dict):
+        if "input_ids" in test_dataset:
+            # Handle tokenized dataset
+            if tokenizer:
+                test_dataset = create_text_dataset_from_tokenized(test_dataset, tokenizer)
+            else:
+                logger.error("Tokenizer required to convert tokenized dataset to text")
+                return {"error": "Tokenizer required for tokenized dataset"}
+        elif "text" in test_dataset:
+            # Convert to Huggingface Dataset
+            test_dataset = Dataset.from_dict(test_dataset)
+        else:
+            logger.error("Test dataset must contain 'input_ids' or 'text'")
+            return {"error": "Invalid test dataset format"}
+    
+    try:
+        # Process dataset in batches
+        progress_bar = tqdm(range(0, len(test_dataset), batch_size), desc="Evaluating")
+        for i in progress_bar:
+            batch = test_dataset[i:min(i+batch_size, len(test_dataset))]
+            
+            # Get text data from batch
+            if "text" in batch:
+                batch_texts = batch["text"]
+            elif "input_ids" in batch and tokenizer:
+                batch_texts = [tokenizer.decode(ids) for ids in batch["input_ids"]]
+            else:
+                logger.error("Batch must contain 'text' or 'input_ids'")
+                continue
+            
+            # Skip empty batches
+            if not batch_texts or len(batch_texts) == 0:
+                continue
+                
+            # Handle single string case
+            if isinstance(batch_texts, str):
+                batch_texts = [batch_texts]
+                
+            try:
+                # Tokenize inputs
+                inputs = tokenizer(
+                    batch_texts, 
+                    return_tensors="pt", 
+                    padding=True, 
+                    truncation=True,
+                    max_length=max_seq_length
+                ).to(device)
+                
+                # Calculate loss
+                with torch.no_grad():
+                    outputs = model(**inputs, labels=inputs["input_ids"])
+                    loss = outputs.loss
+                
+                # Update metrics
+                batch_loss = loss.item() * len(batch_texts)
+                total_loss += batch_loss
+                num_samples += len(batch_texts)
+                
+                # Update progress bar
+                progress_bar.set_postfix({"avg_loss": total_loss / max(1, num_samples)})
+                
+            except Exception as batch_error:
+                logger.warning(f"Error processing batch: {batch_error}")
+                continue
+    
+    except Exception as e:
+        logger.error(f"Error during evaluation: {e}")
+        return {
+            "error": f"Evaluation failed: {str(e)}",
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+        }
+    
     # Calculate final metrics
+    if num_samples == 0:
+        logger.warning("No samples were successfully evaluated")
+        return {
+            "error": "No samples successfully evaluated",
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
+        }
+    
     avg_loss = total_loss / num_samples
-    perplexity = torch.exp(torch.tensor(avg_loss)).item()
-
+    
+    try:
+        perplexity = torch.exp(torch.tensor(avg_loss)).item()
+    except OverflowError:
+        # Handle overflow for very large loss values
+        perplexity = float('inf')
+    
+    evaluation_time = time.time() - start_time
+    
     metrics = {
         "loss": avg_loss,
         "perplexity": perplexity,
-        "num_samples": num_samples
+        "num_samples": num_samples,
+        "evaluation_time_seconds": round(evaluation_time, 2),
+        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
     }
-
-    # Save metrics
-    metrics_path = os.path.join(model_dir, "evaluation_metrics.json")
-    with open(metrics_path, 'w') as f:
-        json.dump(metrics, f, indent=2)
-
+    
+    # Save metrics if model_dir is provided
+    if model_dir:
+        try:
+            metrics_path = os.path.join(model_dir, "evaluation_metrics.json")
+            with open(metrics_path, 'w') as f:
+                json.dump(metrics, f, indent=2)
+            logger.info(f"Saved evaluation metrics to {metrics_path}")
+        except Exception as e:
+            logger.warning(f"Failed to save metrics to file: {e}")
+    
     return metrics
 
 def create_text_dataset_from_tokenized(
