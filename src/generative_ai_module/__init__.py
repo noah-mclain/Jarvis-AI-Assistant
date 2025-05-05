@@ -46,34 +46,77 @@ except ImportError:
 except Exception as e:
     logger.warning(f"Failed to initialize GPU settings: {str(e)}")
 
-# Import key components
-from .jarvis_unified import JarvisAI
-from .text_generator import TextGenerator
-from .code_generator import CodeGenerator
-from .utils import (
-    get_storage_path, 
-    sync_to_gdrive, 
-    sync_from_gdrive, 
-    setup_logging,
-    setup_gpu_for_training,
-    force_cuda_device
-)
+# Import key components with proper error handling
+try:
+    from .jarvis_unified import JarvisAI
+except ImportError as e:
+    logger.warning(f"Unable to import JarvisAI: {e}")
+    class JarvisAI:
+        def __init__(self, *args, **kwargs):
+            logger.error("JarvisAI class not properly loaded")
+            raise ImportError("JarvisAI could not be loaded")
+
+try:
+    from .text_generator import TextGenerator
+except ImportError as e:
+    logger.warning(f"Unable to import TextGenerator: {e}")
+    class TextGenerator:
+        def __init__(self, *args, **kwargs):
+            logger.error("TextGenerator class not properly loaded")
+            raise ImportError("TextGenerator could not be loaded")
+
+try:
+    from .code_generator import CodeGenerator
+except ImportError as e:
+    logger.warning(f"Unable to import CodeGenerator: {e}")
+    class CodeGenerator:
+        def __init__(self, *args, **kwargs):
+            logger.error("CodeGenerator class not properly loaded")
+            raise ImportError("CodeGenerator could not be loaded")
+
+try:
+    from .utils import (
+        get_storage_path, 
+        sync_to_gdrive, 
+        sync_from_gdrive, 
+        setup_logging,
+        setup_gpu_for_training,
+        force_cuda_device
+    )
+except ImportError as e:
+    logger.warning(f"Unable to import utils functions: {e}")
+    # Provide stub implementations for essential functions
+    def get_storage_path(path_type): return f"./data/{path_type}"
+    def sync_to_gdrive(path): logger.error("sync_to_gdrive not available")
+    def sync_from_gdrive(path): logger.error("sync_from_gdrive not available")
+    def setup_logging(): pass
+    def setup_gpu_for_training(): return "cpu"
+    def force_cuda_device(): return "cpu"
 
 # Optional imports based on availability
 try:
     from .evaluation_metrics import EvaluationMetrics
-except ImportError:
-    logger.warning("EvaluationMetrics not available")
+except ImportError as e:
+    logger.warning(f"EvaluationMetrics not available: {e}")
+    class EvaluationMetrics:
+        def __init__(self, *args, **kwargs):
+            logger.error("EvaluationMetrics class not properly loaded")
 
 try:
     from .unified_generation_pipeline import UnifiedGenerationPipeline
-except ImportError:
-    logger.warning("UnifiedGenerationPipeline not available")
+except ImportError as e:
+    logger.warning(f"UnifiedGenerationPipeline not available: {e}")
+    class UnifiedGenerationPipeline:
+        def __init__(self, *args, **kwargs):
+            logger.error("UnifiedGenerationPipeline class not properly loaded")
 
 try:
     from .unified_dataset_handler import UnifiedDatasetHandler
-except ImportError:
-    logger.warning("UnifiedDatasetHandler not available")
+except ImportError as e:
+    logger.warning(f"UnifiedDatasetHandler not available: {e}")
+    class UnifiedDatasetHandler:
+        def __init__(self, *args, **kwargs):
+            logger.error("UnifiedDatasetHandler class not properly loaded")
 
 # Expose key classes and functions
 __all__ = [
