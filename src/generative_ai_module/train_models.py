@@ -1385,28 +1385,47 @@ def main():
     import glob
     import os
     import torch
+    import sys
     
     # Set up logging
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger(__name__)
     
-    # Force GPU usage for RTX5000 on Paperspace
+    # Force GPU usage for ALL operations from the very beginning
     from .utils import setup_gpu_for_training, force_cuda_device, is_paperspace_environment
     
-    # Apply GPU configuration at the start
-    device, gpu_config = setup_gpu_for_training(force_gpu=True)
+    print("⚡⚡⚡ Enforcing GPU usage for all training operations ⚡⚡⚡")
     
-    # Use strong GPU preferences for RTX5000
-    if is_paperspace_environment() and torch.cuda.is_available():
+    # Set environment variables to ensure CUDA visibility
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+    
+    # Force CUDA as default tensor type if available
+    if torch.cuda.is_available():
+        # Log GPU info
         gpu_name = torch.cuda.get_device_name(0)
-        if "RTX5000" in gpu_name or "RTX 5000" in gpu_name:
-            logger.info(f"Using RTX5000 GPU for training with optimized settings")
+        logger.info(f"✅ Found GPU: {gpu_name}")
+        
+        # Apply maximum GPU enforcement - set default tensors to CUDA
+        torch.set_default_tensor_type('torch.cuda.FloatTensor')
+        
+        # In PyTorch 2.0+, also set the default device
+        if hasattr(torch, 'set_default_device'):
+            torch.set_default_device('cuda')
+            
+        # Apply RTX5000-specific optimizations if detected
+        if is_paperspace_environment() and ("RTX5000" in gpu_name or "RTX 5000" in gpu_name):
+            logger.info(f"✅ RTX5000 GPU detected - applying optimized settings")
             # Set environment variables
             os.environ["CUDA_VISIBLE_DEVICES"] = "0"
             os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
             
             # These optimizations will be applied to all subsequent PyTorch operations
             torch.backends.cudnn.benchmark = True  # May improve performance for fixed-size inputs
+    
+    # Apply GPU configuration through utility function for detailed setup
+    device, gpu_config = setup_gpu_for_training(force_gpu=True)
+    logger.info(f"✅ GPU enforcement complete. Using device: {device}")
     
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Train a model on a specific dataset.')
@@ -1481,7 +1500,21 @@ def main():
     parser.add_argument('--cache_dir', type=str, default=None,
                       help='Directory to cache models and datasets')
     
+    # Always force GPU usage
+    parser.add_argument('--force_gpu', action='store_true', default=True,
+                      help='Force GPU usage (default: True)')
+    parser.add_argument('--cpu', action='store_true', default=False,
+                      help='Force CPU usage (this will be ignored if --force_gpu is also set)')
+    
     args = parser.parse_args()
+    
+    # Override CPU request with GPU force
+    if args.cpu:
+        logger.warning("CPU mode requested but will be ignored due to GPU enforcement policy")
+        args.cpu = False
+    
+    # Ensure force_gpu is always True
+    args.force_gpu = True
     
     # Print all arguments for logging
     logger.info("Training with the following arguments:")
@@ -1537,7 +1570,8 @@ def main():
             max_length=args.max_length,
             output_dir=args.output_dir,
             eval_metrics_dir=args.eval_metrics_dir,
-            max_samples=args.max_samples
+            max_samples=args.max_samples,
+            force_gpu=True  # Always force GPU for code models
         )
     
     else:

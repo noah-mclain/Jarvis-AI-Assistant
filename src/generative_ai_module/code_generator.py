@@ -37,45 +37,90 @@ class CodeGenerator:
             
     def _get_device(self):
         """Determine the best available device (MPS for Apple Silicon, CUDA for NVIDIA, or CPU)"""
-        # Use the GPU utilities from utils.py to get the device
+        # Always force GPU usage regardless of initialization parameter
+        self.force_gpu = True
         
-        if self.force_gpu:
-            # Force GPU usage when requested specifically
-            try:
-                # Use setup_gpu_for_training for detailed configuration
-                device, gpu_config = setup_gpu_for_training(force_gpu=True)
-                
+        print("Setting up GPU for all operations...")
+        
+        # Use the GPU utilities from utils.py to get the device with forced GPU mode
+        try:
+            # Use setup_gpu_for_training for detailed configuration
+            device, gpu_config = setup_gpu_for_training(force_gpu=True)
+            
+            # Save GPU configuration for later model loading optimizations
+            self.gpu_config = gpu_config
+            
+            # If we have a CUDA device, ensure it's properly configured
+            if device.type == "cuda":
                 # Apply any RTX5000-specific configurations
                 if is_paperspace_environment() and torch.cuda.is_available():
                     gpu_name = torch.cuda.get_device_name(0)
                     if "RTX5000" in gpu_name or "RTX 5000" in gpu_name:
-                        # Save GPU configuration for later use in model loading
-                        self.gpu_config = gpu_config
+                        print(f"RTX 5000 GPU detected - applying optimized settings for model loading")
+                        # Force 4-bit quantization for RTX5000 to maximize available memory
+                        self.load_in_4bit = True
+                        self.load_in_8bit = False
                 
+                # Set CUDA tensor as default type for all operations
+                torch.set_default_tensor_type('torch.cuda.FloatTensor')
+                
+                # In PyTorch 2.0+, also set the default device
+                if hasattr(torch, 'set_default_device'):
+                    torch.set_default_device('cuda')
+                
+                print(f"GPU enforcement successful: Using CUDA device {device}")
                 return device
-            except Exception as e:
-                print(f"Error setting up GPU: {e}")
-                print("Falling back to default device selection")
+            
+            # For MPS (Apple Silicon) device
+            elif device.type == "mps":
+                print(f"GPU enforcement successful: Using Apple Silicon MPS device")
+                # Optimize MPS settings
+                if hasattr(torch.mps, 'empty_cache'):
+                    torch.mps.empty_cache()
+                return device
+            
+            # For CPU fallback (only if both setup_gpu_for_training and the code below fail)
+            else:
+                print("Warning: setup_gpu_for_training returned CPU device despite force_gpu=True")
+                # Fall through to try alternative methods for finding a GPU
+        except Exception as e:
+            print(f"Error in primary GPU setup: {e}")
+            print("Attempting alternative GPU detection methods...")
         
-        # Fall back to normal device selection if the above fails
-        if hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-            print("Using MPS (Apple Silicon GPU)")
-            return torch.device("mps")
-        elif torch.cuda.is_available():
-            # If we're on CUDA, specifically check for RTX5000 on Paperspace
+        # Alternative GPU detection paths
+        
+        # First try CUDA
+        if torch.cuda.is_available():
+            # We have CUDA, so use it
             device = torch.device("cuda")
             gpu_name = torch.cuda.get_device_name(0)
-            print(f"Using CUDA GPU: {gpu_name}")
+            print(f"Alternative GPU enforcement: Using CUDA GPU: {gpu_name}")
+            
+            # Set CUDA tensor as default type
+            torch.set_default_tensor_type('torch.cuda.FloatTensor')
             
             # Apply RTX5000-specific configurations if detected
             if is_paperspace_environment() and ("RTX5000" in gpu_name or "RTX 5000" in gpu_name):
                 print("RTX 5000 GPU detected - applying optimized settings")
                 # Force GPU visibility
                 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+                os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+                
+                # Force 4-bit quantization for RTX5000 to maximize available memory
+                self.load_in_4bit = True
+                self.load_in_8bit = False
             
             return device
+        # Then try MPS for Apple Silicon
+        elif hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            print("Alternative GPU enforcement: Using MPS (Apple Silicon GPU)")
+            # Optimize MPS settings
+            if hasattr(torch.mps, 'empty_cache'):
+                torch.mps.empty_cache()
+            return torch.device("mps")
+        # Last resort - CPU with warning
         else:
-            print("Using CPU (no GPU available)")
+            print("Warning: No GPU available despite forced GPU mode. Performance will be significantly slower on CPU.")
             return torch.device("cpu")
     
     def load_model(self):

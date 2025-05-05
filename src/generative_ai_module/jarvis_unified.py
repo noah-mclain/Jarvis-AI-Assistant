@@ -33,6 +33,114 @@ from transformers import (
     BitsAndBytesConfig
 )
 
+# =========== CRITICAL GPU ENFORCEMENT MODULE ============
+# This section ensures that GPU is used for all operations from the moment of import
+def _force_gpu_usage():
+    """Force GPU usage for all PyTorch operations throughout the codebase"""
+    try:
+        # Set environment variables to ensure CUDA visibility
+        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+        
+        # Basic logging configuration
+        print("Forcing GPU usage for all Jarvis AI operations...")
+        
+        # Import torch first to make sure CUDA is initialized
+        import torch
+        
+        # Set global seeds for reproducibility
+        torch.manual_seed(42)
+        random.seed(42)
+        np.random.seed(42)
+        
+        # Try multiple approaches to ensure GPU usage
+        if torch.cuda.is_available():
+            # Set CUDA device
+            torch.cuda.set_device(0)
+            
+            # Force CUDA as default tensor type
+            torch.set_default_tensor_type('torch.cuda.FloatTensor')
+            
+            # In PyTorch 2.0+, also set the default device
+            if hasattr(torch, 'set_default_device'):
+                torch.set_default_device('cuda')
+            
+            # Set all CUDA seeds
+            torch.cuda.manual_seed(42)
+            torch.cuda.manual_seed_all(42)
+            
+            # Get GPU info for logging
+            gpu_name = torch.cuda.get_device_name(0)
+            cuda_version = torch.version.cuda if hasattr(torch.version, 'cuda') else "Unknown"
+            
+            # Enable cudnn benchmark for faster training
+            if hasattr(torch.backends, 'cudnn'):
+                torch.backends.cudnn.benchmark = True
+                torch.backends.cudnn.enabled = True
+            
+            # Try to get GPU memory
+            try:
+                gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                print(f"GPU Memory: {gpu_memory_gb:.2f} GB")
+            except:
+                pass
+                
+            print(f"✅ GPU enforcement successful. Using CUDA device: {gpu_name} (CUDA {cuda_version})")
+            return True
+        
+        # Try Apple Silicon MPS as fallback
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            # Set MPS as device
+            device = torch.device("mps")
+            
+            # Clear MPS cache to free memory
+            if hasattr(torch.mps, 'empty_cache'):
+                torch.mps.empty_cache()
+                
+            print(f"✅ GPU enforcement successful. Using Apple Silicon MPS device")
+            return True
+        
+        else:
+            print("⚠️ No GPU available. Performance will be significantly slower on CPU.")
+            return False
+            
+    except Exception as e:
+        print(f"⚠️ Error enforcing GPU usage: {str(e)}")
+        print("⚠️ Operations will fall back to CPU, but performance will be degraded.")
+        return False
+
+# Run GPU enforcement immediately on module import
+_GPU_AVAILABLE = _force_gpu_usage()
+
+# ======== CRITICAL PATCH TO FIX CUDA GENERATOR ISSUES ========
+# This patch ensures that PyTorch's random_split and DataLoader will work correctly
+# with CUDA by always using CPU generators for samplers
+def _patch_torch_for_cuda_generator_compatibility():
+    if hasattr(torch.utils.data, 'random_split'):
+        original_random_split = torch.utils.data.random_split
+        
+        def patched_random_split(dataset, lengths, generator=None):
+            """Patched version that ensures CPU generator is used"""
+            cpu_generator = torch.Generator().manual_seed(42 if generator is None else generator.initial_seed())
+            return original_random_split(dataset, lengths, generator=cpu_generator)
+        
+        # Apply the patch
+        torch.utils.data.random_split = patched_random_split
+        
+    # Set global seed for all operations
+    torch.manual_seed(42)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(42)
+        torch.cuda.manual_seed_all(42)
+    random.seed(42)
+    np.random.seed(42)
+    
+    # Log the patch application
+    print("Applied critical patch for CUDA generator compatibility")
+
+# Apply the patch immediately
+_patch_torch_for_cuda_generator_compatibility()
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -44,11 +152,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("jarvis_unified")
 
-# Import PyTorch if available
+# Additional GPU optimizations for specific hardware
 try:
-    import torch
-    
-    # Check for CUDA
+    # Check for CUDA again (redundant but ensures logging)
     if torch.cuda.is_available():
         # Check for RTX5000 GPU
         gpu_name = torch.cuda.get_device_name(0)
@@ -68,7 +174,7 @@ try:
         if "RTX5000" in gpu_name or "RTX 5000" in gpu_name:
             logger.info("RTX 5000 GPU detected - applying optimized settings")
             
-            # Force GPU visibility
+            # Force GPU visibility (redundant but ensuring it's set)
             os.environ["CUDA_VISIBLE_DEVICES"] = "0"
             
             # Memory optimization
@@ -82,9 +188,6 @@ try:
             bf16_support = torch.cuda.is_bf16_supported() if hasattr(torch.cuda, 'is_bf16_supported') else False
             logger.info(f"BF16 support: {bf16_support}")
             
-            # Set default tensor type
-            torch.set_default_tensor_type(torch.cuda.FloatTensor)
-            
             # Check for Unsloth optimizations
             try:
                 import unsloth
@@ -92,12 +195,13 @@ try:
             except ImportError:
                 pass
     else:
-        logger.info("No GPU detected - using CPU")
+        if _GPU_AVAILABLE:
+            logger.info("Using Apple Silicon MPS device")
+        else:
+            logger.warning("No GPU detected - using CPU (performance will be significantly slower)")
         
-except ImportError:
-    logger.warning("PyTorch not available. GPU optimization disabled.")
 except Exception as e:
-    logger.warning(f"Error during GPU initialization: {str(e)}")
+    logger.warning(f"Error during additional GPU initialization: {str(e)}")
 
 # Conditionally import FastLanguageModel from unsloth only when CUDA is available
 unsloth_available = False
@@ -396,12 +500,9 @@ class JarvisAI:
         Returns:
             A torch Generator for the appropriate device
         """
-        if self.device == 'cuda':
-            # Create a CUDA generator for GPU
-            return torch.Generator(device='cuda').manual_seed(seed)
-        else:
-            # Use CPU generator
-            return torch.Generator().manual_seed(seed)
+        # IMPORTANT: Always use CPU generator for DataLoader/random_split compatibility
+        # The critical issue is that DataLoader's samplers expect CPU generators
+        return torch.Generator().manual_seed(seed)
 
     def load_model(self, dataset_or_path: str, is_path: bool = False) -> Tuple[Any, Any]:
         """
@@ -787,6 +888,17 @@ class JarvisAI:
             [train_size, val_size, test_size],
             generator=generator
         )
+
+        # CRITICAL FIX: Always use CPU generator for dataset operations
+        # The core issue is that DataLoader and Sampler expect CPU generators
+        cpu_generator = torch.Generator().manual_seed(42)
+        
+        # Split the dataset using CPU generator to avoid device mismatch errors
+        train_dataset, val_dataset, test_dataset = random_split(
+            full_dataset, 
+            [train_size, val_size, test_size],
+            generator=cpu_generator
+        )
         
         logger.info(f"Dataset split: {train_size} train, {val_size} validation, {test_size} test")
         
@@ -990,9 +1102,7 @@ class JarvisAI:
                     use_mps=False,
                     use_flash_attn=False,
                     use_unsloth=self.use_unsloth,
-                    cache_dir=None,
-                    seed=42,  # Fixed seed for reproducibility
-                    data_seed=42  # Fixed seed for data operations
+                    cache_dir=None
                 )
                 
                 # Store metrics for HuggingFace datasets
@@ -1080,7 +1190,6 @@ class JarvisAI:
                 optim="adamw_torch_fused",  # Use fused optimizer on NVIDIA GPUs
                 gradient_accumulation_steps=gradient_accumulation_steps,  # More steps for RTX GPUs
                 seed=42,  # Set fixed seed for reproducibility
-                data_seed=42,  # Set fixed seed for data shuffling
                 dataloader_drop_last=False,  # Keep all samples even if last batch is smaller
                 dataloader_num_workers=4,  # Optimize number of workers for RTX5000
                 torch_compile=False  # Disable torch compile as it can cause issues with CUDA generators
@@ -1099,6 +1208,27 @@ class JarvisAI:
                 torch.cuda.manual_seed_all(42)
             else:
                 torch.manual_seed(42)
+            
+            # CRITICAL FIX: Patch or override PyTorch's random_split/Sampler to use CPU generator
+            # The core issue is that PyTorch's DataLoader creates samplers with CPU generators
+            # even when CUDA is available, and this causes device mismatch errors
+            
+            # Override the default PyTorch sampler behavior to always use CPU generators
+            def create_cpu_generator():
+                """Create a CPU generator regardless of device being used"""
+                return torch.Generator().manual_seed(42)
+            
+            # Monkey-patch torch.utils.data.random_split during training to avoid CUDA generator issues
+            original_random_split = torch.utils.data.random_split
+            
+            def safe_random_split(dataset, lengths, generator=None):
+                """Safe version of random_split that ensures CPU generator"""
+                # Always use CPU generator to avoid device mismatch
+                cpu_generator = create_cpu_generator()
+                return original_random_split(dataset, lengths, generator=cpu_generator)
+            
+            # Apply the monkey patch
+            torch.utils.data.random_split = safe_random_split
             
             # Train model with device-appropriate settings
             trainer = Trainer(

@@ -1525,78 +1525,160 @@ def interactive_generation(model: torch.nn.Module,
                          model_type: str = "text",
                          force_gpu: bool = True,
                          args: argparse.Namespace = None) -> None:
-    """Interactive generation mode for user prompts"""
-    print("\nStarting interactive generation mode...")
-    print("Type 'quit' to exit")
-    print("The system will automatically determine whether to generate a story or dialogue response.")
+    """
+    Provides an interactive prompt for generating text with the model.
     
-    # If args wasn't provided, create default values
+    Args:
+        model: The trained model
+        tokenizer: Tokenizer for the model
+        model_type: Type of model (text or code)
+        force_gpu: Force GPU usage for generation
+        args: Optional arguments from command line
+    """
+    # Always force GPU usage regardless of the parameter value
+    force_gpu = True
+    
+    # Apply GPU configuration upfront
+    import torch
+    import os
+    from .utils import setup_gpu_for_training, force_cuda_device
+    
+    print("⚡ Setting up GPU for interactive generation")
+    
+    # Set environment variables for GPU visibility
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+    
+    # Force CUDA device if available
+    device = force_cuda_device()
+    print(f"Using device: {device}")
+    
+    # Make sure the model is on the right device
+    if hasattr(model, 'to') and device.type != 'cpu':
+        model = model.to(device)
+    
+    # Ensure we have usable args
     if args is None:
         class DefaultArgs:
             model_dir = "models"
             length = 100
             temperature = 0.7
+            top_p = 0.95
         args = DefaultArgs()
     
+    # Prepare generation parameters with higher defaults for interactive use
+    length = getattr(args, 'length', 100)
+    temperature = getattr(args, 'temperature', 0.7)
+    top_p = getattr(args, 'top_p', 0.95)
+    
+    print("\n" + "="*80)
+    print("Interactive Generation Mode")
+    print("="*80)
+    print("Type 'exit', 'quit', or Ctrl+C to end the session")
+    print("Type 'settings' to adjust generation parameters")
+    print("Type 'gpu' to force GPU usage explicitly")
+    print(f"Generation Settings: length={length}, temperature={temperature}, top_p={top_p}")
+    print("="*80 + "\n")
+    
+    # Get the text or code generator based on model type
+    if model_type == "code":
+        # For code generation, we'll use different defaults
+        generate_func = lambda prompt, max_tokens, temp: generate_code(
+            model, tokenizer, prompt, max_length=max_tokens, temperature=temp, top_p=top_p
+        )
+    else:
+        # For text generation, we'll use different defaults
+        generate_func = lambda prompt, max_tokens, temp: generate_text(
+            model, tokenizer, prompt, max_length=max_tokens, temperature=temp
+        )
+        
+    # Start the interactive loop
     while True:
         try:
-            prompt = input("\nEnter your prompt: ")
-            if prompt.lower() == 'quit':
+            prompt = input("\nPrompt: ")
+            
+            # Handle special commands
+            if prompt.lower() in ["exit", "quit"]:
+                print("Exiting interactive mode")
                 break
             
-            # Analyze the prompt to determine the appropriate dataset
-            dataset_name = analyze_prompt(prompt)
-            print(f"\nDetected prompt type: {'Story generation' if dataset_name == 'writing_prompts' else 'Dialogue'}")
-            
-            # Load the appropriate model
-            model_path = os.path.join(args.model_dir, f"text_gen_{dataset_name}.pt")
-            
-            # Check if model exists, if not, train it
-            if not os.path.exists(model_path):
-                print(f"Model not found at {model_path}. Training new model...")
-                datasets = preprocess_datasets(args)
-                train_on_datasets(args, datasets)
-            
-            model, vocab_size = load_model(model_path)
-            
-            # Get device
-            device = torch.device("cpu")
-            if force_gpu:
-                if hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-                    device = torch.device("mps")
-                    print("Using Apple Silicon GPU (MPS) for generation")
-                elif torch.cuda.is_available():
-                    device = torch.device("cuda")
-                    print("Using NVIDIA GPU for generation")
-                else:
-                    print("Warning: GPU requested but not available. Using CPU.")
-            model = model.to(device)
-            
-            # Generate response
-            if tokenizer:
-                response, _ = generate_with_tokenizer(
-                    model, tokenizer, prompt,
-                    max_length=args.length,
-                    temperature=args.temperature
-                )
-            else:
-                # Create a text generator with the loaded model
-                text_gen = TextGenerator(force_gpu=force_gpu)
-                text_gen.model = model
+            elif prompt.lower() == "settings":
+                try:
+                    length = int(input(f"Enter max tokens (current: {length}): ") or length)
+                    temperature = float(input(f"Enter temperature (current: {temperature}): ") or temperature)
+                    top_p = float(input(f"Enter top_p (current: {top_p}): ") or top_p)
+                    print(f"Updated settings: length={length}, temperature={temperature}, top_p={top_p}")
+                except ValueError:
+                    print("Invalid value entered. Settings unchanged.")
+                continue
                 
-                response = text_gen.generate(
-                    initial_str=prompt, 
-                    pred_len=args.length,
-                    temperature=args.temperature
-                )
+            elif prompt.lower() == "gpu":
+                print("Enforcing GPU usage...")
+                # Force CUDA device
+                device = force_cuda_device()
+                
+                # Move model to device explicitly
+                if hasattr(model, 'to') and device.type != 'cpu':
+                    model = model.to(device)
+                    
+                print(f"Device after GPU enforcement: {device}")
+                continue
+                
+            # Generate text or code
+            start_time = time.time()
             
-            print("\nGenerated response:")
-            print(response)
+            # Enhanced prompt analysis for better generation
+            enhanced_prompt = analyze_prompt(prompt) if hasattr(args, 'enhance_prompts') and args.enhance_prompts else prompt
+            
+            if enhanced_prompt != prompt:
+                print("\nUsing enhanced prompt:")
+                print("-" * 40)
+                print(enhanced_prompt)
+                print("-" * 40)
+            
+            # Generate with progress indication
+            print("Generating...", end="", flush=True)
+            generated_text = generate_func(enhanced_prompt, length, temperature)
+            end_time = time.time()
+            
+            # Print generation time
+            print(f" Done (took {end_time - start_time:.2f}s)")
+            
+            # Print generated text
+            print("\nGenerated Output:")
+            print("-" * 80)
+            print(generated_text)
+            print("-" * 80)
+            
+            # Offer to save the generated text
+            save_option = input("Save this generated text? (y/n): ")
+            if save_option.lower() == 'y':
+                save_name = input("Enter filename (or press Enter for auto-generated name): ")
+                
+                if not save_name:
+                    # Use first few words of prompt as filename
+                    save_name = "_".join(prompt.split()[:5]).replace("/", "_")
+                    save_name = f"{save_name}_{int(time.time())}"
+                
+                # Ensure the filename has the right extension
+                if model_type == "code" and not any(save_name.endswith(ext) for ext in ['.py', '.js', '.cpp', '.c', '.java']):
+                    save_name += '.py'  # Default to Python for code
+                elif not save_name.endswith('.txt'):
+                    save_name += '.txt'
+                
+                # Create outputs directory if it doesn't exist
+                os.makedirs("outputs", exist_ok=True)
+                
+                # Save the generated text
+                with open(f"outputs/{save_name}", 'w') as f:
+                    f.write(generated_text)
+                
+                print(f"Saved to outputs/{save_name}")
             
         except KeyboardInterrupt:
+            print("\nExiting interactive mode")
             break
         except Exception as e:
-            print(f"Error generating response: {e}")
+            print(f"Error during generation: {str(e)}")
 
 def split_data(data: Dict[str, Any], eval_split: float = 0.2) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """Split data into training and evaluation sets"""
