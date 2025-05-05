@@ -751,24 +751,46 @@ ASSISTANT: I'm a software engineer during the week. But on weekends, I play guit
         Convert token IDs back to text
         
         Args:
-            tokens: List of token IDs
+            tokens: List of token IDs (may be nested)
             
         Returns:
             Decoded text string
         """
+        # Handle nested lists by flattening
+        flat_tokens = []
+        def flatten(items):
+            for item in items:
+                if isinstance(item, list):
+                    flatten(item)
+                else:
+                    flat_tokens.append(item)
+                    
+        # Flatten tokens if it's a nested list
+        if isinstance(tokens, list):
+            if tokens and isinstance(tokens[0], list):
+                flatten(tokens)
+            else:
+                flat_tokens = tokens
+        else:
+            flat_tokens = [tokens]  # Handle single token case
+            
+        # Now decode the flattened tokens
         if hasattr(self, 'text_generator') and hasattr(self.text_generator, 'index_to_char'):
             # Use the text generator's mapping
-            return ''.join(self.text_generator.index_to_char.get(token, "<UNK>") for token in tokens)
+            return ''.join(self.text_generator.index_to_char.get(token, "<UNK>") for token in flat_tokens)
         
         # If we have a tokenizer with a decode method (HuggingFace style)
         if hasattr(self, 'tokenizer') and hasattr(self.tokenizer, 'decode'):
-            return self.tokenizer.decode(tokens)
+            try:
+                return self.tokenizer.decode(flat_tokens)
+            except Exception as e:
+                return f"<Error decoding tokens: {str(e)}>"
             
         # Fallback: try to interpret as character codes
         try:
-            return ''.join(chr(token) if 0 <= token <= 0x10FFFF else "<UNK>" for token in tokens)
-        except:
-            return f"<Unable to decode tokens: {tokens[:10]}...>"
+            return ''.join(chr(token) if 0 <= token <= 0x10FFFF else "<UNK>" for token in flat_tokens)
+        except Exception as e:
+            return f"<Unable to decode tokens: {flat_tokens[:10]}... Error: {str(e)}>"
     
     def save_tokenized_data(self, data: Dict[str, Any], output_dir: str, dataset_name: str):
         """
