@@ -1147,6 +1147,297 @@ def train_text_model(
     return model, tokenizer, training_args
 
 
+def train_cnn_text_model(
+    dataset: Union[str, List[str]],
+    model_name_or_path: str = "distilgpt2",
+    batch_size: int = 2,
+    epochs: int = 3,
+    learning_rate: float = 3e-5,
+    weight_decay: float = 0.01,
+    max_length: int = 512,
+    output_dir: str = "models/text_gen",
+    eval_metrics_dir: str = "metrics",
+    dataset_subset: Optional[str] = None,
+    max_samples: Optional[int] = None,
+    evaluation_strategy: str = "epoch",
+    save_strategy: str = "epoch",
+    logging_steps: int = 100,
+    eval_steps: Optional[int] = None,
+    visualize_metrics: bool = False,
+    cnn_layers: int = 2,
+    cnn_kernel_sizes: List[int] = None,
+    cnn_dropout: float = 0.1,
+    gradient_accumulation_steps: int = 8,
+    fp16: bool = False,
+    bf16: bool = False,
+    temperature: float = 1.0,
+    resume_from_checkpoint: Union[bool, str] = False,
+    sync_to_gdrive: bool = True,
+    cache_dir: Optional[str] = None,
+) -> tuple:
+    """
+    Train a CNN-enhanced text generation model
+    
+    Args:
+        dataset: Dataset name or list of dataset names
+        model_name_or_path: Base transformer model name or path
+        batch_size: Training batch size
+        epochs: Number of training epochs
+        learning_rate: Learning rate
+        weight_decay: Weight decay
+        max_length: Maximum sequence length
+        output_dir: Directory to save the model
+        eval_metrics_dir: Directory to save evaluation metrics
+        dataset_subset: Optional subset for specific datasets
+        max_samples: Maximum number of samples to load from each dataset
+        evaluation_strategy: Evaluation strategy (epoch, steps)
+        save_strategy: Save strategy (epoch, steps)
+        logging_steps: Logging steps
+        eval_steps: Evaluation steps (if evaluation_strategy is steps)
+        visualize_metrics: Whether to visualize metrics
+        cnn_layers: Number of CNN layers to use
+        cnn_kernel_sizes: Kernel sizes for CNN layers
+        cnn_dropout: Dropout rate for CNN layers
+        gradient_accumulation_steps: Gradient accumulation steps
+        fp16: Whether to use mixed precision (fp16)
+        bf16: Whether to use mixed precision (bf16)
+        temperature: Temperature for generation
+        resume_from_checkpoint: Resume from checkpoint
+        sync_to_gdrive: Whether to sync to Google Drive
+        cache_dir: Directory to cache models and datasets
+        
+    Returns:
+        Trained model, tokenizer, training metrics
+    """
+    # CRITICAL FIX: Ensure GPU usage for all operations
+    import os
+    import torch
+    import gc
+    import math
+    from datetime import datetime
+    
+    # Force CUDA to be visible
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+    
+    # Set default kernel sizes if None
+    if cnn_kernel_sizes is None:
+        cnn_kernel_sizes = [3, 5, 7]
+    
+    # Create a seed for reproducibility
+    torch.manual_seed(42)
+    
+    # Check for CUDA
+    if torch.cuda.is_available():
+        # Use CUDA for all operations
+        torch.cuda.manual_seed(42)
+        torch.cuda.manual_seed_all(42)
+        
+        # Force CUDA as default tensor type
+        torch.set_default_tensor_type('torch.cuda.FloatTensor')
+        
+        # Set default device in PyTorch 2.0+
+        if hasattr(torch, 'set_default_device'):
+            torch.set_default_device('cuda')
+        
+        # Create a dummy tensor to ensure CUDA is initialized
+        _ = torch.zeros(1, device="cuda")
+        
+        # Enable cuDNN benchmark for better performance
+        torch.backends.cudnn.benchmark = True
+        
+        print(f"Using CUDA GPU for CNN text generation: {torch.cuda.get_device_name(0)}")
+        
+        # Log memory available
+        memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+        print(f"GPU Memory: {memory_gb:.2f} GB")
+        
+        # Apply RTX5000-specific optimizations if detected
+        gpu_name = torch.cuda.get_device_name(0)
+        if "RTX5000" in gpu_name or "RTX 5000" in gpu_name:
+            print(f"RTX5000 GPU detected - applying CNN-specific optimizations")
+            # Reduce number of CNN layers if on RTX5000 to save memory
+            if cnn_layers > 2 and batch_size > 1:
+                print(f"Reducing CNN layers from {cnn_layers} to 2 for RTX5000")
+                cnn_layers = 2
+    else:
+        print("Warning: No GPU detected. Processing will be slow on CPU.")
+    
+    # Import necessary modules
+    from pathlib import Path
+    from .text_generator import CNNTextGenerator, create_cnn_text_generator
+    from .unified_dataset_handler import UnifiedDatasetHandler
+    
+    # Create output directories
+    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(eval_metrics_dir, exist_ok=True)
+    
+    # Initialize dataset handler
+    dataset_handler = UnifiedDatasetHandler(
+        dataset_name=None,
+        cache_dir=cache_dir
+    )
+    
+    # Handle multiple datasets
+    if isinstance(dataset, str) and ',' in dataset:
+        dataset_names = dataset.split(',')
+        print(f"Using multiple datasets for CNN-enhanced model: {dataset_names}")
+        combined_dataset = None
+        
+        for dataset_name in dataset_names:
+            dataset_name = dataset_name.strip()
+            print(f"\n{'='*50}\nTraining CNN text model on {dataset_name} dataset\n{'='*50}")
+            
+            # Load single dataset
+            current_dataset = dataset_handler.load_dataset(
+                dataset_name=dataset_name,
+                split="train",
+                max_samples=max_samples,
+                subset=dataset_subset,
+                cache_dir=cache_dir,
+                use_cache=True
+            )
+            
+            # Combine datasets (simple concatenation for CNN model)
+            if combined_dataset is None:
+                combined_dataset = current_dataset
+            else:
+                if "batches" in combined_dataset and "batches" in current_dataset:
+                    combined_dataset["batches"].extend(current_dataset["batches"])
+    else:
+        # Single dataset
+        dataset_name = dataset
+        print(f"\n{'='*50}\nTraining CNN Text Model on {dataset} dataset\n{'='*50}")
+        combined_dataset = dataset_handler.load_dataset(
+            dataset_name=dataset,
+            split="train",
+            max_samples=max_samples,
+            subset=dataset_subset,
+            cache_dir=cache_dir,
+            use_cache=True
+        )
+    
+    # Initialize CNN-enhanced text generator
+    print(f"Initializing CNN text generator with {cnn_layers} CNN layers")
+    model = create_cnn_text_generator(
+        model_name=model_name_or_path,
+        force_gpu=True,
+        cnn_layers=cnn_layers
+    )
+    
+    # Set model parameters
+    model.cnn_kernel_sizes = cnn_kernel_sizes[:cnn_layers]
+    model.cnn_dropout = cnn_dropout
+    
+    # Re-initialize the model with updated parameters
+    model._initialize_model(model_name_or_path)
+    
+    # Set optimizer with appropriate learning rate
+    model.optimizer = torch.optim.AdamW(
+        list(model.cnn_layers_list.parameters()) + 
+        list(model.adapter.parameters()) + 
+        list(model.base_model.parameters()),
+        lr=learning_rate,
+        weight_decay=weight_decay
+    )
+    
+    # Print effective batch size information
+    print(f"Using batch size {batch_size} with gradient accumulation steps {gradient_accumulation_steps}")
+    print(f"Effective batch size: {batch_size * gradient_accumulation_steps}")
+    
+    # Setup checkpoint directory
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    checkpoint_dir = os.path.join(output_dir, f"cnn_{Path(model_name_or_path).name}_{timestamp}")
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    
+    # Train the model
+    print(f"Starting CNN-enhanced model training for {epochs} epochs...")
+    try:
+        # Clear GPU cache before training
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            gc.collect()  # Force garbage collection
+        
+        # Track metrics
+        metrics = {
+            'loss': [],
+            'val_loss': [],
+            'perplexity': []
+        }
+        
+        # Train the model
+        losses = model.train(
+            combined_dataset,
+            epochs=epochs,
+            gradient_accumulation_steps=gradient_accumulation_steps
+        )
+        
+        # Store training metrics
+        metrics['loss'] = losses
+        metrics['perplexity'] = [min(math.exp(loss), 10000) for loss in losses]  # Cap at 10000 to avoid overflow
+        
+        # Save the model
+        model_path = os.path.join(checkpoint_dir, "cnn_model.pt")
+        model.save_model(model_path)
+        
+        # Sync to Google Drive if requested
+        if sync_to_gdrive:
+            try:
+                # Import directly to avoid circular imports
+                from src.generative_ai_module.google_drive_storage import sync_directory_to_gdrive
+                print(f"Syncing model to Google Drive...")
+                sync_directory_to_gdrive(
+                    local_dir=checkpoint_dir,
+                    remote_dir=f"Jarvis_AI_Assistant/models/cnn_models/{Path(model_name_or_path).name}_{timestamp}"
+                )
+                print(f"Model synced to Google Drive successfully")
+            except Exception as e:
+                print(f"Error syncing to Google Drive: {e}")
+        
+        # Visualize metrics if requested
+        if visualize_metrics:
+            try:
+                # Import directly to avoid circular imports
+                from src.generative_ai_module.evaluation_metrics import visualize_training_metrics
+                
+                # Visualize metrics
+                visualize_training_metrics(
+                    metrics=metrics,
+                    output_dir=eval_metrics_dir,
+                    title=f"CNN Model Training Metrics for {model_name_or_path} on {dataset}"
+                )
+                
+                # Sync metrics to Google Drive if requested
+                if sync_to_gdrive:
+                    try:
+                        from src.generative_ai_module.google_drive_storage import sync_directory_to_gdrive
+                        print(f"Syncing metrics to Google Drive...")
+                        sync_directory_to_gdrive(
+                            local_dir=eval_metrics_dir,
+                            remote_dir=f"Jarvis_AI_Assistant/metrics/cnn_models"
+                        )
+                    except Exception as e:
+                        print(f"Error syncing metrics to Google Drive: {e}")
+            except Exception as e:
+                print(f"Error visualizing metrics: {e}")
+    
+    except Exception as e:
+        print(f"Error during CNN model training: {e}")
+        # Try to save the model even if training failed
+        try:
+            model_path = os.path.join(checkpoint_dir, "cnn_model_partial.pt")
+            model.save_model(model_path)
+            print(f"Partially trained model saved to {model_path}")
+        except:
+            pass
+        
+        # Return None for the model to indicate failure
+        return None, model.tokenizer, None
+    
+    # Return the model, tokenizer, and metrics
+    return model, model.tokenizer, metrics
+
+
 def train_code_model(args, force_gpu: bool = True):
     """Train DeepSeek-Coder model for code generation"""
     print("\n===== Training DeepSeek-Coder Model =====")
