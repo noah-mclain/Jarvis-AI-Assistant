@@ -216,6 +216,9 @@ class UnifiedDatasetHandler:
         self.dataset_name = dataset_name
         self.dataset_path = dataset_path
         
+        # Set up class-specific logger
+        self.logger = logging.getLogger("UnifiedDatasetHandler")
+        
         # Use the storage path utility for consistent paths and ensure directories exist
         self.output_dir = output_dir or ensure_directory_exists("datasets", "processed")
         self.cache_dir = cache_dir or ensure_directory_exists("datasets", "cache")

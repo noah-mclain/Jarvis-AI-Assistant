@@ -202,6 +202,7 @@ from typing import Dict, List, Any, Tuple, Optional, Union
 from tqdm import tqdm
 import math
 import tempfile
+import traceback
 
 # Force Paperspace environment to be True
 # This replaces the is_paperspace_environment() function call with a hardcoded True
@@ -557,6 +558,34 @@ def train_text_model(
         # Create a dummy tensor to ensure CUDA is initialized
         _ = torch.zeros(1, device="cuda")
         
+        # Critical fix: Override tensor device placement to force GPU usage
+        # Monkey-patch the device property to ensure models always use CUDA
+        original_to = torch.Tensor.to
+        def force_cuda_to(self, *args, **kwargs):
+            # Extract device from args or kwargs
+            device = None
+            if args and isinstance(args[0], (torch.device, str)):
+                device = args[0]
+            elif 'device' in kwargs:
+                device = kwargs['device']
+                
+            # If device is explicitly set to CPU and this isn't a generator op, 
+            # override to CUDA if needed for models but not for generators
+            if device == 'cpu' and not self.is_sparse and self.dim() > 0:
+                # Check if this is a generator operation
+                stack_str = ''.join(traceback.format_stack())
+                if 'random_split' not in stack_str and 'generator' not in stack_str:
+                    # This is likely a model tensor, force CUDA
+                    args = ('cuda',) + args[1:] if args else args
+                    if 'device' in kwargs:
+                        kwargs['device'] = 'cuda'
+            
+            # Call original implementation
+            return original_to(self, *args, **kwargs)
+            
+        # Apply the patch cautiously - commented out to avoid any potential issues
+        # torch.Tensor.to = force_cuda_to
+        
         print(f"Using CUDA GPU for text generation: {torch.cuda.get_device_name(0)}")
     elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
         # Use MPS (Apple Silicon) if available
@@ -686,18 +715,44 @@ def train_text_model(
     
     # CRITICAL FIX: Ensure we always use CPU generators for data operations
     # This avoids the "Expected a 'cuda' device type for generator but found 'cpu'" error
+    print("Applying critical fix to ensure all dataset operations use CPU generators")
+    
+    # 1. Patch torch.randperm to always use CPU device regardless of the generator's device
+    original_randperm = torch.randperm
+    def patched_randperm(n, *, dtype=None, layout=None, device=None, requires_grad=False, pin_memory=False, generator=None):
+        # Always use CPU for the initial operation, then move to the requested device if needed
+        if generator is not None and hasattr(generator, 'device') and generator.device.type != 'cpu':
+            # Create a CPU generator with the same seed
+            cpu_generator = torch.Generator().manual_seed(generator.initial_seed())
+            generator = cpu_generator
+            
+        # Force CPU device for the randperm operation
+        result = original_randperm(n, dtype=dtype, layout=layout, device='cpu', 
+                                  requires_grad=requires_grad, pin_memory=pin_memory, 
+                                  generator=generator)
+        
+        # Move to the requested device if specified
+        if device is not None and device != 'cpu':
+            result = result.to(device)
+            
+        return result
+        
+    # Apply the patch
+    torch.randperm = patched_randperm
+    
+    # 2. Patch DataLoader to ensure it always uses CPU generators
     torch.utils.data.dataloader._DataLoader._DataLoader__initialized = False
     def force_cpu_generator_for_sampler(loader):
         """Force the data loader to use CPU generators for samplers"""
         if hasattr(loader, 'generator') and loader.generator is not None:
-            if str(loader.generator.device) != 'cpu':
+            if hasattr(loader.generator, 'device') and str(loader.generator.device) != 'cpu':
                 # Create a CPU generator with same seed
                 seed = loader.generator.initial_seed()
                 loader.generator = torch.Generator().manual_seed(seed)
                 
         # Also patch any existing samplers
         if hasattr(loader, 'sampler') and hasattr(loader.sampler, 'generator'):
-            if loader.sampler.generator is not None and str(loader.sampler.generator.device) != 'cpu':
+            if loader.sampler.generator is not None and hasattr(loader.sampler.generator, 'device') and str(loader.sampler.generator.device) != 'cpu':
                 seed = loader.sampler.generator.initial_seed()
                 loader.sampler.generator = torch.Generator().manual_seed(seed)
     
@@ -707,7 +762,7 @@ def train_text_model(
         args_dict, kwargs_dict = original_init_args(self, *args, **kwargs)
         # Force CPU generator
         if 'generator' in kwargs_dict and kwargs_dict['generator'] is not None:
-            if str(kwargs_dict['generator'].device) != 'cpu':
+            if hasattr(kwargs_dict['generator'], 'device') and str(kwargs_dict['generator'].device) != 'cpu':
                 seed = kwargs_dict['generator'].initial_seed()
                 kwargs_dict['generator'] = torch.Generator().manual_seed(seed)
         return args_dict, kwargs_dict
@@ -715,6 +770,23 @@ def train_text_model(
     # Apply the patch
     torch.utils.data.dataloader._DataLoader._data_loader_init_args_and_kwargs = patched_init_args
     torch.utils.data.dataloader._DataLoader._DataLoader__initialized = True
+    
+    # 3. Override random_split to always use CPU generators
+    original_random_split = torch.utils.data.random_split
+    def safe_random_split(dataset, lengths, generator=None):
+        """Ensure random_split always uses a CPU generator"""
+        # Always use a CPU generator
+        if generator is None:
+            cpu_generator = torch.Generator().manual_seed(42)
+        elif hasattr(generator, 'device') and generator.device.type != 'cpu':
+            cpu_generator = torch.Generator().manual_seed(generator.initial_seed())
+        else:
+            cpu_generator = generator
+            
+        return original_random_split(dataset, lengths, generator=cpu_generator)
+    
+    # Apply the patch
+    torch.utils.data.random_split = safe_random_split
     
     # Setup training arguments
     training_args = TrainingArguments(
