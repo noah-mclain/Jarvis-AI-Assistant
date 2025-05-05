@@ -219,9 +219,12 @@ class UnifiedDatasetHandler:
         # Use the storage path utility for consistent paths and ensure directories exist
         self.output_dir = output_dir or ensure_directory_exists("datasets", "processed")
         self.cache_dir = cache_dir or ensure_directory_exists("datasets", "cache")
+        self.data_dir = os.path.dirname(self.cache_dir)  # Set data_dir as parent of cache_dir
         
         self.dataset = None
         self.tokenizer = None
+        self.max_length = 1024  # Default value
+        self.batch_size = 32  # Default value
         
         # Try to sync from Google Drive on initialization to get latest datasets
         if dataset_path is None and dataset_name is None and is_paperspace_environment():

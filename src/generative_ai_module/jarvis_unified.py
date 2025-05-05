@@ -10,16 +10,14 @@ import os
 import sys
 import json
 import time
-import torch
-import random
+import glob
 import logging
+import datetime
+from typing import Dict, List, Tuple, Optional, Union, Any, Set
+import random
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import Dict, List, Any, Optional, Union, Tuple
-from pathlib import Path
-from datetime import datetime
-from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader, random_split
 from transformers import (
     AutoTokenizer, 
@@ -191,7 +189,7 @@ class ConversationMemory:
         memory_data = {
             "exchanges": self.exchanges,
             "user_preferences": self.user_preferences,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.datetime.now().isoformat()
         }
         
         try:
@@ -602,10 +600,14 @@ class JarvisAI:
                 
                 # Initialize unified dataset handler
                 dataset_handler = UnifiedDatasetHandler(
-                    tokenizer=tokenizer,
-                    max_length=self.default_seq_length,
-                    batch_size=self.default_batch_size
+                    dataset_name=dataset_name,
+                    cache_dir=self.models_dir
                 )
+                
+                # Add tokenizer and parameters as properties
+                dataset_handler.tokenizer = tokenizer
+                dataset_handler.max_length = self.default_seq_length
+                dataset_handler.batch_size = self.default_batch_size
                 
                 logger.info(f"Loading HuggingFace dataset: {dataset_name}")
                 
@@ -625,7 +627,8 @@ class JarvisAI:
                     # Split dataset
                     splits = train_dataset.train_test_split(
                         test_size=validation_split + test_split,
-                        shuffle=True
+                        shuffle=True,
+                        seed=42  # Use fixed seed
                     )
                     train_dataset = splits["train"]
                     
@@ -634,7 +637,8 @@ class JarvisAI:
                         test_val_ratio = test_split / (validation_split + test_split)
                         val_test_splits = splits["test"].train_test_split(
                             test_size=test_val_ratio,
-                            shuffle=True
+                            shuffle=True,
+                            seed=43  # Use a different fixed seed
                         )
                         val_dataset = val_test_splits["train"]
                         test_dataset = val_test_splits["test"]
@@ -700,9 +704,13 @@ class JarvisAI:
         test_size = int(len(full_dataset) * test_split)
         train_size = len(full_dataset) - val_size - test_size
         
+        # Create a CPU generator for random_split to avoid CUDA device errors
+        generator = torch.Generator().manual_seed(42)
+        
         train_dataset, val_dataset, test_dataset = random_split(
             full_dataset, 
-            [train_size, val_size, test_size]
+            [train_size, val_size, test_size],
+            generator=generator
         )
         
         logger.info(f"Dataset split: {train_size} train, {val_size} validation, {test_size} test")
