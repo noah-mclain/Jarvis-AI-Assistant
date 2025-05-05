@@ -2423,22 +2423,36 @@ def main():
             print(f"\nSuccessfully trained text model!")
             print(f"Model saved to: {args.output_dir}")
     elif args.model_type == 'code':
-        from .code_generator import train_code_model
+        # Fix: Call the code model training directly without importing from code_generator
+        # Import code generator and call its methods directly
+        from .code_generator import CodeGenerator
         
-        train_code_model(
-            dataset=args.dataset,
-            model_name_or_path=args.model_name_or_path,
-            batch_size=args.batch_size,
-            epochs=args.epochs,
-            learning_rate=args.learning_rate,
-            weight_decay=args.weight_decay,
-            max_length=args.max_length,
-            output_dir=args.output_dir,
-            eval_metrics_dir=args.eval_metrics_dir,
-            max_samples=args.max_samples,
-            force_gpu=True  # Always force GPU for code models
+        # Create a code generator instance
+        code_gen = CodeGenerator(
+            use_deepseek=True,  # Always use DeepSeek for code
+            load_in_8bit=not args.use_4bit,  # If 4-bit requested, don't use 8-bit
+            load_in_4bit=args.use_4bit,
+            force_gpu=args.force_gpu
         )
-    
+        
+        # Create output directory if it doesn't exist
+        os.makedirs(args.output_dir, exist_ok=True)
+        
+        # Call fine_tune_deepseek directly
+        code_gen.fine_tune_deepseek(
+            train_dataset=args.dataset,
+            output_dir=args.output_dir,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            sequence_length=args.max_length,
+            learning_rate=args.learning_rate,
+            warmup_steps=args.warmup_steps if hasattr(args, 'warmup_steps') else 100,
+            max_samples=args.max_samples,
+            subset=args.dataset_subset if hasattr(args, 'dataset_subset') else None,
+            all_subsets=hasattr(args, 'all_subsets') and args.all_subsets
+        )
+        
+        logger.info(f"Code model training completed. Model saved to {args.output_dir}")
     else:
         logger.error(f"Model type '{args.model_type}' not implemented yet.")
         return

@@ -69,46 +69,75 @@ case $MODEL_CHOICE in
             --save_strategy steps \
             --logging_steps 50 \
             --output_dir Jarvis_AI_Assistant/models/text \
-            --visualize_metrics
+            --visualize_metrics \
+            --warmup_steps 100 \
+            --use_unsloth \
+            --sequence_packing \
+            --force_gpu
         ;;
     2)
-        echo "Starting optimized CODE model training..."
-        python -m src.generative_ai_module.train_models \
-            --model_type code \
-            --dataset "codeparrot/github-code" \
-            --model_name_or_path codeparrot/codeparrot-small \
-            --batch_size 2 \
-            --max_length 2048 \
-            --gradient_accumulation_steps 16 \
-            --max_samples 80000 \
-            --learning_rate 2e-5 \
-            --weight_decay 0.1 \
-            --use_4bit \
-            --use_flash_attention_2 \
-            --gradient_checkpointing \
-            --optim adamw_bnb_8bit \
-            --eval_steps 1000 \
-            --save_steps 2000 \
+        echo "Starting optimized CODE model training with DeepSeek + Unsloth..."
+        # First approach - Direct finetune_deepseek.py script with maximum optimizations
+        python -m src.generative_ai_module.finetune_deepseek \
             --epochs 3 \
-            --evaluation_strategy steps \
-            --save_strategy steps \
-            --logging_steps 100 \
-            --pad_token_id 50256 \
-            --fim_rate 0.5 \
-            --num_workers 4 \
-            --output_dir Jarvis_AI_Assistant/models/code \
-            --visualize_metrics
+            --batch-size 1 \
+            --max-samples 80000 \
+            --all-subsets \
+            --subset python \
+            --sequence-length 2048 \
+            --learning-rate 2e-5 \
+            --warmup-steps 100 \
+            --load-in-4bit \
+            --save-steps 2000 \
+            --save-total-limit 2 \
+            --use-unsloth \
+            --force-gpu \
+            --output-dir Jarvis_AI_Assistant/models/deepseek_finetuned \
+            --verbose \
+            --eval-split 0.1
+        
+        # Second approach (uncomment if the first one fails)
+        # This uses train_models.py with all optimizations
+        # echo "Alternatively trying code model training with train_models.py..."
+        # python -m src.generative_ai_module.train_models \
+        #     --model_type code \
+        #     --dataset "codeparrot/github-code" \
+        #     --model_name_or_path deepseek-ai/deepseek-coder-6.7b-instruct \
+        #     --batch_size 1 \
+        #     --max_length 2048 \
+        #     --gradient_accumulation_steps 16 \
+        #     --max_samples 80000 \
+        #     --learning_rate 2e-5 \
+        #     --weight_decay 0.1 \
+        #     --use_4bit \
+        #     --use_flash_attention_2 \
+        #     --gradient_checkpointing \
+        #     --optim adamw_bnb_8bit \
+        #     --eval_steps 1000 \
+        #     --save_steps 2000 \
+        #     --epochs 3 \
+        #     --evaluation_strategy steps \
+        #     --save_strategy steps \
+        #     --logging_steps 100 \
+        #     --output_dir Jarvis_AI_Assistant/models/code \
+        #     --visualize_metrics \
+        #     --warmup_steps 100 \
+        #     --force_gpu \
+        #     --pad_token_id 50256 \
+        #     --dataset_subset python \
+        #     --fim_rate 0.5 \
+        #     --use_unsloth
         ;;
     3)
-        echo "Starting CNN-enhanced TEXT model training..."
+        echo "Starting CNN-enhanced TEXT model training with 4 CNN layers..."
         python -m src.generative_ai_module.train_models \
             --model_type text \
             --use_cnn \
-            --cnn_layers 2 \
+            --cnn_layers 4 \
             --dataset "agie-ai/OpenAssistant-oasst1,teknium/GPTeacher-General-Instruct,google/Synthetic-Persona-Chat,euclaise/writingprompts" \
             --model_name_or_path distilgpt2 \
-            --batch_size 8 \
-            --gradient_accumulation_steps 4 \
+            --batch_size 6 \
+            --gradient_accumulation_steps 5 \
             --max_length 1024 \
             --max_samples 50000 \
             --learning_rate 3e-5 \
@@ -125,7 +154,10 @@ case $MODEL_CHOICE in
             --evaluation_strategy steps \
             --sequence_packing \
             --output_dir Jarvis_AI_Assistant/models \
-            --visualize_metrics
+            --visualize_metrics \
+            --warmup_steps 100 \
+            --use_unsloth \
+            --force_gpu
         ;;
     *)
         echo "Invalid choice. Exiting."
