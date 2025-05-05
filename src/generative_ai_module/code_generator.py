@@ -483,7 +483,7 @@ class CodeGenerator:
             gradient_accumulation_steps=8,    # Updated to 8 as requested
             gradient_checkpointing=use_gradient_checkpointing,  # Only enable for non-MPS devices
             # Disable distributed training on MPS 
-            local_rank=-1 if self.device.type == "mps" else training_args.local_rank if hasattr(training_args, 'local_rank') else -1,
+            local_rank=-1,  # Default to -1, meaning no distributed training
             # Use correct param for CPU/GPU
             use_cpu=self.device.type == "cpu",  # Use use_cpu instead of no_cuda
             # Additional checkpointing
