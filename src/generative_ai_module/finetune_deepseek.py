@@ -212,58 +212,78 @@ def parse_args():
     return parser.parse_args()
 
 def setup_environment(args):
-    """Setup training environment and reproducibility"""
-    # Set random seed
-    torch.manual_seed(args.seed)
+    """Set up the environment for fine-tuning, including GPU detection and memory optimizations"""
+    import torch
+    import datetime
+    import logging
+    import os
     
-    # Set environment variables for MPS (Apple Silicon)
-    if hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-        # Avoid offloading tensors to disk
-        os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0" 
-        # Increase memory allocation on MPS
-        os.environ["PYTORCH_MPS_ALLOCATOR_MEMPROFILE"] = "1"
-        # Better memory management for MPS
-        os.environ["PYTORCH_MPS_ACTIVE_MEMORY_MANAGER"] = "1"
-        # Disable distributed training for MPS
-        os.environ["LOCAL_RANK"] = "-1"
-        # Enable garbage collection more aggressively
-        import gc
-        gc.collect()
+    # Import utilities for GPU configuration
+    from src.generative_ai_module.utils import setup_gpu_for_training, force_cuda_device, is_paperspace_environment
+    
+    # Force GPU usage if requested
+    if args.gpu or args.force_gpu:
+        device, gpu_config = setup_gpu_for_training(force_gpu=True)
         
-    # Configure device
-    if args.cpu:
-        os.environ["CUDA_VISIBLE_DEVICES"] = ""
-        device = torch.device("cpu")
-        print("Using CPU for training (forced by --cpu flag)")
-    elif args.force_gpu:
-        # Check for Apple Silicon MPS support
-        if hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        # Apply RTX5000-specific configurations (will only affect RTX5000 on Paperspace)
+        if is_paperspace_environment() and torch.cuda.is_available():
+            gpu_name = torch.cuda.get_device_name(0)
+            if "RTX5000" in gpu_name or "RTX 5000" in gpu_name:
+                # Apply the recommended optimizations for RTX5000
+                args.load_in_4bit = True  # Force 4-bit quantization for RTX5000
+                
+                # Set environment variables
+                os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+                os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+                
+                # Adjust other parameters for optimal RTX5000 performance
+                if not hasattr(args, 'gradient_accumulation_steps'):
+                    args.gradient_accumulation_steps = gpu_config.get("gradient_accumulation_steps", 8)
+                
+                # Check for specific training optimizations for RTX5000
+                if hasattr(torch.cuda, 'get_device_properties'):
+                    props = torch.cuda.get_device_properties(0)
+                    memory_gb = props.total_memory / (1024**3)
+                    
+                    # Memory-based optimizations
+                    if memory_gb < 17:  # RTX5000 has 16GB VRAM
+                        print(f"Optimizing for RTX5000 with {memory_gb:.2f}GB VRAM")
+                        # Ensure small batch size for 16GB VRAM
+                        if args.batch_size > 2:
+                            print(f"Reducing batch size from {args.batch_size} to 1 for RTX5000")
+                            args.batch_size = 1
+        
+        return device
+    
+    # If not forcing GPU, use normal device detection
+    if hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        if args.cpu:
+            device = torch.device("cpu")
+            print("Manually selected CPU despite MPS being available")
+        else:
             device = torch.device("mps")
             print("Using Apple Silicon GPU via MPS backend")
             
-            # Set Apple Silicon specific optimizations
-            print("Applying Apple Silicon memory optimizations...")
-            # Force garbage collection
-            import gc
-            gc.collect()
-            # Empty MPS cache if possible
+            # Clear any existing MPS cache to free up memory
             if hasattr(torch.mps, 'empty_cache'):
                 torch.mps.empty_cache()
             
             # Reduce default tensor size to save memory
             torch.set_default_tensor_type(torch.FloatTensor)
-        elif torch.cuda.is_available():
-            device = torch.device("cuda")
-            print(f"Using NVIDIA GPU: {torch.cuda.get_device_name(0)}")
-        else:
-            device = torch.device("cpu")
-            print("Warning: GPU requested but neither MPS nor CUDA available. Falling back to CPU.")
-    elif hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-        device = torch.device("mps")
-        print("Using Apple Silicon GPU via MPS backend")
     elif torch.cuda.is_available():
-        device = torch.device("cuda")
-        print(f"Using NVIDIA GPU: {torch.cuda.get_device_name(0)}")
+        if args.cpu:
+            device = torch.device("cpu")
+            print("Manually selected CPU despite CUDA being available")
+        else:
+            device = torch.device("cuda")
+            gpu_name = torch.cuda.get_device_name(0)
+            print(f"Using NVIDIA GPU: {gpu_name}")
+            
+            # Check for Paperspace RTX5000 again
+            if is_paperspace_environment() and ("RTX5000" in gpu_name or "RTX 5000" in gpu_name):
+                print("RTX 5000 GPU detected - applying optimized settings")
+                args.load_in_4bit = True  # Force 4-bit quantization for RTX5000
+                os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     else:
         device = torch.device("cpu")
         print("Using CPU for training (no GPU available)")

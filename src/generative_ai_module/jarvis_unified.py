@@ -44,47 +44,60 @@ logging.basicConfig(
 )
 logger = logging.getLogger("jarvis_unified")
 
-# Check for CUDA availability
-if torch.cuda.is_available():
-    device = torch.device("cuda")
-    logger.info(f"Using GPU: {torch.cuda.get_device_name(0)}")
-    logger.info(f"CUDA Version: {torch.version.cuda}")
-    logger.info(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
+# Import PyTorch if available
+try:
+    import torch
     
-    # Check for specific GPU types
-    gpu_name = torch.cuda.get_device_name(0).lower()
-    is_a100 = "a100" in gpu_name
-    is_rtx4000 = "rtx 4000" in gpu_name
-    is_rtx5000 = "rtx 5000" in gpu_name
-    is_paperspace = os.path.exists("/storage") or os.path.exists("/notebooks")
-    
-    if is_a100:
-        logger.info("A100 GPU detected - applying optimal settings")
-        # Export environment variables for optimal A100 performance
-        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:512"
-        os.environ["CUDA_LAUNCH_BLOCKING"] = "0"
-        os.environ["TOKENIZERS_PARALLELISM"] = "true"
-    elif is_rtx4000:
-        logger.info("RTX 4000 GPU detected - applying memory-optimized settings")
-        # Export environment variables for RTX4000 (less memory than A100)
-        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
-        os.environ["CUDA_LAUNCH_BLOCKING"] = "0"
-        os.environ["TOKENIZERS_PARALLELISM"] = "true"
-    elif is_rtx5000:
-        logger.info("RTX 5000 GPU detected - applying optimized settings")
-        # Export environment variables for RTX5000
-        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:256"
-        os.environ["CUDA_LAUNCH_BLOCKING"] = "0"
-        os.environ["TOKENIZERS_PARALLELISM"] = "true"
+    # Check for CUDA
+    if torch.cuda.is_available():
+        # Check for RTX5000 GPU
+        gpu_name = torch.cuda.get_device_name(0)
+        logger.info(f"Using GPU: {gpu_name}")
         
-    logger.info(f"BF16 support: {torch.cuda.is_bf16_supported()}")
-else:
-    device = torch.device("cpu")
-    is_a100 = False
-    is_rtx4000 = False
-    is_rtx5000 = False
-    is_paperspace = False
-    logger.warning("CUDA not available, using CPU")
+        # Get CUDA version for optimizations
+        cuda_version = torch.version.cuda if hasattr(torch.version, 'cuda') else "Unknown"
+        logger.info(f"CUDA Version: {cuda_version}")
+        
+        # Get GPU memory
+        if hasattr(torch.cuda, 'get_device_properties'):
+            props = torch.cuda.get_device_properties(0)
+            memory_gb = props.total_memory / (1024**3)
+            logger.info(f"GPU Memory: {memory_gb:.2f} GB")
+        
+        # Check for RTX5000 in Paperspace
+        if "RTX5000" in gpu_name or "RTX 5000" in gpu_name:
+            logger.info("RTX 5000 GPU detected - applying optimized settings")
+            
+            # Force GPU visibility
+            os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+            
+            # Memory optimization
+            os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+            os.environ["CUDA_LAUNCH_BLOCKING"] = "0"
+            
+            # Performance optimizations
+            torch.backends.cudnn.benchmark = True
+            
+            # Check for BF16 support (unlikely on RTX5000 but check anyway)
+            bf16_support = torch.cuda.is_bf16_supported() if hasattr(torch.cuda, 'is_bf16_supported') else False
+            logger.info(f"BF16 support: {bf16_support}")
+            
+            # Set default tensor type
+            torch.set_default_tensor_type(torch.cuda.FloatTensor)
+            
+            # Check for Unsloth optimizations
+            try:
+                import unsloth
+                logger.info("Unsloth optimizations available")
+            except ImportError:
+                pass
+    else:
+        logger.info("No GPU detected - using CPU")
+        
+except ImportError:
+    logger.warning("PyTorch not available. GPU optimization disabled.")
+except Exception as e:
+    logger.warning(f"Error during GPU initialization: {str(e)}")
 
 # Conditionally import FastLanguageModel from unsloth only when CUDA is available
 unsloth_available = False
@@ -296,7 +309,7 @@ class JarvisAI:
         self.gradient_accumulation_steps = gradient_accumulation_steps
         
         # Setup environment-specific paths
-        if is_paperspace and os.path.exists("/storage"):
+        if os.path.exists("/storage"):
             # Use Paperspace persistent storage if available
             default_storage = Path("/storage/Jarvis_AI_Assistant")
             self.models_dir = default_storage / "models" if models_dir == "models" else Path(models_dir)
@@ -310,19 +323,16 @@ class JarvisAI:
         
         # Set up precision based on device capabilities and hardware
         self.use_bf16 = torch.cuda.is_bf16_supported() if torch.cuda.is_available() else False
-        if is_rtx4000 or is_rtx5000:
+        if "RTX5000" in torch.cuda.get_device_name(0) or "RTX 5000" in torch.cuda.get_device_name(0):
             # RTX GPUs work better with FP16
             self.use_bf16 = False
             logger.info("Using FP16 precision for RTX GPU")
         
         # Set batch size based on GPU type for default values in train_models
-        if is_a100:
-            self.default_batch_size = 8  # A100 has plenty of memory
-            self.default_seq_length = 2048
-        elif is_rtx5000:
+        if "RTX5000" in torch.cuda.get_device_name(0) or "RTX 5000" in torch.cuda.get_device_name(0):
             self.default_batch_size = 4  # RTX5000 has less memory
             self.default_seq_length = 1024
-        elif is_rtx4000:
+        elif "RTX4000" in torch.cuda.get_device_name(0) or "RTX 4000" in torch.cuda.get_device_name(0):
             self.default_batch_size = 2  # RTX4000 has even less memory
             self.default_seq_length = 512
         else:
@@ -650,7 +660,7 @@ class JarvisAI:
         
         # Use default values if not specified
         if max_samples is None:
-            max_samples = 500 if is_a100 else 200 if is_rtx4000 else 300 if is_rtx5000 else 200
+            max_samples = 500 if "RTX5000" in torch.cuda.get_device_name(0) or "RTX 5000" in torch.cuda.get_device_name(0) else 200 if "RTX4000" in torch.cuda.get_device_name(0) or "RTX 4000" in torch.cuda.get_device_name(0) else 300 if torch.cuda.is_available() else 200
         
         if batch_size is None:
             batch_size = self.default_batch_size
@@ -783,7 +793,7 @@ class JarvisAI:
                         logger.error(f"Memory summary during OOM error: {memory_info}")
                     
                     # Provide suggestions based on GPU type
-                    if is_rtx4000:
+                    if "RTX4000" in torch.cuda.get_device_name(0) or "RTX 4000" in torch.cuda.get_device_name(0):
                         logger.error(
                             "RTX4000 GPU (8GB) encountered memory error. Try: \n"
                             "1. Reduce batch size to 1\n"
@@ -791,7 +801,7 @@ class JarvisAI:
                             "3. Reduce sequence_length to 512\n"
                             "4. Use a smaller model (e.g., deepseek-coder-1.3b)"
                         )
-                    elif is_rtx5000:
+                    elif "RTX5000" in torch.cuda.get_device_name(0) or "RTX 5000" in torch.cuda.get_device_name(0):
                         logger.error(
                             "RTX5000 GPU (16GB) encountered memory error. Try: \n"
                             "1. Reduce batch size to 2\n"

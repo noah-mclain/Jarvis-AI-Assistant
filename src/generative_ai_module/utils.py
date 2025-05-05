@@ -512,4 +512,143 @@ def process_text_with_spacy_or_fallback(text, nlp=None):
         "sentences": sentences,
         "minimal_mode": True  # Using basic mode
     }
+
+def setup_gpu_for_training(force_gpu=True):
+    """
+    Configure GPU usage for model training/inference, with special handling for RTX5000 GPU on Paperspace.
+    
+    Args:
+        force_gpu (bool): If True, will raise an error if GPU is not available when specifically requested
+        
+    Returns:
+        torch.device: The device to use for model training/inference
+        dict: Additional configuration parameters for specific GPU optimizations
+    """
+    import torch
+    import subprocess
+    import re
+    import logging
+    
+    logger = logging.getLogger("jarvis_unified")
+    
+    # Default optimization parameters
+    config = {
+        "use_fp16": False,
+        "use_bf16": False,
+        "use_4bit": True,  # Default to 4-bit for RTX5000
+        "gradient_checkpointing": True,
+        "gradient_accumulation_steps": 8,  # Default for RTX5000 with 16GB VRAM
+        "attention_implementation": "sdpa",  # Default for LLMs on newer GPUs
+    }
+    
+    # Check if CUDA is available
+    if not torch.cuda.is_available():
+        if force_gpu:
+            # Check if this is Paperspace and we're missing CUDA
+            if is_paperspace_environment():
+                logger.error("GPU requested but CUDA not available on Paperspace. This may indicate a configuration issue.")
+                # Try to get system GPU info through subprocess to diagnose
+                try:
+                    gpu_info = subprocess.check_output("nvidia-smi", shell=True).decode("utf-8")
+                    logger.error(f"GPU info from nvidia-smi: {gpu_info}")
+                except:
+                    logger.error("Couldn't get GPU info via nvidia-smi. NVIDIA drivers may not be installed correctly.")
+                
+                # Since user specifically requested RTX5000 enforcement, this is an error condition
+                raise RuntimeError("Failed to find CUDA GPU on Paperspace despite being requested.")
+            else:
+                logger.warning("GPU was requested but no CUDA device is available. Falling back to CPU.")
+                return torch.device("cpu"), config
+        else:
+            logger.info("No GPU available, using CPU.")
+            return torch.device("cpu"), config
+    
+    # If we reach here, CUDA is available. Now check for RTX5000 specifically
+    device = torch.device("cuda")
+    gpu_name = torch.cuda.get_device_name(0)
+    
+    # Check for RTX5000 in Paperspace environment
+    is_rtx5000 = "RTX5000" in gpu_name or "RTX 5000" in gpu_name
+    
+    # Get GPU memory
+    try:
+        gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+        logger.info(f"GPU Memory: {gpu_memory_gb:.2f} GB")
+    except:
+        gpu_memory_gb = None
+        logger.warning("Could not determine GPU memory size")
+    
+    # If this is Paperspace + RTX5000, apply specific optimizations
+    if is_paperspace_environment() and is_rtx5000:
+        # Log that we've detected the specific setup
+        logger.info(f"Using GPU: {gpu_name}")
+        
+        # Get CUDA version
+        cuda_version = torch.version.cuda if hasattr(torch.version, 'cuda') else "Unknown"
+        logger.info(f"CUDA Version: {cuda_version}")
+        
+        # RTX5000 has 16GB VRAM, optimize accordingly
+        logger.info("RTX 5000 GPU detected - applying optimized settings")
+        
+        # Check for BF16 support (not available on RTX5000 but check anyway for future compatibility)
+        bf16_support = torch.cuda.is_bf16_supported() if hasattr(torch.cuda, 'is_bf16_supported') else False
+        logger.info(f"BF16 support: {bf16_support}")
+        
+        config.update({
+            "use_fp16": True,         # Use FP16 precision
+            "use_bf16": bf16_support, # Use BF16 if supported
+            "use_4bit": True,         # Use 4-bit quantization for maximum memory efficiency
+            "attention_implementation": "flash_attention_2" if cuda_version >= "11.8" else "sdpa",
+            "gradient_accumulation_steps": 8,
+            "gradient_checkpointing": True,
+            "low_cpu_mem_usage": True
+        })
+        
+        # Set environment variables to optimize GPU memory usage
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+        os.environ["CUDA_LAUNCH_BLOCKING"] = "0"  # Better performance but less debugging info
+        
+        if "CUDA_VISIBLE_DEVICES" not in os.environ:
+            os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # Ensure GPU is visible
+            
+        # Log availability of Unsloth optimizations
+        try:
+            import unsloth
+            logger.info("Unsloth optimizations available")
+        except ImportError:
+            logger.info("Unsloth not available - consider installing for faster training")
+            
+    return device, config
+
+def force_cuda_device():
+    """
+    Force all PyTorch operations to use CUDA device if available,
+    with special handling for RTX5000 on Paperspace.
+    This is a simpler version of setup_gpu_for_training when 
+    you just need to ensure GPU usage without detailed configuration.
+    
+    Returns:
+        torch.device: The CUDA device if available, otherwise CPU
+    """
+    import torch
+    
+    # Check for CUDA availability
+    if torch.cuda.is_available():
+        # Get GPU info for logging
+        device = torch.device("cuda")
+        gpu_name = torch.cuda.get_device_name(0)
+        
+        # Set default device
+        torch.set_default_tensor_type('torch.cuda.FloatTensor')
+        
+        # Set environment variables 
+        if is_paperspace_environment() and ("RTX5000" in gpu_name or "RTX 5000" in gpu_name):
+            os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+            # Apply memory optimizations for Paperspace RTX5000
+            os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+            
+        return device
+    else:
+        # Return CPU device if CUDA not available
+        return torch.device("cpu")
     

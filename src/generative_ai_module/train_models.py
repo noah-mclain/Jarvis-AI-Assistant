@@ -1384,10 +1384,29 @@ def main():
     import logging
     import glob
     import os
+    import torch
     
     # Set up logging
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger(__name__)
+    
+    # Force GPU usage for RTX5000 on Paperspace
+    from .utils import setup_gpu_for_training, force_cuda_device, is_paperspace_environment
+    
+    # Apply GPU configuration at the start
+    device, gpu_config = setup_gpu_for_training(force_gpu=True)
+    
+    # Use strong GPU preferences for RTX5000
+    if is_paperspace_environment() and torch.cuda.is_available():
+        gpu_name = torch.cuda.get_device_name(0)
+        if "RTX5000" in gpu_name or "RTX 5000" in gpu_name:
+            logger.info(f"Using RTX5000 GPU for training with optimized settings")
+            # Set environment variables
+            os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+            os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+            
+            # These optimizations will be applied to all subsequent PyTorch operations
+            torch.backends.cudnn.benchmark = True  # May improve performance for fixed-size inputs
     
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Train a model on a specific dataset.')

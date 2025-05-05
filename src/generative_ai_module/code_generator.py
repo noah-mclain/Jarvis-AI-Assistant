@@ -11,6 +11,7 @@ import datetime
 import time
 from tqdm import tqdm
 import numpy as np
+from .utils import setup_gpu_for_training, force_cuda_device, is_paperspace_environment
 
 class CodeGenerator:
     def __init__(self, use_deepseek=False, load_in_8bit=True, load_in_4bit=False, force_gpu=False):
@@ -36,24 +37,43 @@ class CodeGenerator:
             
     def _get_device(self):
         """Determine the best available device (MPS for Apple Silicon, CUDA for NVIDIA, or CPU)"""
+        # Use the GPU utilities from utils.py to get the device
+        
         if self.force_gpu:
-            # Try to use MPS (Metal Performance Shaders) for Apple Silicon
-            if hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-                print("Using MPS (Apple Silicon GPU)")
-                return torch.device("mps")
-            # Fall back to CUDA if available
-            elif torch.cuda.is_available():
-                print(f"Using CUDA GPU: {torch.cuda.get_device_name(0)}")
-                return torch.device("cuda")
-            else:
-                print("Warning: GPU requested but neither MPS nor CUDA is available. Falling back to CPU.")
-                return torch.device("cpu")
-        elif hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            # Force GPU usage when requested specifically
+            try:
+                # Use setup_gpu_for_training for detailed configuration
+                device, gpu_config = setup_gpu_for_training(force_gpu=True)
+                
+                # Apply any RTX5000-specific configurations
+                if is_paperspace_environment() and torch.cuda.is_available():
+                    gpu_name = torch.cuda.get_device_name(0)
+                    if "RTX5000" in gpu_name or "RTX 5000" in gpu_name:
+                        # Save GPU configuration for later use in model loading
+                        self.gpu_config = gpu_config
+                
+                return device
+            except Exception as e:
+                print(f"Error setting up GPU: {e}")
+                print("Falling back to default device selection")
+        
+        # Fall back to normal device selection if the above fails
+        if hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
             print("Using MPS (Apple Silicon GPU)")
             return torch.device("mps")
         elif torch.cuda.is_available():
-            print(f"Using CUDA GPU: {torch.cuda.get_device_name(0)}")
-            return torch.device("cuda")
+            # If we're on CUDA, specifically check for RTX5000 on Paperspace
+            device = torch.device("cuda")
+            gpu_name = torch.cuda.get_device_name(0)
+            print(f"Using CUDA GPU: {gpu_name}")
+            
+            # Apply RTX5000-specific configurations if detected
+            if is_paperspace_environment() and ("RTX5000" in gpu_name or "RTX 5000" in gpu_name):
+                print("RTX 5000 GPU detected - applying optimized settings")
+                # Force GPU visibility
+                os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+            
+            return device
         else:
             print("Using CPU (no GPU available)")
             return torch.device("cpu")
