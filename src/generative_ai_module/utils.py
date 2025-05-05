@@ -690,39 +690,36 @@ def force_cuda_device():
     
     # Check for CUDA availability
     if torch.cuda.is_available():
-        # Get GPU info for logging
-        device = torch.device("cuda")
-        gpu_name = torch.cuda.get_device_name(0)
-        logger.info(f"CUDA device forced: {gpu_name}")
-        
-        # Set default device
-        torch.set_default_tensor_type('torch.cuda.FloatTensor')
-        
-        # In PyTorch 2.0+, also set the default device
-        if hasattr(torch, 'set_default_device'):
-            torch.set_default_device('cuda')
-        
-        if is_paperspace_environment() and ("RTX5000" in gpu_name or "RTX 5000" in gpu_name):
-            os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-            # Apply memory optimizations for Paperspace RTX5000
-            os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+        try:
+            # Modern approach (PyTorch 2.0+)
+            if hasattr(torch, 'set_default_device'):
+                torch.set_default_device('cuda')
+                logger.info("Using modern device setting approach (PyTorch 2.0+)")
+            else:
+                # Legacy approach - will show deprecation warnings
+                torch.set_default_tensor_type('torch.cuda.FloatTensor')
+                logger.info("Using legacy tensor type setting approach")
+                
+            # For model inference
+            device = torch.device('cuda')
             
-        return device
-    
-    # Try Apple Silicon as fallback
-    try:
-        if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-            logger.info("CUDA not available, but Apple Silicon GPU (MPS) is available. Using MPS.")
-            device = torch.device("mps")
+            # Get device properties for optimizations
+            device_props = torch.cuda.get_device_properties(0)
+            total_memory_gb = device_props.total_memory / (1024**3)
+            gpu_name = torch.cuda.get_device_name(0)
             
-            # For MPS backend, use regular float tensors
-            torch.set_default_tensor_type(torch.FloatTensor)
+            # Add to config
+            config = {
+                "gpu_memory": f"{total_memory_gb:.2f} GB",
+                "gpu_name": gpu_name,
+                "cuda_version": torch.version.cuda
+            }
             
-            return device
-    except Exception as e:
-        logger.warning(f"Error checking for MPS availability: {e}")
-    
-    # Last resort - use CPU but log a warning
-    logger.warning("No GPU available. Falling back to CPU, but performance will be significantly slower.")
-    return torch.device("cpu")
+            return device, config
+        except Exception as e:
+            logger.error(f"Error setting up CUDA device: {e}")
+            return torch.device("cpu"), {}
+    else:
+        logger.warning("No GPU available. Falling back to CPU.")
+        return torch.device("cpu"), {}
     

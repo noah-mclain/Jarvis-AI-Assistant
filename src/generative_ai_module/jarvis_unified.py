@@ -407,18 +407,23 @@ class TextDataset(Dataset):
         
         Args:
             texts: List of text samples
-            tokenizer: Tokenizer for encoding text
+            tokenizer: Tokenizer for encoding text or a dictionary of pre-tokenized inputs
             max_length: Maximum sequence length
         """
         # Force tensors to stay on CPU for DataLoader compatibility
         with torch.device('cpu'):
-            self.encodings = tokenizer(
-                texts, 
-                truncation=True, 
-                padding="max_length", 
-                max_length=max_length,
-                return_tensors="pt"
-            )
+            if callable(tokenizer):
+                # If tokenizer is a callable (like HuggingFace tokenizer)
+                self.encodings = tokenizer(
+                    texts, 
+                    truncation=True, 
+                    padding="max_length", 
+                    max_length=max_length,
+                    return_tensors="pt"
+                )
+            else:
+                # If tokenizer is already a dictionary of tokenized inputs
+                self.encodings = tokenizer
             
             # Explicitly ensure tensors are on CPU
             for key, val in self.encodings.items():
@@ -428,12 +433,19 @@ class TextDataset(Dataset):
     def __getitem__(self, idx):
         """Get encoded item by index."""
         item = {key: val[idx].clone() for key, val in self.encodings.items()}
-        item["labels"] = item["input_ids"].clone()
+        
+        # Add labels if not present (for causal language modeling)
+        if "labels" not in item and "input_ids" in item:
+            item["labels"] = item["input_ids"].clone()
+        
         return item
     
     def __len__(self):
         """Get dataset length."""
-        return len(self.encodings.input_ids)
+        for val in self.encodings.values():
+            if isinstance(val, torch.Tensor):
+                return len(val)
+        return 0
 
 
 class JarvisAI:
