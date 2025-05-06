@@ -98,14 +98,8 @@ case $MODEL_CHOICE in
             --save-total-limit 3 \
             --use-unsloth \
             --force-gpu \
-            --output-dir models/deepseek \
+            --output-dir Jarvis_AI_Assistant/models/deepseek \
             --eval-split 0.15 \
-            --fim-rate 0.5 \
-            --gradient_accumulation_steps 8 \
-            --use_flash_attention_2 \
-            --gradient_checkpointing \
-            --pad_token_id 50256 \
-            --num_workers 4 \
             --verbose
         
         # Second approach (uncomment if the first one fails)
