@@ -29,7 +29,7 @@ echo "✓ Enabled CUDNN benchmarking for faster training"
 
 # Step 4: Monitor GPU usage in the background
 echo "Starting GPU monitoring..."
-(watch -n 5 "nvidia-smi --query-gpu=memory.used --format=csv" &> gpu_memory_log.txt) &
+(watch -n 1 "nvidia-smi --query-gpu=memory.used --format=csv" &> gpu_memory_log.txt) &
 MONITOR_PID=$!
 
 # Display GPU info
@@ -81,11 +81,15 @@ case $MODEL_CHOICE in
         ;;
     2)
         echo "Starting optimized CODE model training with DeepSeek + Unsloth..."
+        sudo nvidia-pmi -c && nvidia-smi --gpu-reset -i 0
         # First approach - Direct finetune_deepseek.py script with maximum optimizations
         export CUDA_DEVICE_ORDER=PCI_BUS_ID
         export CUDA_VISIBLE_DEVICES=0
         export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:24,garbage_collection_threshold:0.8"
         export FORCE_CPU_DATA_PIPELINE=1  # Critical for Paperspace GPU constraints
+        export NCCL_P2P_DISABLE=1  # Prevent PCIe congestion
+        export TOKENIZERS_PARALLELISM=false
+        rm -rf ~/.cache/huggingface/datasets .cache
         # python -m src.generative_ai_module.finetune_deepseek \
         #     --epochs 4 \
         #     --batch-size 2 \
@@ -108,35 +112,39 @@ case $MODEL_CHOICE in
         # echo "Alternatively trying code model training with train_models.py..."
         python -m src.generative_ai_module.train_models \
             --model_type code \
-            --dataset "codeparrot/github-code,code-search-net/code_search_net" \
-            --model_name_or_path deepseek-ai/deepseek-coder-6.7b-instruct \
-            --batch_size 1 \
-            --max_length 768 \
-            --gradient_accumulation_steps 64 \
-            --max_samples 80000 \
-            --learning_rate 2e-5 \
-            --weight_decay 0.1 \
+            --model_name_or_path deepseek-ai/deepseek-coder-5.7b-instruct \
+            --dataset "codeparrot/github-code:0.7,code-search-net/code_search_net:0.3" \  # Weighted dataset mixing
+            --batch_size 2 \
+            --max_length 1024 \
+            --gradient_accumulation_steps 32 \
             --use_4bit \
             --use_qlora \
+            --lora_r 96 \                     # Increased from 64 → better adaptation
+            --lora_alpha 32 \                 # Scaled with r (α = r * 0.33)
+            --lora_dropout 0.05 \             # Critical for regularization
             --use_flash_attention_2 \
             --gradient_checkpointing \
             --optim adamw_bnb_8bit \
-            --eval_steps 1000 \
-            --save_steps 2000 \
-            --epochs 3 \
-            --evaluation_strategy steps \
-            --save_strategy steps \
-            --logging_steps 100 \
-            --output_dir models/code \
-            --visualize_metrics \
+            --learning_rate 1.5e-5 \          # Tuned for 5.7B + QLoRA
+            --weight_decay 0.05 \             # Balances regularization
+            --lr_scheduler_type cosine \      # Better than linear for code
+            --warmup_ratio 0.03 \             # 3% of total steps
+            --max_grad_norm 0.5 \             # Gradient clipping
+            --fp16 \
+            --num_workers 1 \
+            --cache_dir .cache \
             --force_gpu \
             --pad_token_id 50256 \
-            --dataset_subset python \
-            --fim_rate 0.5 \
-            --use_unsloth \
-            --cache_dir .cache \
-            --num_workers 1 \
-            --fp16
+            --dataset_subset "python,javascript" \  # Multi-language focus
+            --fim_rate 0.6 \                  # Slightly higher for code
+            --save_total_limit 2 \            # Prevent storage bloat
+            --evaluation_strategy "steps" \
+            --eval_steps 250 \                # Aligns with grad accumulation
+            --save_steps 500 \
+            --logging_steps 25 \
+            --group_by_length \               # Better packing efficiency
+            --report_to "tensorboard" \
+            --run_name "deepseek-5.7b-ft-$(date +%s)"  # Unique identifier
 
         unset FORCE_CPU_DATA_PIPELINE
         ;;

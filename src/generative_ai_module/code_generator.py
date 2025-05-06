@@ -1,5 +1,5 @@
 from email.headerregistry import DateHeader
-from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments, TrainerCallback
+from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments, TrainerCallback, BitsAndBytesConfig
 from peft import get_peft_model, LoraConfig, TaskType
 from .code_preprocessing import load_and_preprocess_dataset, save_preprocessing_metrics
 from .text_generator import TextGenerator
@@ -120,26 +120,24 @@ class CodeGenerator:
                     
                     print("Using 'auto' device mapping to optimize memory usage...")
                     # Use device_map="auto" to let HuggingFace optimize placement
-                    from transformers.utils.quantization_config import BitsAndBytesConfig
+                    # For CUDA devices (replace existing 4-bit block)
                     quantization_config = BitsAndBytesConfig(
-                        load_in_8bit=True,
-                        bnb_4bit_compute_dtype=torch.float16,
-                        bnb_4bit_use_double_quant=True,
-                        bnb_4bit_quant_type="nf4"
+                        load_in_4bit=True,
+                        bnb_4bit_compute_dtype=torch.float16,  # Force FP16 compute
+                        bnb_4bit_use_double_quant=True,        # Second quantization for 4-bit
+                        bnb_4bit_quant_type="nf4",             # Optimal quantization type
+                        llm_int8_skip_modules=["lm_head"],     # Keep lm_head in FP16
                     )
-                    
-                    # Try to load with optimized settings
+
                     self.model = AutoModelForCausalLM.from_pretrained(
                         self.model_name,
                         trust_remote_code=True,
-                        torch_dtype=torch.float16,  # Use float16 for better memory efficiency
-                        device_map="auto",          # Let transformers decide placement
-                        offload_folder="offload_folder", # Enable CPU offloading
-                        offload_state_dict=True,    # Allow state dict offloading
-                        max_memory={0: "4GiB", "cpu": "8GiB"}, # Limit GPU memory usage
+                        torch_dtype=torch.float16,
+                        device_map="auto",
+                        max_memory={0: "14GiB", "cpu": "10GiB"},  # Hard limit GPU allocation
+                        quantization_config=quantization_config,
                         use_flash_attention_2=True,
-                        # Apply 8-bit quantization for memory efficiency
-                        quantization_config=quantization_config
+                        low_cpu_mem_usage=True
                     )
                     print("Successfully loaded model with optimized memory settings")
                     return
@@ -185,42 +183,51 @@ class CodeGenerator:
                 
             # Set quantization parameters based on user settings (for CUDA devices)
             elif self.load_in_4bit and self.device.type == "cuda":
-                print("Loading model in 4-bit quantization for extreme memory saving")
+                print("Optimized 4-bit loading for RTX A4000")
                 try:
                     from transformers import BitsAndBytesConfig
                     quantization_config = BitsAndBytesConfig(
                         load_in_4bit=True,
                         bnb_4bit_compute_dtype=torch.float16,
                         bnb_4bit_use_double_quant=True,
-                        bnb_4bit_quant_type="nf4"
+                        bnb_4bit_quant_type="nf4",
+                        llm_int8_skip_modules=["lm_head"]
                     )
                     
-                    # Try loading with 4-bit quantization
                     self.model = AutoModelForCausalLM.from_pretrained(
                         self.model_name,
                         trust_remote_code=True,
                         torch_dtype=torch.float16,
                         device_map="auto",
-                        quantization_config=quantization_config
+                        max_memory={0: "14GiB", "cpu": "10GiB"},
+                        quantization_config=quantization_config,
+                        use_flash_attention_2=True,  # <<<<<<<<<<
+                        low_cpu_mem_usage=True
                     )
-                    print("Successfully loaded model with 4-bit quantization")
+                    
+                    # Memory verification
+                    mem_used = torch.cuda.memory_allocated() / 1e9
+                    print(f"Model loaded using {mem_used:.2f}GB/16GB VRAM")
+                    
                 except Exception as e:
-                    print(f"Error loading with 4-bit quantization: {e}")
-                    print("Falling back to 8-bit quantization...")
+                    print(f"4-bit load failed: {e}")
+                    print("Attempting 4-bit with reduced constraints...")
                     try:
-                        # Try 8-bit quantization as fallback
-                        self.load_in_8bit = True
-                        self.load_in_4bit = False
-                        return self.load_model()  # Recursively call with new settings
-                    except Exception as e2:
-                        print(f"Error with 8-bit quantization: {e2}")
-                        print("Falling back to 16-bit precision...")
                         self.model = AutoModelForCausalLM.from_pretrained(
                             self.model_name,
                             trust_remote_code=True,
-                            torch_dtype=torch.float16,
-                            device_map="auto",
+                            load_in_4bit=True,  # Let HF handle defaults
+                            device_map="auto"
                         )
+                    except:
+                        raise RuntimeError("Failed to load model even with 4-bit")
+                        # print("Falling back to 16-bit precision...")
+                        # self.model = AutoModelForCausalLM.from_pretrained(
+                        #     self.model_name,
+                        #     trust_remote_code=True,
+                        #     torch_dtype=torch.float16,
+                        #     device_map="auto",
+                        # )
             elif self.load_in_8bit and self.device.type == "cuda":
                 print("Loading model in 8-bit quantization")
                 try:
@@ -255,14 +262,18 @@ class CodeGenerator:
             # Apply LoRA - only for non-MPS devices
             if self.device.type != "mps":
                 lora_config = LoraConfig(
-                    r=16,  # Increased rank for better fine-tuning
-                    lora_alpha=32,  # Increased alpha
-                    target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],  # Added more target modules
-                    lora_dropout=0.05,  # Lower dropout
+                    r=64,  # Increased from 16 → better adaptation for code tasks
+                    lora_alpha=64,  # Keep alpha=r for simplicity
+                    target_modules=[
+                        "q_proj", "k_proj", "v_proj", "o_proj",
+                        "gate_proj", "up_proj", "down_proj"  # Added FFN layers
+                    ],
+                    lora_dropout=0.05,
                     bias="none",
                     task_type=TaskType.CAUSAL_LM,
+                    modules_to_save=["lm_head"]  # Keep lm_head trainable
                 )
-                
+
                 print("Applying LoRA adapters to model...")
                 try:
                     self.model = get_peft_model(self.model, lora_config)
@@ -270,6 +281,23 @@ class CodeGenerator:
                 except Exception as e:
                     print(f"Error applying LoRA adapters: {e}")
                     print("Continuing with base model without LoRA")
+
+            if self.device.type == "cuda":
+                # Verify memory usage
+                mem_alloc = torch.cuda.memory_allocated() / (1024**3)
+                if mem_alloc > 14.5:
+                    raise RuntimeError(
+                        f"Model requires {mem_alloc:.1f}GB/16GB VRAM. "
+                        "Reduce --max_length or enable --gradient_checkpointing"
+                    )
+                
+                # Warm up GPU memory
+                try:
+                    dummy_input = torch.zeros((1, 64), dtype=torch.long, device="cuda")
+                    _ = self.model(dummy_input)
+                    torch.cuda.empty_cache()
+                except Exception as e:
+                    print(f"GPU warmup failed: {e}")
         finally:
             self._loading = False
     
