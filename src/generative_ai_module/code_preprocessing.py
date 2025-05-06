@@ -180,7 +180,7 @@ def load_and_preprocess_dataset(max_samples=None, sequence_length=512, subset="p
                 
                 # Perform tokenization with proper error handling
                 tokenized = tokenizer(
-                    valid_texts, 
+                    examples["text"], 
                     truncation=True, 
                     padding="max_length", 
                     max_length=sequence_length,

@@ -603,11 +603,8 @@ class GoogleDriveSync:
                     logger.info(f"Skipping {folder_name}: Local directory {local_dir} is empty or doesn't exist")
                     continue
                 
-                # Create GDrive directory if needed (using mkdir with --parents)
-                mkdir_cmd = ["rclone", "mkdir", "--parents", gdrive_dir]
-                subprocess.run(mkdir_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                
-                # Sync local to GDrive
+                # Remove the mkdir command - rclone sync will create directories automatically
+                # Sync local to GDrive directly
                 cmd = ["rclone", "sync", local_dir, gdrive_dir, "-v"]
                 result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 logger.info(f"Successfully synced {folder_name} to Google Drive")

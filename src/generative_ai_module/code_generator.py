@@ -312,7 +312,7 @@ class CodeGenerator:
             # Generate with deepseek model
             with torch.no_grad():
                 outputs = self.model.generate(
-                    inputs.input_ids,
+                    inputs['input_ids'],
                     max_new_tokens=length,
                     temperature=temperature,
                     top_p=top_p,
@@ -555,6 +555,7 @@ class CodeGenerator:
             group_by_length=True,
             logging_first_step=True,
             logging_nan_inf_filter=True,
+            dataloader_pin_memory=True,  # Only works if data is on CPU
         )
 
         # Initialize trainer

@@ -329,7 +329,8 @@ def create_mini_dataset(sequence_length=512):
     
     # Process dataset
     tokenized_dataset = dataset.map(tokenize_function, batched=True, remove_columns=["text"])
-    tokenized_dataset.set_format(type="torch", columns=["input_ids", "attention_mask"])
+    tokenized_dataset = tokenized_dataset.with_format("torch")
+
     
     # Split into train and validation
     train_size = int(0.8 * len(tokenized_dataset))
@@ -391,6 +392,8 @@ def main(args=None):
             subset=args.subset,
             all_subsets=args.all_subsets
         )
+        train_dataset = train_dataset.with_format("torch")  # Keep on CPU
+        eval_dataset = eval_dataset.with_format("torch")    # Keep on CPU
 
     print(f"\nInitializing DeepSeek-Coder model...")
     code_gen = CodeGenerator(
