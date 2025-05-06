@@ -50,51 +50,63 @@ case $MODEL_CHOICE in
         echo "Starting optimized TEXT model training..."
         python -m src.generative_ai_module.train_models \
             --model_type text \
-            --dataset "agie-ai/OpenAssistant-oasst1,teknium/GPTeacher-General-Instruct,google/Synthetic-Persona-Chat,euclaise/writingprompts" \
-            --model_name_or_path distilgpt2 \
-            --batch_size 8 \
-            --max_length 1024 \
-            --gradient_accumulation_steps 4 \
-            --max_samples 50000 \
-            --learning_rate 3e-5 \
-            --weight_decay 0.05 \
+            --dataset "agie-ai/OpenAssistant-oasst1,teknium/GPTeacher-General-Instruct" \
+            --model_name_or_path mistralai/Mistral-7B-v0.1 \
+            --batch_size 12 \
+            --max_length 4096 \
+            --gradient_accumulation_steps 2 \
+            --max_samples 120000 \
+            --learning_rate 2e-5 \
+            --weight_decay 0.01 \
             --use_4bit \
             --use_flash_attention_2 \
             --gradient_checkpointing \
             --optim adamw_bnb_8bit \
-            --eval_steps 500 \
-            --save_steps 1000 \
-            --epochs 3 \
+            --eval_steps 250 \
+            --save_steps 500 \
+            --epochs 4 \
             --evaluation_strategy steps \
             --save_strategy steps \
             --logging_steps 50 \
-            --output_dir Jarvis_AI_Assistant/models/text \
+            --output_dir models/text \
             --visualize_metrics \
-            --warmup_steps 100 \
+            --warmup_steps 150 \
             --use_unsloth \
             --sequence_packing \
-            --force_gpu
+            --num_workers 6 \
+            --fp16 \
+            --force_gpu \
+            --cache_dir .cache \
+            --use_qlora
         ;;
     2)
         echo "Starting optimized CODE model training with DeepSeek + Unsloth..."
         # First approach - Direct finetune_deepseek.py script with maximum optimizations
+        export CUDA_DEVICE_ORDER=PCI_BUS_ID
+        export CUDA_VISIBLE_DEVICES=0
+        export FORCE_CPU_DATA_PIPELINE=1  # Force CPU for data pipeline to preserve GPU memory for model weights
         python -m src.generative_ai_module.finetune_deepseek \
-            --epochs 3 \
-            --batch-size 1 \
-            --max-samples 80000 \
+            --epochs 4 \
+            --batch-size 2 \
+            --max-samples 100000 \
             --all-subsets \
-            --subset python \
-            --sequence-length 2048 \
-            --learning-rate 2e-5 \
-            --warmup-steps 100 \
+            --sequence-length 4096 \
+            --learning-rate 3e-5 \
+            --warmup-steps 200 \
             --load-in-4bit \
-            --save-steps 2000 \
-            --save-total-limit 2 \
+            --save-steps 1000 \
+            --save-total-limit 3 \
             --use-unsloth \
             --force-gpu \
-            --output-dir Jarvis_AI_Assistant/models/deepseek_finetuned \
-            --verbose \
-            --eval-split 0.1
+            --output-dir models/deepseek \
+            --eval-split 0.15 \
+            --fim-rate 0.5 \
+            --gradient_accumulation_steps 8 \
+            --use_flash_attention_2 \
+            --gradient_checkpointing \
+            --pad_token_id 50256 \
+            --num_workers 4 \
+            --verbose
         
         # Second approach (uncomment if the first one fails)
         # This uses train_models.py with all optimizations
@@ -127,6 +139,8 @@ case $MODEL_CHOICE in
         #     --dataset_subset python \
         #     --fim_rate 0.5 \
         #     --use_unsloth
+
+        unset FORCE_CPU_DATA_PIPELINE
         ;;
     3)
         echo "Starting CNN-enhanced TEXT model training with 4 CNN layers..."

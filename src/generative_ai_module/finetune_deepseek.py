@@ -324,7 +324,8 @@ def create_mini_dataset(sequence_length=512):
             truncation=True, 
             padding="max_length", 
             max_length=sequence_length,
-            return_tensors="pt"
+            return_tensors="pt",
+            device_map='cpu'
         ).to("cpu")
     
     # Process dataset

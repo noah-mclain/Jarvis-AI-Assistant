@@ -1,3 +1,4 @@
+from email.headerregistry import DateHeader
 from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments, TrainerCallback
 from peft import get_peft_model, LoraConfig, TaskType
 from .code_preprocessing import load_and_preprocess_dataset, save_preprocessing_metrics
@@ -11,7 +12,15 @@ import datetime
 import time
 from tqdm import tqdm
 import numpy as np
+from torch.utils.data import DataLoader
 from .utils import setup_gpu_for_training, force_cuda_device, is_paperspace_environment
+
+# Environment variable check
+import os
+if os.environ.get('FORCE_CPU_DATA_PIPELINE', '0') == '1':
+    torch.set_default_dtype('torch.float32')
+    if hasattr(torch, 'set_default_device'):
+        torch.set_default_device('cpu')
 
 class CodeGenerator:
     def __init__(self, use_deepseek=False, load_in_8bit=True, load_in_4bit=False, force_gpu=False):
@@ -37,201 +46,193 @@ class CodeGenerator:
             
     def _get_device(self):
         """Determine the best available device (MPS for Apple Silicon, CUDA for NVIDIA, or CPU)"""
-        # Always force GPU usage regardless of initialization parameter
+        if os.environ.get('FORCE_CPU_DATA_PIPELINE') == '1':
+            return torch.device("cpu")
+        
+        # Force GPU usage only when not in CPU mode
         self.force_gpu = True
         
         print("Setting up GPU for all operations...")
         
-        # Use the GPU utilities from utils.py to get the device with forced GPU mode
         try:
-            # Use setup_gpu_for_training for detailed configuration
             device, gpu_config = setup_gpu_for_training(force_gpu=True)
-            
-            # Save GPU configuration for later model loading optimizations
             self.gpu_config = gpu_config
-            
-            # If we have a CUDA device, ensure it's properly configured
+
             if device.type == "cuda":
-                # Apply any RTX5000-specific configurations
+                # RTX5000 configurations
                 if is_paperspace_environment() and torch.cuda.is_available():
                     gpu_name = torch.cuda.get_device_name(0)
                     if "RTX5000" in gpu_name or "RTX 5000" in gpu_name:
-                        print(f"RTX 5000 GPU detected - applying optimized settings for model loading")
-                        # Force 4-bit quantization for RTX5000 to maximize available memory
+                        print("RTX 5000 GPU detected - applying optimized settings")
                         self.load_in_4bit = True
                         self.load_in_8bit = False
                 
-                # Set CUDA tensor as default type for all operations
-                torch.set_default_tensor_type('torch.cuda.FloatTensor')
+                # Conditional CUDA setup
+                if os.environ.get('FORCE_CPU_DATA_PIPELINE') != '1':
+                    torch.set_default_tensor_type('torch.cuda.FloatTensor')
+                    if hasattr(torch, 'set_default_device'):
+                        torch.set_default_device('cuda')
+                    print(f"GPU enforcement successful: Using CUDA device {device}")
                 
-                # In PyTorch 2.0+, also set the default device
-                if hasattr(torch, 'set_default_device'):
-                    torch.set_default_device('cuda')
-                
-                print(f"GPU enforcement successful: Using CUDA device {device}")
                 return device
             
-            # For MPS (Apple Silicon) device
             elif device.type == "mps":
-                print(f"GPU enforcement successful: Using Apple Silicon MPS device")
-                # Optimize MPS settings
+                print("Using Apple Silicon MPS device")
                 if hasattr(torch.mps, 'empty_cache'):
                     torch.mps.empty_cache()
                 return device
             
-            # For CPU fallback (only if both setup_gpu_for_training and the code below fail)
             else:
-                print("Warning: setup_gpu_for_training returned CPU device despite force_gpu=True")
-                # Fall through to try alternative methods for finding a GPU
+                print("Warning: setup_gpu_for_training returned CPU despite force_gpu=True")
+        
         except Exception as e:
-            print(f"Error in primary GPU setup: {e}")
-            print("Attempting alternative GPU detection methods...")
-        
-        # Alternative GPU detection paths
-        
-        # First try CUDA
+            print(f"GPU setup error: {e}, trying fallback detection")
+
+        # Fallback GPU detection
         if torch.cuda.is_available():
-            # We have CUDA, so use it
             device = torch.device("cuda")
-            gpu_name = torch.cuda.get_device_name(0)
-            print(f"Alternative GPU enforcement: Using CUDA GPU: {gpu_name}")
-            
-            # Set CUDA tensor as default type
-            torch.set_default_tensor_type('torch.cuda.FloatTensor')
-            
-            # Apply RTX5000-specific configurations if detected
-            if is_paperspace_environment() and ("RTX5000" in gpu_name or "RTX 5000" in gpu_name):
-                print("RTX 5000 GPU detected - applying optimized settings")
-                # Force GPU visibility
-                os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-                os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
-                
-                # Force 4-bit quantization for RTX5000 to maximize available memory
-                self.load_in_4bit = True
-                self.load_in_8bit = False
-            
+            print(f"Using CUDA device: {torch.cuda.get_device_name(0)}")
             return device
-        # Then try MPS for Apple Silicon
-        elif hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-            print("Alternative GPU enforcement: Using MPS (Apple Silicon GPU)")
-            # Optimize MPS settings
-            if hasattr(torch.mps, 'empty_cache'):
-                torch.mps.empty_cache()
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            print("Using MPS device")
             return torch.device("mps")
-        # Last resort - CPU with warning
         else:
-            print("Warning: No GPU available despite forced GPU mode. Performance will be significantly slower on CPU.")
+            print("Warning: Falling back to CPU")
             return torch.device("cpu")
     
     def load_model(self):
         """Load the deepseek model with appropriate quantization settings"""
-        print(f"Loading {self.model_name}...")
-        
-        # Special case for Apple Silicon (M1/M2/M3)
-        if self.device.type == "mps":
-            print("Loading model for Apple Silicon GPU with memory-efficient settings")
-            
-            # First load model with a device_map that spreads across CPU and GPU
-            try:
-                # Set environment variables to optimize MPS memory usage
-                os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"  # Avoid offloading to disk
-                os.environ["PYTORCH_MPS_ACTIVE_MEMORY_MANAGER"] = "1"   # Better memory management
-                
-                print("Using 'auto' device mapping to optimize memory usage...")
-                # Use device_map="auto" to let HuggingFace optimize placement
-                from transformers.utils.quantization_config import BitsAndBytesConfig
-                quantization_config = BitsAndBytesConfig(
-                    load_in_8bit=True,
-                    bnb_4bit_compute_dtype=torch.float16,
-                    bnb_4bit_use_double_quant=True,
-                    bnb_4bit_quant_type="nf4"
-                )
-                
-                # Try to load with optimized settings
-                self.model = AutoModelForCausalLM.from_pretrained(
-                    self.model_name,
-                    trust_remote_code=True,
-                    torch_dtype=torch.float16,  # Use float16 for better memory efficiency
-                    device_map="auto",          # Let transformers decide placement
-                    offload_folder="offload_folder", # Enable CPU offloading
-                    offload_state_dict=True,    # Allow state dict offloading
-                    max_memory={0: "4GiB", "cpu": "8GiB"}, # Limit GPU memory usage
-                    # Apply 8-bit quantization for memory efficiency
-                    quantization_config=quantization_config
-                )
-                print("Successfully loaded model with optimized memory settings")
-                return
-            except Exception as e:
-                print(f"Error loading with optimized settings: {e}")
-                print("Trying alternative loading approach...")
-                
-                try:
-                    print("Loading in smaller segments...")
-                    # Use transformers' loading in smaller segments
-                    self.model = AutoModelForCausalLM.from_pretrained(
-                        self.model_name,
-                        trust_remote_code=True,
-                        torch_dtype=torch.float32,  # More stable on MPS
-                        device_map="auto",          # Let transformers decide placement
-                        low_cpu_mem_usage=True,     # Reduce CPU memory usage
-                        offload_state_dict=True     # Enable state dict offloading
-                    )
-                    print("Successfully loaded model with segment approach")
-                    return
-                except Exception as e2:
-                    print(f"Error with alternative loading: {e2}")
-                    print("Falling back to basic CPU loading then MPS transfer...")
-                    
-                    # Last resort: load on CPU first then move to MPS
-                    self.model = AutoModelForCausalLM.from_pretrained(
-                        self.model_name,
-                        trust_remote_code=True,
-                        torch_dtype=torch.float32,
-                        device_map="cpu"
-                    )
-                    
-                    print("Moving model to MPS device (without LoRA)")
-                    try:
-                        # Move to MPS in chunks to avoid OOM
-                        for param in self.model.parameters():
-                            param.data = param.data.to("mps")
-                        print("Successfully moved model to MPS")
-                    except Exception as e:
-                        print(f"Error moving model to MPS, will use CPU instead: {e}")
-                        self.device = torch.device("cpu")
+        if getattr(self, '_loading', False):  # Prevent recursion
             return
-            
-        # Set quantization parameters based on user settings (for CUDA devices)
-        elif self.load_in_4bit and self.device.type == "cuda":
-            print("Loading model in 4-bit quantization for extreme memory saving")
-            try:
-                from transformers import BitsAndBytesConfig
-                quantization_config = BitsAndBytesConfig(
-                    load_in_4bit=True,
-                    bnb_4bit_compute_dtype=torch.float16,
-                    bnb_4bit_use_double_quant=True,
-                    bnb_4bit_quant_type="nf4"
-                )
+        self._loading = True
+        try:
+            print(f"Loading {self.model_name}...")
+        
+            # Special case for Apple Silicon (M1/M2/M3)
+            if self.device.type == "mps":
+                print("Loading model for Apple Silicon GPU with memory-efficient settings")
                 
-                # Try loading with 4-bit quantization
-                self.model = AutoModelForCausalLM.from_pretrained(
-                    self.model_name,
-                    trust_remote_code=True,
-                    torch_dtype=torch.float16,
-                    device_map="auto",
-                    quantization_config=quantization_config
-                )
-                print("Successfully loaded model with 4-bit quantization")
-            except Exception as e:
-                print(f"Error loading with 4-bit quantization: {e}")
-                print("Falling back to 8-bit quantization...")
+                # First load model with a device_map that spreads across CPU and GPU
                 try:
-                    # Try 8-bit quantization as fallback
-                    self.load_in_8bit = True
-                    self.load_in_4bit = False
-                    return self.load_model()  # Recursively call with new settings
-                except Exception as e2:
-                    print(f"Error with 8-bit quantization: {e2}")
+                    # Set environment variables to optimize MPS memory usage
+                    os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"  # Avoid offloading to disk
+                    os.environ["PYTORCH_MPS_ACTIVE_MEMORY_MANAGER"] = "1"   # Better memory management
+                    
+                    print("Using 'auto' device mapping to optimize memory usage...")
+                    # Use device_map="auto" to let HuggingFace optimize placement
+                    from transformers.utils.quantization_config import BitsAndBytesConfig
+                    quantization_config = BitsAndBytesConfig(
+                        load_in_8bit=True,
+                        bnb_4bit_compute_dtype=torch.float16,
+                        bnb_4bit_use_double_quant=True,
+                        bnb_4bit_quant_type="nf4"
+                    )
+                    
+                    # Try to load with optimized settings
+                    self.model = AutoModelForCausalLM.from_pretrained(
+                        self.model_name,
+                        trust_remote_code=True,
+                        torch_dtype=torch.float16,  # Use float16 for better memory efficiency
+                        device_map="auto",          # Let transformers decide placement
+                        offload_folder="offload_folder", # Enable CPU offloading
+                        offload_state_dict=True,    # Allow state dict offloading
+                        max_memory={0: "4GiB", "cpu": "8GiB"}, # Limit GPU memory usage
+                        use_flash_attention_2=True,
+                        # Apply 8-bit quantization for memory efficiency
+                        quantization_config=quantization_config
+                    )
+                    print("Successfully loaded model with optimized memory settings")
+                    return
+                except Exception as e:
+                    print(f"Error loading with optimized settings: {e}")
+                    print("Trying alternative loading approach...")
+                    
+                    try:
+                        print("Loading in smaller segments...")
+                        # Use transformers' loading in smaller segments
+                        self.model = AutoModelForCausalLM.from_pretrained(
+                            self.model_name,
+                            trust_remote_code=True,
+                            torch_dtype=torch.float32,  # More stable on MPS
+                            device_map="auto",          # Let transformers decide placement
+                            low_cpu_mem_usage=True,     # Reduce CPU memory usage
+                            offload_state_dict=True     # Enable state dict offloading
+                        )
+                        print("Successfully loaded model with segment approach")
+                        return
+                    except Exception as e2:
+                        print(f"Error with alternative loading: {e2}")
+                        print("Falling back to basic CPU loading then MPS transfer...")
+                        
+                        # Last resort: load on CPU first then move to MPS
+                        self.model = AutoModelForCausalLM.from_pretrained(
+                            self.model_name,
+                            trust_remote_code=True,
+                            torch_dtype=torch.float32,
+                            device_map="cpu"
+                        )
+                        
+                        print("Moving model to MPS device (without LoRA)")
+                        try:
+                            # Move to MPS in chunks to avoid OOM
+                            for param in self.model.parameters():
+                                param.data = param.data.to("mps")
+                            print("Successfully moved model to MPS")
+                        except Exception as e:
+                            print(f"Error moving model to MPS, will use CPU instead: {e}")
+                            self.device = torch.device("cpu")
+                return
+                
+            # Set quantization parameters based on user settings (for CUDA devices)
+            elif self.load_in_4bit and self.device.type == "cuda":
+                print("Loading model in 4-bit quantization for extreme memory saving")
+                try:
+                    from transformers import BitsAndBytesConfig
+                    quantization_config = BitsAndBytesConfig(
+                        load_in_4bit=True,
+                        bnb_4bit_compute_dtype=torch.float16,
+                        bnb_4bit_use_double_quant=True,
+                        bnb_4bit_quant_type="nf4"
+                    )
+                    
+                    # Try loading with 4-bit quantization
+                    self.model = AutoModelForCausalLM.from_pretrained(
+                        self.model_name,
+                        trust_remote_code=True,
+                        torch_dtype=torch.float16,
+                        device_map="auto",
+                        quantization_config=quantization_config
+                    )
+                    print("Successfully loaded model with 4-bit quantization")
+                except Exception as e:
+                    print(f"Error loading with 4-bit quantization: {e}")
+                    print("Falling back to 8-bit quantization...")
+                    try:
+                        # Try 8-bit quantization as fallback
+                        self.load_in_8bit = True
+                        self.load_in_4bit = False
+                        return self.load_model()  # Recursively call with new settings
+                    except Exception as e2:
+                        print(f"Error with 8-bit quantization: {e2}")
+                        print("Falling back to 16-bit precision...")
+                        self.model = AutoModelForCausalLM.from_pretrained(
+                            self.model_name,
+                            trust_remote_code=True,
+                            torch_dtype=torch.float16,
+                            device_map="auto",
+                        )
+            elif self.load_in_8bit and self.device.type == "cuda":
+                print("Loading model in 8-bit quantization")
+                try:
+                    self.model = AutoModelForCausalLM.from_pretrained(
+                        self.model_name,
+                        trust_remote_code=True,
+                        torch_dtype=torch.float16,
+                        device_map="auto",
+                        load_in_8bit=True,
+                    )
+                except Exception as e:
+                    print(f"Error loading with 8-bit quantization: {e}")
                     print("Falling back to 16-bit precision...")
                     self.model = AutoModelForCausalLM.from_pretrained(
                         self.model_name,
@@ -239,55 +240,38 @@ class CodeGenerator:
                         torch_dtype=torch.float16,
                         device_map="auto",
                     )
-        elif self.load_in_8bit and self.device.type == "cuda":
-            print("Loading model in 8-bit quantization")
-            try:
-                self.model = AutoModelForCausalLM.from_pretrained(
-                    self.model_name,
-                    trust_remote_code=True,
-                    torch_dtype=torch.float16,
-                    device_map="auto",
-                    load_in_8bit=True,
-                )
-            except Exception as e:
-                print(f"Error loading with 8-bit quantization: {e}")
-                print("Falling back to 16-bit precision...")
+            else:
+                print("Loading model in full precision")
                 self.model = AutoModelForCausalLM.from_pretrained(
                     self.model_name,
                     trust_remote_code=True,
                     torch_dtype=torch.float16,
                     device_map="auto",
                 )
-        else:
-            print("Loading model in full precision")
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_name,
-                trust_remote_code=True,
-                torch_dtype=torch.float16,
-                device_map="auto",
-            )
-        
-        print(f"\n=== Model Load Verification ===")
-        print(f"Model type: {type(self.model)}")
-        
-        # Apply LoRA - only for non-MPS devices
-        if self.device.type != "mps":
-            lora_config = LoraConfig(
-                r=16,  # Increased rank for better fine-tuning
-                lora_alpha=32,  # Increased alpha
-                target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],  # Added more target modules
-                lora_dropout=0.05,  # Lower dropout
-                bias="none",
-                task_type=TaskType.CAUSAL_LM,
-            )
             
-            print("Applying LoRA adapters to model...")
-            try:
-                self.model = get_peft_model(self.model, lora_config)
-                print("Model ready with LoRA adapters")
-            except Exception as e:
-                print(f"Error applying LoRA adapters: {e}")
-                print("Continuing with base model without LoRA")
+            print(f"\n=== Model Load Verification ===")
+            print(f"Model type: {type(self.model)}")
+            
+            # Apply LoRA - only for non-MPS devices
+            if self.device.type != "mps":
+                lora_config = LoraConfig(
+                    r=16,  # Increased rank for better fine-tuning
+                    lora_alpha=32,  # Increased alpha
+                    target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],  # Added more target modules
+                    lora_dropout=0.05,  # Lower dropout
+                    bias="none",
+                    task_type=TaskType.CAUSAL_LM,
+                )
+                
+                print("Applying LoRA adapters to model...")
+                try:
+                    self.model = get_peft_model(self.model, lora_config)
+                    print("Model ready with LoRA adapters")
+                except Exception as e:
+                    print(f"Error applying LoRA adapters: {e}")
+                    print("Continuing with base model without LoRA")
+        finally:
+            self._loading = False
     
     def generate_code(self, prompt, length=100, temperature=0.7, top_p=0.95):
         """
@@ -494,6 +478,15 @@ class CodeGenerator:
                 all_subsets=all_subsets
             )
             log_checkpoint(f"Dataset loaded - Train: {len(train_dataset)} samples, Eval: {len(eval_dataset)} samples")
+            
+        if train_dataset is not None:
+            log_checkpoint("Validating dataset device placement...")
+            temp_loader = DataLoader(train_dataset, batch_size=2, shuffle=False)
+            sample = next(iter(temp_loader))
+            for key in sample:
+                if isinstance(sample[key], torch.Tensor):
+                    assert sample[key].device.type == 'cpu', \
+                        f"Dataset contains GPU tensors in {key} column!"
 
         if train_dataset is None or eval_dataset is None:
             log_checkpoint("FAILED: Could not load datasets for fine-tuning")
@@ -558,6 +551,8 @@ class CodeGenerator:
             dataloader_pin_memory=True,  # Requires data to be on CPU
             dataloader_num_workers=2,    # For multiprocessing
             group_by_length=True,        # Keep existing parameter
+            remove_unused_columns=False,
+            dataloader_prefetch_factor=2,# Optimize CPU-GPU Pipeline
         )
 
         # Initialize trainer
@@ -605,17 +600,36 @@ class CodeGenerator:
                     self.log_func(f"Training completed after {state.global_step} steps")
             
             checkpoint_callback = CheckpointCallback(log_checkpoint)
-                        
+            
+            # Define CPUSafeDataLoader class
+            class CPUSafeDataLoader(DataLoader):
+                def __iter__(self):
+                    for batch in super().__iter__():
+                        yield {k: v.to('cpu') if isinstance(v, torch.Tensor) else v 
+                               for k, v in batch.items()}
+            # Override datasets and data loaders
+            trainer.train_dataset = train_dataset.with_format("torch", device='cpu')
+            trainer.eval_dataset = eval_dataset.with_format("torch", device='cpu')
+            
             trainer = Trainer(
                 model=self.model,
                 args=training_args,
                 train_dataset=train_dataset,
                 eval_dataset=eval_dataset,
                 callbacks=[checkpoint_callback],
+                data_collator=lambda x: x,
             )
         
             # Fine-tune the model and track metrics
             log_checkpoint(f"Starting fine-tuning for {epochs} epochs...")
+            
+            trainer.train_dataloader = CPUSafeDataLoader(
+                trainer.train_dataset,
+                batch_size=training_args.per_device_train_batch_size,
+                shuffle=True,
+                num_workers=training_args.dataloader_num_workers,
+                pin_memory=training_args.dataloader_pin_memory
+            )
             training_metrics = {}
             training_output = trainer.train()
 
@@ -644,7 +658,7 @@ class CodeGenerator:
                 'timestamp': datetime.datetime.now().isoformat(),
                 'checkpoints': trainer.state.log_history,
                 'lora_config': {
-                    'r': self.model.peft_config.r,
+                    'r': self.model.peft_config.r if hasattr(self.model, 'peft_config') else None,
                     'lora_alpha': self.model.peft_config.lora_alpha,
                     'target_modules': self.model.peft_config.target_modules,
                 }
@@ -666,10 +680,12 @@ class CodeGenerator:
             
             # Move model to CPU for saving if it's on MPS
             if self.device.type == "mps":
-                log_checkpoint("Moving model to CPU for saving...")
-                model_to_save = self.model.to("cpu")
-                model_to_save.save_pretrained(output_dir)
-                self.model = self.model.to("mps")  # Move back to MPS
+                try:
+                    log_checkpoint("Moving model to CPU for saving...")
+                    model_to_save = self.model.to("cpu")
+                    model_to_save.save_pretrained(output_dir)
+                finally:
+                    self.model = self.model.to("mps")  # Move back to MPS
             else:
                 self.model.save_pretrained(output_dir)
                 
@@ -749,6 +765,8 @@ class CodeGenerator:
         
         print("Setting up memory-efficient training for Apple Silicon MPS...")
         
+        self.model.gradient_checkpointing_enable()
+        
         # Use extremely small batch size for MPS to avoid memory issues
         batch_size = 1  # Always use batch size of 1 for MPS to avoid OOM
         print(f"Using batch size of {batch_size} for MPS training (enforced to avoid memory issues)")
@@ -770,6 +788,13 @@ class CodeGenerator:
             shuffle=True,
             pin_memory=True  # Pin memory for faster transfers
         )
+        
+        # Validate that the model is on the CPU
+        sample = next(iter(train_loader))
+        for key in sample:
+            if isinstance(sample[key], torch.Tensor):
+                assert sample[key].device.type == 'cpu', \
+                    f"Dataset contains GPU tensors in {key} column!"
         
         eval_loader = DataLoader(
             eval_dataset,
