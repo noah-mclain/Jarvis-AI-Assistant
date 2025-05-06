@@ -267,6 +267,9 @@ class CodeGenerator:
                 device_map="auto",
             )
         
+        print(f"\n=== Model Load Verification ===")
+        print(f"Model type: {type(self.model)}")
+        
         # Apply LoRA - only for non-MPS devices
         if self.device.type != "mps":
             lora_config = LoraConfig(
@@ -312,7 +315,8 @@ class CodeGenerator:
             # Generate with deepseek model
             with torch.no_grad():
                 outputs = self.model.generate(
-                    inputs['input_ids'],
+                    input_ids=inputs['input_ids'],
+                    attention_mask=inputs['attention_mask'],
                     max_new_tokens=length,
                     temperature=temperature,
                     top_p=top_p,
@@ -551,11 +555,9 @@ class CodeGenerator:
             local_rank=-1,
             use_cpu=self.device.type == "cpu",
             save_safetensors=True,
-            dataloader_num_workers=0,
-            group_by_length=True,
-            logging_first_step=True,
-            logging_nan_inf_filter=True,
-            dataloader_pin_memory=True,  # Only works if data is on CPU
+            dataloader_pin_memory=True,  # Requires data to be on CPU
+            dataloader_num_workers=2,    # For multiprocessing
+            group_by_length=True,        # Keep existing parameter
         )
 
         # Initialize trainer

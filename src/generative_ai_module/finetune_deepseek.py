@@ -325,11 +325,11 @@ def create_mini_dataset(sequence_length=512):
             padding="max_length", 
             max_length=sequence_length,
             return_tensors="pt"
-        )
+        ).to("cpu")
     
     # Process dataset
     tokenized_dataset = dataset.map(tokenize_function, batched=True, remove_columns=["text"])
-    tokenized_dataset = tokenized_dataset.with_format("torch")
+    tokenized_dataset = tokenized_dataset.with_format("torch", device="cpu")
 
     
     # Split into train and validation
@@ -394,6 +394,11 @@ def main(args=None):
         )
         train_dataset = train_dataset.with_format("torch")  # Keep on CPU
         eval_dataset = eval_dataset.with_format("torch")    # Keep on CPU
+        
+        # After loading datasets:
+        print("\n=== Dataset Device Verification ===")
+        print(f"Train dataset device: {train_dataset['input_ids'].device}")  # Should show "cpu"
+        print(f"Eval dataset device: {eval_dataset['input_ids'].device}")    # Should show "cpu"
 
     print(f"\nInitializing DeepSeek-Coder model...")
     code_gen = CodeGenerator(
@@ -402,6 +407,10 @@ def main(args=None):
         load_in_4bit=args.load_in_4bit,
         force_gpu=args.force_gpu
     )
+    
+    # After model initialization:
+    print("\n=== Model Type Verification ===")
+    print(type(code_gen.model))  # Should show PeftModelForCausalLM
 
     print(f"\nStarting fine-tuning with the following parameters:")
     print(f"  - Epochs: {args.epochs}")
