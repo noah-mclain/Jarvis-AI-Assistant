@@ -18,7 +18,7 @@ from .utils import setup_gpu_for_training, force_cuda_device, is_paperspace_envi
 # Environment variable check
 import os
 if os.environ.get('FORCE_CPU_DATA_PIPELINE', '0') == '1':
-    torch.set_default_dtype('torch.float32')
+    torch.set_default_dtype(torch.float32)
     if hasattr(torch, 'set_default_device'):
         torch.set_default_device('cpu')
 
