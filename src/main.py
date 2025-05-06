@@ -1,10 +1,8 @@
 import sys
 import os
+os.environ["QT_MAC_WANTS_LAYER"] = "1" 
 from pathlib import Path
 import site
-
-import os
-os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = "/Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/.env/lib/python3.11/site-packages/PySide6/Qt/plugins"
 
 # Configure Qt plugin paths before importing any PySide6 modules
 def configure_qt_paths():
@@ -42,9 +40,9 @@ def configure_qt_paths():
     os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = str(platform_path)
     
     if sys.platform == "darwin":
-        os.environ["DYLD_FRAMEWORK_PATH"] = str(lib_path)
-        os.environ["DYLD_LIBRARY_PATH"] = str(lib_path)
-    
+        os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"  # Disable sandboxing (critical for macOS)
+        os.environ["DYLD_FALLBACK_LIBRARY_PATH"] = f"{lib_path}:/usr/lib:/usr/local/lib"  # Safer library resolution
+        
     return True
 
 # Configure Qt paths before importing PySide6

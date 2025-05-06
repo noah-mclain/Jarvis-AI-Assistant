@@ -1,22 +1,18 @@
 #!/bin/bash
+VENV_PATH="/Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/.env"
 
-# Get the absolute path of the PySide6 installation
-PYSIDE_PATH=$(python -c "import PySide6; import os; print(os.path.dirname(PySide6.__file__))")
-QT_PATH="$PYSIDE_PATH/Qt"
+# Set critical paths
+export QT_PLUGIN_PATH="$VENV_PATH/lib/python3.11/site-packages/PySide6/Qt/plugins"
+export QT_QPA_PLATFORM_PLUGIN_PATH="$QT_PLUGIN_PATH/platforms"
 
-echo "PySide6 path: $PYSIDE_PATH"
-echo "Qt path: $QT_PATH"
+# Force macOS to use the cocoa plugin
+export QT_QPA_PLATFORM="cocoa"
 
-# Set environment variables
-export QT_DEBUG_PLUGINS=1
-export QT_PLUGIN_PATH="$QT_PATH/plugins"
-export QT_QPA_PLATFORM_PLUGIN_PATH="$QT_PATH/plugins/platforms"
-export DYLD_FRAMEWORK_PATH="$QT_PATH/lib"
-export DYLD_PRINT_LIBRARIES=1
-export DYLD_PRINT_LIBRARIES_POST_LAUNCH=1
+# Fix macOS library resolution
+export DYLD_FALLBACK_LIBRARY_PATH="$VENV_PATH/lib/python3.11/site-packages/PySide6/Qt/lib:/usr/lib:/usr/local/lib"
 
-# Enable macOS library loading debug
-echo "Running with debug enabled..."
+# Code sign ONLY the cocoa plugin
+codesign --force --deep --sign - "$QT_PLUGIN_PATH/platforms/libqcocoa.dylib"
 
-# Save output to debug.log
-python src/main.py > logs/debug.log 2>&1 
+# Run with debug logging
+"$VENV_PATH/bin/python" src/main.py
