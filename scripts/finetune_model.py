@@ -229,11 +229,23 @@ def train_step(batch, models, tokenizer, optimizer, device, args, scaler=None):
     noisy_latents = latents + noise * timesteps.view(-1, 1, 1, 1).float()
     
     # Get time embeddings
-    time_embeddings = torch.stack([pipeline.get_time_embedding(t) for t in timesteps]).to(device)
+    # Process each sample in the batch individually to maintain correct dimensions
+    predicted_noise_list = []
+    for i in range(noisy_latents.shape[0]):
+        # Get time embedding for this sample - shape (1, 320)
+        time_embedding = pipeline.get_time_embedding(timesteps[i]).to(device)
+        
+        # Get the corresponding latent and context for this sample
+        sample_latent = noisy_latents[i:i+1]  # Keep batch dimension
+        sample_context = context[i:i+1] if context.shape[0] > 1 else context
+        
+        # Predict noise with diffusion model
+        with autocast() if args.mixed_precision else torch.no_grad():
+            sample_predicted_noise = diffusion(sample_latent, sample_context, time_embedding)
+            predicted_noise_list.append(sample_predicted_noise)
     
-    # Predict noise with diffusion model
-    with autocast() if args.mixed_precision else torch.no_grad():
-        predicted_noise = diffusion(noisy_latents, context, time_embeddings)
+    # Combine the results
+    predicted_noise = torch.cat(predicted_noise_list, dim=0)
     
     # Calculate loss
     loss = torch.nn.functional.mse_loss(predicted_noise, noise)
