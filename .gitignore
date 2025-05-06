@@ -65,3 +65,4 @@ desktop.ini
 __pycache__/
 *.pyc
 *.pyc
+.env
