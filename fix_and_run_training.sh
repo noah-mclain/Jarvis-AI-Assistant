@@ -108,18 +108,16 @@ case $MODEL_CHOICE in
         # echo "Alternatively trying code model training with train_models.py..."
         python -m src.generative_ai_module.train_models \
             --model_type code \
-            --dataset "codeparrot/github-code,code-search-net/code_search_net" \  # Combined datasets
+            --dataset "codeparrot/github-code,code-search-net/code_search_net" \
             --model_name_or_path deepseek-ai/deepseek-coder-6.7b-instruct \
             --batch_size 1 \
-            --max_length 768 \                  # Optimal for 16GB VRAM
-            --gradient_accumulation_steps 64 \   # Increased from 32 → 64
+            --max_length 768 \
+            --gradient_accumulation_steps 64 \
             --max_samples 80000 \
             --learning_rate 2e-5 \
             --weight_decay 0.1 \
             --use_4bit \
-            --use_qlora \                       # QLoRA for parameter efficiency
-            --lora_r 64 \                       # Added LoRA configuration
-            --lora_alpha 16 \                   # LoRA alpha scaling
+            --use_qlora \
             --use_flash_attention_2 \
             --gradient_checkpointing \
             --optim adamw_bnb_8bit \
@@ -131,17 +129,14 @@ case $MODEL_CHOICE in
             --logging_steps 100 \
             --output_dir models/code \
             --visualize_metrics \
-            --warmup_steps 100 \
             --force_gpu \
             --pad_token_id 50256 \
             --dataset_subset python \
             --fim_rate 0.5 \
             --use_unsloth \
             --cache_dir .cache \
-            --num_workers 1 \                   # Reduced to 1 for stability
-            --fp16 \                            # Added mixed precision
-            --sequence_packing \                # Better batch utilization
-            --use_cpu_data_loader               # Prevent GPU memory spikes
+            --num_workers 1 \
+            --fp16
 
         unset FORCE_CPU_DATA_PIPELINE
         ;;
