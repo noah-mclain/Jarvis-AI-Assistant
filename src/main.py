@@ -3,6 +3,9 @@ import os
 from pathlib import Path
 import site
 
+import os
+os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = "/Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/.env/lib/python3.11/site-packages/PySide6/Qt/plugins"
+
 # Configure Qt plugin paths before importing any PySide6 modules
 def configure_qt_paths():
     # Find PySide6 installation
@@ -62,14 +65,14 @@ print(f"Plugin path from QLibraryInfo: {plugin_dir}")
 print(f"Plugin path from env: {os.environ.get('QT_PLUGIN_PATH', 'Not set')}")
 
 # Finally, import MainWindow and start app
-from src.main_window import MainWindow
+from main_window import MainWindow
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     
     # Load style sheet
-    with open("styles/theme.qss", "r") as f:
+    with open("src/styles/theme.qss", "r") as f:
         style = f.read()
         app.setStyleSheet(style)
 

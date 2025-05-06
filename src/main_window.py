@@ -3,10 +3,10 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                           QMenu)
 from PySide6.QtCore import Qt, QSize, QTimer, Signal, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup
 from PySide6.QtGui import QIcon, QFont, QTransform, QPainter, QPen, QAction, QActionGroup
-from src.widgets.chat_widget import ChatWidget
-from src.widgets.input_widget import InputWidget
-from src.widgets.sidebar_widget import SidebarWidget
-from src.widgets.settings_dialog import SettingsDialog
+from widgets.chat_widget import ChatWidget
+from widgets.input_widget import InputWidget
+from widgets.sidebar_widget import SidebarWidget
+from widgets.settings_dialog import SettingsDialog
 from styles.colors import Colors
 from styles.animations import slide_in, slide_out, fade_in, combo_animation
 import uuid
@@ -147,6 +147,8 @@ class MainWindow(QMainWindow):
             self.input_widget.update_style()
 
     def setup_ui(self):
+        print("Setting up UI...")
+        
         # Create main container
         self.central_widget = QWidget()
         self.central_widget.setObjectName("central_widget")
@@ -159,91 +161,33 @@ class MainWindow(QMainWindow):
         
         # Create sidebar
         self.sidebar = SidebarWidget()
-        self.sidebar.new_chat_clicked.connect(self.create_new_chat)
-        self.sidebar.chat_selected.connect(self.switch_to_chat)
-        self.sidebar.settings_clicked.connect(self.open_settings)
+        print("Adding sidebar...")
+        self.splitter.addWidget(self.sidebar)
         
-        # Create content area with toggle button
+        # Create content area
         self.content_container = QWidget()
         content_layout = QVBoxLayout(self.content_container)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(0)
         
-        # Header with toggle button and theme menu
-        header = QWidget()
-        header.setFixedHeight(50)
-        header.setStyleSheet(f"background-color: {Colors.BACKGROUND};")
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(10, 0, 10, 0)
-        
-        # Toggle sidebar button with animated icon
-        self.toggle_sidebar_btn = AnimatedToggleButton()
-        self.toggle_sidebar_btn.clicked.connect(self.toggle_sidebar)
-        header_layout.addWidget(self.toggle_sidebar_btn)
-        
-        # Add spacer
-        header_layout.addStretch()
-        
-        # Theme switcher button
-        self.theme_btn = QPushButton()
-        self.theme_btn.setIcon(QIcon("styles/svg/theme_icon.svg"))
-        self.theme_btn.setIconSize(QSize(24, 24))
-        self.theme_btn.setFixedSize(40, 40)
-        self.theme_btn.setCursor(Qt.PointingHandCursor)
-        self.theme_btn.setToolTip("Switch Theme")
-        self.theme_btn.setObjectName("theme_btn")
-        self.theme_btn.setStyleSheet(f"""
-            QPushButton#theme_btn {{
-                background-color: transparent;
-                border: none;
-                border-radius: 5px;
-            }}
-            QPushButton#theme_btn:hover {{
-                background-color: {Colors.SIDEBAR_ITEM_HOVER};
-            }}
-        """)
-        
-        # Connect theme button to menu
-        self.theme_btn.clicked.connect(self.show_theme_menu)
-        header_layout.addWidget(self.theme_btn)
-        
-        # Chat and input areas
-        chat_input_container = QWidget()
-        chat_input_layout = QVBoxLayout(chat_input_container)
-        chat_input_layout.setContentsMargins(0, 0, 0, 0)
-        chat_input_layout.setSpacing(0)
-        
         self.chat_widget = ChatWidget()
         self.input_widget = InputWidget()
         
-        # Connect input widget signals for different generation types
-        self.input_widget.message_sent.connect(self.add_user_message)
-        self.input_widget.code_generation.connect(self.set_code_generation_mode)
-        self.input_widget.story_generation.connect(self.set_story_generation_mode)
-        self.input_widget.image_generation.connect(self.set_image_generation_mode)
+        # Add components to content layout
+        print("Adding chat widget...")
+        content_layout.addWidget(self.chat_widget)
+        print("Adding input widget...")
+        content_layout.addWidget(self.input_widget)
         
-        chat_input_layout.addWidget(self.chat_widget)
-        chat_input_layout.addWidget(self.input_widget)
-        
-        # Add content sections
-        content_layout.addWidget(header)
-        content_layout.addWidget(chat_input_container)
-        
-        # Add to splitter
-        self.splitter.addWidget(self.sidebar)
+        # Add content area to splitter
         self.splitter.addWidget(self.content_container)
         
         # Set initial sizes
-        self.splitter.setSizes([250, 750])
-        self.splitter.setHandleWidth(1)
-        self.splitter.setCollapsible(1, False)  # Content area can't be collapsed
-        
-        # Add splitter to main layout
-        main_layout.addWidget(self.splitter)
-        
-        # Set central widget
+        self.splitter.setSizes([250, 750])  # Adjust these values as needed
         self.setCentralWidget(self.central_widget)
         
+        print("UI setup complete.")
+
     def initialize_first_chat(self):
         """Create the initial chat automatically."""
         self.create_new_chat()
@@ -304,28 +248,10 @@ class MainWindow(QMainWindow):
         
         if sidebar_visible:
             # Hide sidebar with animation
-            def update_sidebar():
-                self.is_sidebar_visible = False
-                    
-            # Create animation for the sidebar
-            target_sizes = [0, self.width()]
-            
-            # Setup a smooth animation
-            self.splitter.setSizes(target_sizes)
-            self.sidebar.setMaximumWidth(0)
-            update_sidebar()
+            self.splitter.setSizes([0, self.width()])  # Collapse the sidebar
         else:
             # Show sidebar with animation
-            def update_sidebar():
-                self.is_sidebar_visible = True
-                self.sidebar.setMaximumWidth(300)
-                    
-            # Create animation for the sidebar
-            target_sizes = [250, self.width() - 250]
-            
-            # Setup a smooth animation
-            self.splitter.setSizes(target_sizes)
-            update_sidebar()
+            self.splitter.setSizes([250, self.width() - 250])  # Expand the sidebar
     
     def open_settings(self):
         """Open settings dialog."""

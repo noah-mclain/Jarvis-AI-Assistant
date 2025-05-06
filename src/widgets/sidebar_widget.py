@@ -128,7 +128,7 @@ class SidebarWidget(QWidget):
         # Add entrance animation
         entrance_anim = QParallelAnimationGroup(self)
         fade = fade_in(self, duration=400)
-        slide = slide_in(self, direction='left', distance=20, duration=400, ease=QEasingCurve.OutQuint)
+        slide = slide_in(self, duration=400, ease=QEasingCurve.OutQuint)
         entrance_anim.addAnimation(fade)
         entrance_anim.addAnimation(slide)
         entrance_anim.start()
@@ -145,7 +145,7 @@ class SidebarWidget(QWidget):
         
         # New Chat Button
         self.new_chat_btn = QPushButton("New Chat")
-        self.new_chat_btn.setIcon(QIcon("styles/svg/new_chat_icon.svg"))
+        self.new_chat_btn.setIcon(QIcon("src/styles/svg/new_chat_icon.svg"))
         self.new_chat_btn.setIconSize(QSize(18, 18))
         self.new_chat_btn.setCursor(Qt.PointingHandCursor)
         self.new_chat_btn.clicked.connect(self.new_chat_clicked)
@@ -168,7 +168,7 @@ class SidebarWidget(QWidget):
         
         # Settings Button
         self.settings_btn = QPushButton("Settings")
-        self.settings_btn.setIcon(QIcon("styles/svg/settings_icon.svg"))
+        self.settings_btn.setIcon(QIcon("src/styles/svg/settings_icon.svg"))
         self.settings_btn.setIconSize(QSize(18, 18))
         self.settings_btn.setCursor(Qt.PointingHandCursor)
         self.settings_btn.clicked.connect(self.settings_clicked)

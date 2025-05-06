@@ -1,8 +1,8 @@
 from PySide6.QtWidgets import QScrollArea, QWidget, QVBoxLayout, QLabel, QSizePolicy, QFrame, QHBoxLayout
-from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, Signal, QParallelAnimationGroup
+from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, Signal, QParallelAnimationGroup, QByteArray
 from PySide6.QtGui import QFont, QColor
 
-from src.widgets.chat_message import ChatMessage
+from widgets.chat_message import ChatMessage
 from styles.colors import Colors
 from styles.animations import fade_in, pulse, bounce_in
 
@@ -10,12 +10,14 @@ from styles.animations import fade_in, pulse, bounce_in
 class ChatWidget(QScrollArea):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setup_ui()
         self.messages = []
         self.current_chat_id = None
+        self.empty_label = QLabel("No messages yet.")
         
         # Animate entrance
         self.animate_entrance()
+        
+        self.setup_ui()
         
     def animate_entrance(self):
         """Add entrance animation to the entire chat area."""
@@ -56,7 +58,7 @@ class ChatWidget(QScrollArea):
         """Update styling based on current theme colors."""
         # Set chat area style
         self.setStyleSheet(f"""
-            QScrollArea {{
+            ChatWidget {{
                 background-color: {Colors.BACKGROUND};
                 border: none;
             }}
@@ -149,7 +151,7 @@ class ChatWidget(QScrollArea):
         
         # Only animate if there's a significant difference
         if maximum - current > 10:
-            animation = QPropertyAnimation(scroll_bar, "value")
+            animation = QPropertyAnimation(scroll_bar, QByteArray(b"value"))
             animation.setDuration(duration)
             animation.setStartValue(current)
             animation.setEndValue(maximum)

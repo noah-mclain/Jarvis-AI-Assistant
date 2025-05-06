@@ -24,7 +24,7 @@ def fade_out(widget, duration=300, ease=QEasingCurve.InCubic):
     animation.setEasingCurve(ease)
     return animation
 
-def slide_in(widget, duration=400, ease=QEasingCurve.OutQuint):
+def slide_in(widget, direction='right', distance=100, duration=400, ease=QEasingCurve.OutQuint):
     """Slide in animation for SidebarWidget."""
     start_height = 0
     end_height = widget.sizeHint().height()

@@ -5,6 +5,11 @@ from PySide6.QtGui import QPainter, QColor, QLinearGradient, QFont, QIcon, QPixm
 from styles.colors import Colors
 from styles.animations import fade_in, slide_in, scale
 import time
+import sys
+from pathlib import Path
+
+# Add the src directory to the Python path
+sys.path.append(str(Path(__file__).resolve().parent))
 
 class ChatMessage(QWidget):
     def __init__(self, text, is_user=True, parent=None):

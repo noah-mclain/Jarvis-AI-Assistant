@@ -17,4 +17,6 @@ export DYLD_PRINT_LIBRARIES_POST_LAUNCH=1
 
 # Enable macOS library loading debug
 echo "Running with debug enabled..."
-python main.py 
+
+# Save output to debug.log
+python src/main.py > logs/debug.log 2>&1 

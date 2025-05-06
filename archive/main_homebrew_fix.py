@@ -73,7 +73,7 @@ if __name__ == "__main__":
         app.setStyle("Fusion")
         
         # Load style sheet
-        with open("styles/theme.qss", "r") as f:
+        with open("src/styles/theme.qss", "r") as f:
             style = f.read()
             app.setStyleSheet(style)
         

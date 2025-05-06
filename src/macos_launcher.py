@@ -51,28 +51,24 @@ try:
             print(f"Warning: Could not find platform plugins in {platform_plugins_path} or {alt_path}")
 
     # Run the application with Qt paths set programmatically
-    from PySide6.QtWidgets import QApplication
-    
-    # This is the key part: tell Qt where to find plugins WITHOUT environment variables
-    # This works around SIP restrictions on macOS
     QCoreApplication.addLibraryPath(cwd)  # Look in current directory first
     QCoreApplication.addLibraryPath(qt_plugin_path)
     
-    # Debug path list
-    print("Qt library paths:")
-    for path in QCoreApplication.libraryPaths():
-        print(f"  {path}")
-    
     # Now run the app
-    from src.main_window import MainWindow
+    from PySide6.QtWidgets import QApplication
     
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     
-    # Load style sheet
-    with open("styles/theme.qss", "r") as f:
-        style = f.read()
-        app.setStyleSheet(style)
+    # Load style sheet with error handling
+    try:
+        with open("src/styles/theme.qss", "r") as f:
+            style = f.read()
+            app.setStyleSheet(style)
+    except FileNotFoundError:
+        print("Warning: theme.qss file not found. Using default styles.")
+    
+    from main_window import MainWindow
     
     window = MainWindow()
     window.show()
@@ -85,4 +81,4 @@ except Exception as e:
     print(f"Error: {e}")
     import traceback
     traceback.print_exc()
-    sys.exit(1) 
+    sys.exit(1)

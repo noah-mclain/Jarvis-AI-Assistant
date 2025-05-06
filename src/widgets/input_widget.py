@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (QWidget, QTextEdit, QPushButton, QHBoxLayout, 
                          QVBoxLayout, QSizePolicy, QFrame, QLabel)
-from PySide6.QtCore import Qt, Signal, QSize, QEvent, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup, QTimer
-from PySide6.QtGui import QIcon, QFont, QKeyEvent, QColor
+from PySide6.QtCore import Qt, Signal, QSize, QEvent, QPropertyAnimation, QEasingCurve, QParallelAnimationGroup, QTimer, QByteArray
+from PySide6.QtGui import QIcon, QFont, QKeyEvent, QColor, QTextCursor
 from styles.colors import Colors
 from styles.animations import scale, fade_in, slide_in, bounce_in, ripple_effect
 
@@ -103,9 +103,9 @@ class InputWidget(QWidget):
         button_layout.setAlignment(Qt.AlignCenter)
         
         # Create floating buttons for different generation types
-        self.code_btn = FloatingButton("styles/svg/code_icon.svg", "Generate Code")
-        self.story_btn = FloatingButton("styles/svg/story_icon.svg", "Generate Story")
-        self.image_btn = FloatingButton("styles/svg/image_icon.svg", "Generate Image")
+        self.code_btn = FloatingButton("src/styles/svg/code_icon.svg", "Generate Code")
+        self.story_btn = FloatingButton("src/styles/svg/story_icon.svg", "Generate Story")
+        self.image_btn = FloatingButton("src/styles/svg/image_icon.svg", "Generate Image")
         
         # Add the buttons to the layout
         button_layout.addWidget(self.code_btn)
@@ -137,7 +137,7 @@ class InputWidget(QWidget):
         
         # Send button with modern styling
         self.send_btn = QPushButton()
-        self.send_btn.setIcon(QIcon("styles/svg/send_icon.svg"))
+        self.send_btn.setIcon(QIcon("src/styles/svg/send_icon.svg"))
         self.send_btn.setIconSize(QSize(24, 24))
         self.send_btn.setCursor(Qt.PointingHandCursor)
         self.send_btn.setFixedSize(50, 50)
@@ -313,7 +313,7 @@ class InputWidget(QWidget):
         # Focus and move cursor to end of text
         self.input_field.setFocus()
         cursor = self.input_field.textCursor()
-        cursor.movePosition(cursor.End)
+        cursor.movePosition(QTextCursor.End)
         self.input_field.setTextCursor(cursor)
         
         # Update and animate the mode indicator
@@ -337,7 +337,7 @@ class InputWidget(QWidget):
         # Focus and move cursor to end of text
         self.input_field.setFocus()
         cursor = self.input_field.textCursor()
-        cursor.movePosition(cursor.End)
+        cursor.movePosition(QTextCursor.End)
         self.input_field.setTextCursor(cursor)
         
         # Update and animate the mode indicator
@@ -361,7 +361,7 @@ class InputWidget(QWidget):
         # Focus and move cursor to end of text
         self.input_field.setFocus()
         cursor = self.input_field.textCursor()
-        cursor.movePosition(cursor.End)
+        cursor.movePosition(QTextCursor.End)
         self.input_field.setTextCursor(cursor)
         
         # Update and animate the mode indicator
@@ -412,7 +412,7 @@ class InputWidget(QWidget):
             # If we were in a special mode, animate the mode indicator disappearing
             if self.generation_mode:
                 # Fade out the mode indicator
-                fade_out = QPropertyAnimation(self.mode_indicator, "windowOpacity")
+                fade_out = QPropertyAnimation(self.mode_indicator, QByteArray(b"windowOpacity"))
                 fade_out.setDuration(200)
                 fade_out.setStartValue(1.0)
                 fade_out.setEndValue(0.0)

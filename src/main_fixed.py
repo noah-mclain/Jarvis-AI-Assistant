@@ -31,16 +31,19 @@ if pyside6_locations:
 
 # Now import PySide6
 from PySide6.QtWidgets import QApplication
-from src.main_window import MainWindow
+from main_window import MainWindow
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     
-    # Load style sheet
-    with open("styles/theme.qss", "r") as f:
-        style = f.read()
-        app.setStyleSheet(style)
+    # Load style sheet with error handling
+    try:
+        with open("src/styles/theme.qss", "r") as f:
+            style = f.read()
+            app.setStyleSheet(style)
+    except FileNotFoundError:
+        print("Warning: theme.qss file not found. Using default styles.")
 
     window = MainWindow()
     window.show()
