@@ -84,55 +84,64 @@ case $MODEL_CHOICE in
         # First approach - Direct finetune_deepseek.py script with maximum optimizations
         export CUDA_DEVICE_ORDER=PCI_BUS_ID
         export CUDA_VISIBLE_DEVICES=0
-        export FORCE_CPU_DATA_PIPELINE=1  # Force CPU for data pipeline to preserve GPU memory for model weights
-        python -m src.generative_ai_module.finetune_deepseek \
-            --epochs 4 \
-            --batch-size 2 \
-            --max-samples 100000 \
-            --all-subsets \
-            --sequence-length 4096 \
-            --learning-rate 3e-5 \
-            --warmup-steps 200 \
-            --load-in-4bit \
-            --save-steps 1000 \
-            --save-total-limit 3 \
-            --use-unsloth \
-            --force-gpu \
-            --output-dir Jarvis_AI_Assistant/models/deepseek \
-            --eval-split 0.15 \
-            --verbose
+        export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:24,garbage_collection_threshold:0.8"
+        export FORCE_CPU_DATA_PIPELINE=1  # Critical for Paperspace GPU constraints
+        # python -m src.generative_ai_module.finetune_deepseek \
+        #     --epochs 4 \
+        #     --batch-size 2 \
+        #     --max-samples 100000 \
+        #     --all-subsets \
+        #     --sequence-length 4096 \
+        #     --learning-rate 3e-5 \
+        #     --warmup-steps 200 \
+        #     --load-in-4bit \
+        #     --save-steps 1000 \
+        #     --save-total-limit 3 \
+        #     --use-unsloth \
+        #     --force-gpu \
+        #     --output-dir Jarvis_AI_Assistant/models/deepseek \
+        #     --eval-split 0.15 \
+        #     --verbose
         
         # Second approach (uncomment if the first one fails)
         # This uses train_models.py with all optimizations
         # echo "Alternatively trying code model training with train_models.py..."
-        # python -m src.generative_ai_module.train_models \
-        #     --model_type code \
-        #     --dataset "codeparrot/github-code" \
-        #     --model_name_or_path deepseek-ai/deepseek-coder-6.7b-instruct \
-        #     --batch_size 1 \
-        #     --max_length 2048 \
-        #     --gradient_accumulation_steps 16 \
-        #     --max_samples 80000 \
-        #     --learning_rate 2e-5 \
-        #     --weight_decay 0.1 \
-        #     --use_4bit \
-        #     --use_flash_attention_2 \
-        #     --gradient_checkpointing \
-        #     --optim adamw_bnb_8bit \
-        #     --eval_steps 1000 \
-        #     --save_steps 2000 \
-        #     --epochs 3 \
-        #     --evaluation_strategy steps \
-        #     --save_strategy steps \
-        #     --logging_steps 100 \
-        #     --output_dir Jarvis_AI_Assistant/models/code \
-        #     --visualize_metrics \
-        #     --warmup_steps 100 \
-        #     --force_gpu \
-        #     --pad_token_id 50256 \
-        #     --dataset_subset python \
-        #     --fim_rate 0.5 \
-        #     --use_unsloth
+        python -m src.generative_ai_module.train_models \
+            --model_type code \
+            --dataset "codeparrot/github-code,code-search-net/code_search_net" \  # Combined datasets
+            --model_name_or_path deepseek-ai/deepseek-coder-6.7b-instruct \
+            --batch_size 1 \
+            --max_length 768 \                  # Optimal for 16GB VRAM
+            --gradient_accumulation_steps 64 \   # Increased from 32 → 64
+            --max_samples 80000 \
+            --learning_rate 2e-5 \
+            --weight_decay 0.1 \
+            --use_4bit \
+            --use_qlora \                       # QLoRA for parameter efficiency
+            --lora_r 64 \                       # Added LoRA configuration
+            --lora_alpha 16 \                   # LoRA alpha scaling
+            --use_flash_attention_2 \
+            --gradient_checkpointing \
+            --optim adamw_bnb_8bit \
+            --eval_steps 1000 \
+            --save_steps 2000 \
+            --epochs 3 \
+            --evaluation_strategy steps \
+            --save_strategy steps \
+            --logging_steps 100 \
+            --output_dir models/code \
+            --visualize_metrics \
+            --warmup_steps 100 \
+            --force_gpu \
+            --pad_token_id 50256 \
+            --dataset_subset python \
+            --fim_rate 0.5 \
+            --use_unsloth \
+            --cache_dir .cache \
+            --num_workers 1 \                   # Reduced to 1 for stability
+            --fp16 \                            # Added mixed precision
+            --sequence_packing \                # Better batch utilization
+            --use_cpu_data_loader               # Prevent GPU memory spikes
 
         unset FORCE_CPU_DATA_PIPELINE
         ;;
