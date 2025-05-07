@@ -1,383 +1,508 @@
-#!/bin/bash
-
 echo "===================================================================="
-echo "Jarvis AI Assistant - Unified Setup Script (No Dependency Conflicts)"
+echo "Jarvis AI Assistant - Setup Script (No Dependency Conflicts)"
 echo "===================================================================="
 
-# Stop on errors
-set -e
+# Set up Python environment
+sudo apt-get update
+sudo apt-get install -y make build-essential libssl-dev zlib1g-dev \
+libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm \
+libncurses5-dev libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev \
+python3-dev sqlite3
 
-# Detect environment
-IN_COLAB=0
-IN_PAPERSPACE=0
-if python -c "import google.colab" 2>/dev/null; then
-    echo "Running in Google Colab environment"
-    IN_COLAB=1
-elif [ -d "/notebooks" ] || [ -d "/storage" ]; then
-    echo "Running in Paperspace environment"
-    IN_PAPERSPACE=1
-else
-    echo "Running in standard environment"
-fi
+curl https://pyenv.run | bash
 
-detect_gpu() {
-    echo "Checking for GPU..."
-    GPU_AVAILABLE=0
-    A100_GPU=false
-    RTX4000_GPU=false
-    RTX5000_GPU=false
-    T4_GPU=false
+# Add pyenv to your shell config
+echo 'export PATH="$HOME/.pyenv/bin:$PATH"' >> ~/.bashrc
+echo 'eval "$(pyenv init --path)"' >> ~/.bashrc
+echo 'eval "$(pyenv virtualenv-init)"' >> ~/.bashrc
+source ~/.bashrc
 
-    # Install minimal NumPy first to avoid any dependency issues
-    echo "Installing NumPy 1.26.4 (required foundation package)..."
-    pip install numpy==1.26.4 --no-deps --quiet
+pyenv install 3.11.5
+pyenv global 3.11.5
+python --version  # Should output "Python 3.11.5"
+python -m venv jarvis_env  # Uses pyenv's 3.11.5
+source jarvis_env/bin/activate
 
-    # Verify NumPy installation
-    if ! python -c "import numpy; assert numpy.__version__ == '1.26.4', f'Wrong NumPy version: {numpy.__version__}'"; then
-        echo "ERROR: NumPy 1.26.4 installation failed. Cannot continue."
-        exit 1
-    fi
-    
-    echo "✅ NumPy 1.26.4 successfully installed"
-
-    # Install minimal PyTorch to check GPU
-    echo "Installing minimal PyTorch to verify GPU..."
-    pip install torch==2.1.2 --quiet --extra-index-url https://download.pytorch.org/whl/cu121
-
-    if python -c "import torch; print(torch.cuda.is_available())" 2>/dev/null | grep -q "True"; then
-        echo "PyTorch confirms CUDA is available"
-        GPU_AVAILABLE=1
-        
-        # Get CUDA and GPU info
-        CUDA_VERSION=$(python -c "import torch; print(torch.version.cuda)")
-        GPU_NAME=$(python -c "import torch; print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None')")
-        
-        echo "CUDA Version: $CUDA_VERSION"
-        echo "GPU: $GPU_NAME"
-        
-        # Detect specific GPU types
-        if echo "$GPU_NAME" | grep -q "A100"; then
-            echo "A100 GPU detected - using optimized settings for high VRAM"
-            A100_GPU=true
-            export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
-        elif echo "$GPU_NAME" | grep -q "RTX 4000"; then
-            echo "RTX 4000 GPU detected - using memory-optimized settings for 8GB VRAM"
-            RTX4000_GPU=true
-            export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
-        elif echo "$GPU_NAME" | grep -q "RTX 5000"; then
-            echo "RTX 5000 GPU detected - using optimized settings for 16GB VRAM"
-            RTX5000_GPU=true
-            export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:256
-        elif echo "$GPU_NAME" | grep -q "T4"; then
-            echo "T4 GPU detected - using memory-optimized settings for 16GB VRAM"
-            T4_GPU=true
-            export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:256
-        else
-            echo "Unknown GPU: $GPU_NAME - using generic settings"
-        fi
-        
-        # Common optimizations for all GPUs
-        export CUDA_LAUNCH_BLOCKING=0
-        export TOKENIZERS_PARALLELISM=true
-    else
-        echo "PyTorch cannot detect CUDA"
-        echo "ERROR: No GPU detected. This setup requires GPU acceleration."
-        exit 1
-    fi
-}
-
-cleanup_environment() {
-    echo "Performing complete environment cleanup..."
-    
-    # Uninstall all relevant packages
-    pip uninstall -y torch torchvision torchaudio
-    pip uninstall -y numpy scipy matplotlib pandas
-    pip uninstall -y transformers tokenizers huggingface-hub
-    pip uninstall -y peft accelerate trl
-    pip uninstall -y bitsandbytes xformers triton
-    pip uninstall -y unsloth
-    pip uninstall -y flash-attn
-    
-    # Remove package directories with sudo if available
-    echo "Removing package directories..."
-    if command -v sudo &> /dev/null; then
-        sudo rm -rf /usr/local/lib/python3.11/dist-packages/numpy*
-        sudo rm -rf /usr/local/lib/python3.11/dist-packages/torch*
-        sudo rm -rf /usr/local/lib/python3.11/dist-packages/transformers*
-        sudo rm -rf /usr/local/lib/python3.11/dist-packages/unsloth*
-    else
-        rm -rf /usr/local/lib/python3.11/dist-packages/numpy*
-        rm -rf /usr/local/lib/python3.11/dist-packages/torch*
-        rm -rf /usr/local/lib/python3.11/dist-packages/transformers*
-        rm -rf /usr/local/lib/python3.11/dist-packages/unsloth*
-    fi
-    
-    # Clear cache
-    pip cache purge
-    rm -rf ~/.cache/pip
-    rm -rf ~/.cache/huggingface
-}
-
-install_core_dependencies() {
-    echo "Installing core dependencies with specific compatible versions..."
-    
-    # Set LD_LIBRARY_PATH for CUDA libraries
-    echo "Setting up CUDA library paths..."
-    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/lib64-nvidia
-    echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/lib64-nvidia' >> ~/.bashrc
-    
-    # 1. NumPy 1.26.4 (crucial for compatibility)
-    echo "Installing NumPy 1.26.4 (foundation package)..."
-    pip install numpy==1.26.4 --no-deps --force-reinstall
-    pip install numpy==1.26.4 --force-reinstall
-    
-    # Verify NumPy installation
-    if ! python -c "import numpy; print(f'NumPy version: {numpy.__version__}'); exit(0 if numpy.__version__ == '1.26.4' else 1)"; then
-        echo "ERROR: NumPy 1.26.4 installation failed. Cannot continue."
-        exit 1
-    else
-        echo "✅ NumPy 1.26.4 successfully installed!"
-    fi
-    
-    # 2. Install PyTorch 2.1.2 with CUDA 12.1 (verified compatible version)
-    echo "Installing PyTorch 2.1.2 with CUDA 12.1 support..."
-    pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --extra-index-url https://download.pytorch.org/whl/cu121
-    
-    # 3. Install core dependencies 
-    echo "Installing core scientific packages..."
-    pip install scipy==1.12.0 matplotlib==3.8.3 pandas==2.2.0
-    
-    # 4. Install utility packages required by transformers ecosystem
-    pip install filelock==3.12.2 requests==2.31.0 tqdm==4.66.1
-    pip install pyyaml==6.0.1 typing-extensions==4.8.0 packaging==23.1
-    pip install fsspec==2023.6.0 psutil==5.9.5 ninja==1.11.1
-    
-    # 5. Hugging Face ecosystem - in exact order for compatibility
-    echo "Installing Hugging Face ecosystem..."
-    pip install safetensors==0.4.0
-    pip install huggingface-hub==0.19.4 --no-deps
-    pip install huggingface-hub==0.19.4  # Second install pulls in compatible dependencies
-    
-    pip install tokenizers==0.14.0 --no-deps
-    pip install tokenizers==0.14.0
-    
-    pip install transformers==4.36.2 --no-deps
-    pip install transformers==4.36.2  # Second install pulls in compatible dependencies
-    
-    pip install peft==0.6.0 --no-deps
-    pip install peft==0.6.0
-    
-    pip install accelerate==0.25.0 --no-deps
-    pip install accelerate==0.25.0
-    
-    pip install datasets==2.14.5 --no-deps
-    pip install datasets==2.14.5
-    
-    pip install trl==0.7.4 --no-deps
-    pip install trl==0.7.4
-    
-    pip install einops==0.7.0
-    
-    # 6. Install optimization libraries with exact versions
-    echo "Installing optimization libraries..."
-    pip install bitsandbytes==0.41.0
-    pip install triton==2.1.0
-    pip install xformers==0.0.23.post1 --index-url https://download.pytorch.org/whl/cu121
-    
-    # 7. Install unsloth (version 2024.8 is confirmed to work with this setup)
-    echo "Installing unsloth dependencies..."
-    pip install sentencepiece==0.1.99
-    pip install unsloth==2024.8 --no-deps
-    
-    echo "✅ All core dependencies installed!"
-}
-
-configure_gpu_optimizations() {
-    echo "Configuring GPU optimizations..."
-    mkdir -p ~/.config/accelerate
-    
-    if [ "$A100_GPU" = true ]; then
-        echo "Applying A100-specific optimizations (BF16)..."
-        cat > ~/.config/accelerate/default_config.yaml << EOF
-compute_environment: LOCAL_MACHINE
-distributed_type: 'NO'
-downcast_bf16: 'yes'
-machine_rank: 0
-main_process_ip: null
-main_process_port: null
-main_training_function: main
-mixed_precision: 'bf16'
-num_machines: 1
-num_processes: 1
-use_cpu: false
-EOF
-    else
-        echo "Applying RTX-optimized settings (FP16)..."
-        cat > ~/.config/accelerate/default_config.yaml << EOF
-compute_environment: LOCAL_MACHINE
-distributed_type: 'NO'
-downcast_bf16: 'no'
-machine_rank: 0
-main_process_ip: null
-main_process_port: null
-main_training_function: main
-mixed_precision: 'fp16'
-num_machines: 1
-num_processes: 1
-use_cpu: false
-EOF
-    fi
-
-    # Set and save environment variables
-    export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-"max_split_size_mb:256"}
-    export CUDA_LAUNCH_BLOCKING=0
-    export TOKENIZERS_PARALLELISM=true
-    
-    echo "export PYTORCH_CUDA_ALLOC_CONF=$PYTORCH_CUDA_ALLOC_CONF" >> ~/.bashrc
-    echo "export CUDA_LAUNCH_BLOCKING=0" >> ~/.bashrc
-    echo "export TOKENIZERS_PARALLELISM=true" >> ~/.bashrc
-}
-
-verify_installation() {
-    echo "Verifying installations..."
-    python -c "
-import sys
-print(f'Python version: {sys.version}')
-
-try:
-    import numpy
-    print(f'NumPy version: {numpy.__version__}')
-    if numpy.__version__ == '1.26.4':
-        print('✅ NumPy 1.26.4 confirmed')
-    else:
-        print(f'❌ Wrong NumPy version: {numpy.__version__}')
-except Exception as e:
-    print(f'❌ NumPy error: {e}')
-
-try:
-    import torch
-    print(f'PyTorch version: {torch.__version__}')
-    print(f'CUDA available: {torch.cuda.is_available()}')
-    if torch.cuda.is_available():
-        print(f'CUDA version: {torch.version.cuda}')
-        print(f'GPU: {torch.cuda.get_device_name(0)}')
-except Exception as e:
-    print(f'❌ PyTorch error: {e}')
-
-try:
-    import transformers
-    print(f'transformers version: {transformers.__version__}')
-except Exception as e:
-    print(f'❌ transformers error: {e}')
-
-try:
-    import peft
-    print(f'peft version: {peft.__version__}')
-except Exception as e:
-    print(f'❌ peft error: {e}')
-
-try:
-    import accelerate
-    print(f'accelerate version: {accelerate.__version__}')
-except Exception as e:
-    print(f'❌ accelerate error: {e}')
-
-try:
-    import bitsandbytes as bnb
-    print(f'bitsandbytes version: {bnb.__version__ if hasattr(bnb, \"__version__\") else \"installed\"}')
-    try:
-        if torch.cuda.is_available():
-            lin8bit = bnb.nn.Linear8bitLt(10, 10, has_fp16_weights=False)
-            print('✅ bitsandbytes 8-bit layers working!')
-    except Exception as e:
-        print(f'❌ bitsandbytes layer creation error: {e}')
-except Exception as e:
-    print(f'❌ bitsandbytes import error: {e}')
-
-try:
-    import unsloth
-    print(f'unsloth version: {unsloth.__version__ if hasattr(unsloth, \"__version__\") else \"installed\"}')
-    print('✅ unsloth successfully imported')
-except Exception as e:
-    print(f'❌ unsloth error: {e}')
-"
-}
-
-create_emergency_fix_script() {
-    echo "Creating emergency fix script..."
-    cat > fix_numpy_emergency.sh << 'EOF'
-#!/bin/bash
-
-echo "================================================================"
-echo "EMERGENCY: NumPy 1.26.4 Installation Fix"
-echo "================================================================"
-
-# Uninstall NumPy
-pip uninstall -y numpy
-
-# Force remove all NumPy directories (with sudo if available)
-if command -v sudo &> /dev/null; then
-    sudo rm -rf /usr/local/lib/python3.11/dist-packages/numpy*
-    sudo rm -rf /usr/local/lib/python3.11/site-packages/numpy*
-else
-    rm -rf /usr/local/lib/python3.11/dist-packages/numpy*
-    rm -rf /usr/local/lib/python3.11/site-packages/numpy*
-fi
-
-# Clear pip cache
 pip cache purge
 
-# Install NumPy 1.26.4 with maximum force
-pip install numpy==1.26.4 --no-deps --force-reinstall
-pip install numpy==1.26.4 --force-reinstall
+# Install dependencies
+sudo apt-get update
+sudo apt-get install -y curl unzip
 
-# Verify installation
-if python -c "import numpy; print(f'NumPy version: {numpy.__version__}'); exit(0 if numpy.__version__ == '1.26.4' else 1)"; then
-    echo "✅ NumPy 1.26.4 successfully installed!"
-else
-    echo "❌ NumPy installation failed after multiple attempts."
-    echo "Please try running this script with sudo: sudo ./fix_numpy_emergency.sh"
-    exit 1
-fi
+# Download and run the rclone installer
+curl https://rclone.org/install.sh | sudo bash
+rclone version
 
-echo "================================================================"
-echo "NumPy 1.26.4 emergency fix complete!"
-echo "================================================================"
-EOF
+rclone config
 
-    chmod +x fix_numpy_emergency.sh
-}
+# Sync entire folder to Paperspace storage
+rclone sync gdrive: \
+  /notebooks/Jarvis_AI_Assistant \
+  --drive-root-folder-id 1bGqUvfzVrZdxBqLz9rl0sN3_j5UjpSTE \
+  --progress \
+  --transfers 4 \
+  --checkers 8 \
+  --drive-acknowledge-abuse
 
-# Main execution flow
-echo "Starting unified setup for Jarvis AI Assistant..."
+  # Compare source and destination
+rclone check gdrive: /notebooks/Jarvis_AI_Assistant \
+  --drive-root-folder-id 1bGqUvfzVrZdxBqLz9rl0sN3_j5UjpSTE \
+  --size-only
 
-# Clean environment first
-cleanup_environment
+# Install Google Drive integration for data persistence
+pip install gdown google-auth google-auth-oauthlib google-auth-httplib2
 
-# Detect GPU and install minimal dependencies
-detect_gpu
+chmod +x setup/*
+./setup/setup.sh
+./setup/fix_unsloth_final.sh
+./setup/create_minimal_unsloth.sh
+./setup/apply_fixed_unsloth.sh
 
-# Install dependencies in the correct order
-install_core_dependencies
+source /notebooks/custom_unsloth/activate_minimal_unsloth.sh
+python /notebooks/custom_unsloth/use_minimal_unsloth.py
 
-# Configure GPU optimizations
-configure_gpu_optimizations
+## Fix Import Issues
 
-# Create emergency fix script
-create_emergency_fix_script
+# Create import_fix.py
+cat > /notebooks/src/generative_ai_module/import_fix.py << 'EOL'
+"""
+Import Fix Module
 
-# Verify installation
-verify_installation
+This module provides all the functions and classes that were missing or had issues in imports.
+Simply import this module first to ensure all dependencies are properly available.
+"""
 
-echo "===================================================================="
-echo "Setup complete! Jarvis AI Assistant environment is ready."
-echo ""
-echo "Environment has:"
-echo "- NumPy 1.26.4 (compatible foundation)"
-echo "- PyTorch 2.1.2 with CUDA 12.1"
-echo "- Transformers 4.36.2, PEFT 0.6.0"
-echo "- Unsloth 2024.8 (compatible version)"
-echo ""
-echo "If NumPy or other packages get corrupted, run:"
-echo "./fix_numpy_emergency.sh"
-echo "====================================================================" 
+import os
+import sys
+import torch
+import numpy as np
+import json
+from datetime import datetime
+
+# Add the parent directory to sys.path for proper imports
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(os.path.dirname(current_dir))
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+
+# Calculate metrics function
+def calculate_metrics(model, data_batches, device):
+    """Calculate metrics on a dataset (loss, perplexity, accuracy)"""
+    model.eval()
+    total_loss = 0.0
+    total_batches = 0
+    total_correct = 0
+    total_samples = 0
+
+    criterion = torch.nn.CrossEntropyLoss()
+
+    with torch.no_grad():
+        for input_batch, target_batch in data_batches:
+            # Move data to the model's device
+            input_batch = input_batch.to(device)
+            target_batch = target_batch.to(device)
+
+            # Forward pass
+            output, _ = model(input_batch)
+
+            # Calculate loss
+            loss = criterion(output.view(-1, output.size(-1)), target_batch.view(-1))
+            total_loss += loss.item()
+
+            # Calculate accuracy
+            predictions = output.argmax(dim=-1)
+            correct = (predictions == target_batch).sum().item()
+            total_correct += correct
+            total_samples += target_batch.numel()
+
+            total_batches += 1
+
+    # Calculate metrics
+    avg_loss = total_loss / max(1, total_batches)
+    perplexity = np.exp(avg_loss)
+    accuracy = total_correct / max(1, total_samples)
+
+    return {
+        'loss': avg_loss,
+        'perplexity': perplexity,
+        'accuracy': accuracy
+    }
+
+def save_metrics(metrics, model_name, dataset_name, timestamp=None):
+    """Save evaluation metrics to a JSON file."""
+    if timestamp is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # Create metrics directory
+    metrics_dir = "metrics"
+    os.makedirs(metrics_dir, exist_ok=True)
+
+    # Create a clean filename
+    model_name_clean = model_name.replace('/', '_')
+    dataset_name_clean = dataset_name.replace('/', '_')
+
+    filename = f"{model_name_clean}_{dataset_name_clean}_{timestamp}.json"
+    filepath = os.path.join(metrics_dir, filename)
+
+    # Add metadata
+    metrics_with_meta = {
+        "model_name": model_name,
+        "dataset_name": dataset_name,
+        "timestamp": timestamp,
+        "metrics": metrics
+    }
+
+    # Save the metrics
+    with open(filepath, 'w') as f:
+        json.dump(metrics_with_meta, f, indent=2)
+
+    print(f"Saved metrics to {filepath}")
+
+    return filepath
+
+# EvaluationMetrics class
+class EvaluationMetrics:
+    """Class for evaluating generative models"""
+
+    def __init__(self, metrics_dir="evaluation_metrics", use_gpu=None):
+        """Initialize the metrics"""
+        self.metrics_dir = metrics_dir
+        os.makedirs(metrics_dir, exist_ok=True)
+        self.use_gpu = torch.cuda.is_available() if use_gpu is None else use_gpu
+
+    def evaluate_generation(self, prompt, generated_text, reference_text=None,
+                          dataset_name="unknown", save_results=True):
+        """Evaluate generated text against reference"""
+        results = {
+            "prompt": prompt,
+            "generated_text": generated_text,
+            "dataset": dataset_name,
+            "timestamp": datetime.now().isoformat()
+        }
+
+        if reference_text:
+            results["reference_text"] = reference_text
+
+        # Save results if requested
+        if save_results:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            results_path = os.path.join(self.metrics_dir, f"evaluation_{dataset_name}_{timestamp}.json")
+
+            with open(results_path, 'w') as f:
+                json.dump(results, f, indent=2)
+
+        return results
+
+# Update the module's __all__ to include these functions
+__all__ = [
+    'calculate_metrics',
+    'save_metrics',
+    'EvaluationMetrics'
+]
+
+# Monkey patch the required modules
+try:
+    import src.generative_ai_module.evaluation_metrics
+    sys.modules['src.generative_ai_module.evaluation_metrics'].calculate_metrics = calculate_metrics
+    sys.modules['src.generative_ai_module.evaluation_metrics'].save_metrics = save_metrics
+    sys.modules['src.generative_ai_module.evaluation_metrics'].EvaluationMetrics = EvaluationMetrics
+except ImportError:
+    # Module not imported yet, that's fine
+    pass
+
+# Fix the module import if this is imported directly
+if __name__ != "__main__":
+    # Add ourselves to sys.modules
+    sys.modules['src.generative_ai_module.calculate_metrics'] = sys.modules[__name__]
+    sys.modules['src.generative_ai_module.evaluate_generation'] = sys.modules[__name__]
+EOL
+
+# Create fix_jarvis_imports.py
+cat > /notebooks/src/generative_ai_module/fix_jarvis_imports.py << 'EOL'
+#!/usr/bin/env python3
+"""
+Jarvis AI Assistant Import Fix Tool
+
+This script fixes import issues in the Jarvis AI Assistant codebase by:
+1. Creating a standalone copy of the functions that have import issues
+2. Adding the necessary import statements to the top of any file that needs them
+
+Usage:
+python fix_jarvis_imports.py <file_to_fix>
+"""
+
+import os
+import sys
+import re
+import argparse
+import shutil
+from pathlib import Path
+
+# Special import block to add to files with import issues
+IMPORT_FIX_BLOCK = '''
+# ===== BEGIN JARVIS IMPORT FIX =====
+# This block was added by the fix_jarvis_imports.py script
+import sys
+import os
+
+# Add the project root to sys.path
+_jarvis_project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+if _jarvis_project_root not in sys.path:
+    sys.path.insert(0, _jarvis_project_root)
+
+# Import the necessary functions directly
+try:
+    from src.generative_ai_module.import_fix import calculate_metrics, save_metrics, EvaluationMetrics
+except ImportError:
+    # If that fails, define them locally
+    import torch
+    import numpy as np
+
+    def calculate_metrics(model, data_batches, device):
+        """Calculate metrics on a dataset (loss, perplexity, accuracy)"""
+        model.eval()
+        total_loss = 0.0
+        total_batches = 0
+        total_correct = 0
+        total_samples = 0
+
+        criterion = torch.nn.CrossEntropyLoss()
+
+        with torch.no_grad():
+            for input_batch, target_batch in data_batches:
+                input_batch = input_batch.to(device)
+                target_batch = target_batch.to(device)
+                output, _ = model(input_batch)
+                loss = criterion(output.view(-1, output.size(-1)), target_batch.view(-1))
+                total_loss += loss.item()
+                predictions = output.argmax(dim=-1)
+                correct = (predictions == target_batch).sum().item()
+                total_correct += correct
+                total_samples += target_batch.numel()
+                total_batches += 1
+
+        avg_loss = total_loss / max(1, total_batches)
+        perplexity = np.exp(avg_loss)
+        accuracy = total_correct / max(1, total_samples)
+
+        return {
+            'loss': avg_loss,
+            'perplexity': perplexity,
+            'accuracy': accuracy
+        }
+
+    class EvaluationMetrics:
+        """Class for evaluating generative models"""
+        def __init__(self, metrics_dir="evaluation_metrics", use_gpu=None):
+            self.metrics_dir = metrics_dir
+            os.makedirs(metrics_dir, exist_ok=True)
+            self.use_gpu = torch.cuda.is_available() if use_gpu is None else use_gpu
+
+        def evaluate_generation(self, prompt, generated_text, reference_text=None,
+                              dataset_name="unknown", save_results=True):
+            import json
+            from datetime import datetime
+
+            results = {
+                "prompt": prompt,
+                "generated_text": generated_text,
+                "dataset": dataset_name,
+                "timestamp": datetime.now().isoformat()
+            }
+
+            if reference_text:
+                results["reference_text"] = reference_text
+
+            if save_results:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                results_path = os.path.join(self.metrics_dir,
+                                           f"evaluation_{dataset_name}_{timestamp}.json")
+                with open(results_path, 'w') as f:
+                    json.dump(results, f, indent=2)
+
+            return results
+
+    def save_metrics(metrics, model_name, dataset_name, timestamp=None):
+        """Save evaluation metrics to a JSON file"""
+        import json
+        from datetime import datetime
+
+        if timestamp is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        metrics_dir = "metrics"
+        os.makedirs(metrics_dir, exist_ok=True)
+
+        model_name_clean = model_name.replace('/', '_')
+        dataset_name_clean = dataset_name.replace('/', '_')
+
+        filename = f"{model_name_clean}_{dataset_name_clean}_{timestamp}.json"
+        filepath = os.path.join(metrics_dir, filename)
+
+        metrics_with_meta = {
+            "model_name": model_name,
+            "dataset_name": dataset_name,
+            "timestamp": timestamp,
+            "metrics": metrics
+        }
+
+        with open(filepath, 'w') as f:
+            json.dump(metrics_with_meta, f, indent=2)
+
+        print(f"Saved metrics to {filepath}")
+        return filepath
+# ===== END JARVIS IMPORT FIX =====
+'''
+
+def backup_file(file_path):
+    """Create a backup of the file before modifying it"""
+    backup_path = f"{file_path}.bak"
+    shutil.copy2(file_path, backup_path)
+    print(f"✅ Created backup at {backup_path}")
+    return backup_path
+
+def fix_imports(file_path):
+    """Add the import fix block to the top of the file"""
+    with open(file_path, 'r') as f:
+        content = f.read()
+
+    # Check if the fix has already been applied
+    if "# ===== BEGIN JARVIS IMPORT FIX =====" in content:
+        print("⚠️ Import fix already appears to be applied to this file.")
+        return False
+
+    # Find the insertion point (after any shebang, module docstrings, and initial imports)
+    lines = content.split('\n')
+
+    # Skip shebang if present
+    start_index = 0
+    if lines and lines[0].startswith('#!'):
+        start_index = 1
+
+    # Skip module docstring if present
+    in_docstring = False
+    for i in range(start_index, len(lines)):
+        line = lines[i].strip()
+
+        if line.startswith('"""') or line.startswith("'''"):
+            if line.endswith('"""') or line.endswith("'''"):
+                # Single line docstring
+                start_index = i + 1
+                break
+            else:
+                # Start of multi-line docstring
+                in_docstring = True
+                continue
+
+        if in_docstring:
+            if line.endswith('"""') or line.endswith("'''"):
+                # End of multi-line docstring
+                in_docstring = False
+                start_index = i + 1
+                break
+
+    # Determine if the file imports from evaluation_metrics or train_models
+    needs_fix = (
+        "from src.generative_ai_module.evaluation_metrics import" in content or
+        "from .evaluation_metrics import" in content or
+        "from src.generative_ai_module.train_models import calculate_metrics" in content or
+        "from .train_models import calculate_metrics" in content or
+        "import src.generative_ai_module.evaluation_metrics" in content or
+        "import src.generative_ai_module" in content
+    )
+
+    if not needs_fix:
+        print("ℹ️ This file doesn't appear to need the import fix.")
+        return False
+
+    # Add the import fix block
+    modified_content = '\n'.join(lines[:start_index]) + IMPORT_FIX_BLOCK + '\n'.join(lines[start_index:])
+
+    # Write the modified content back to the file
+    with open(file_path, 'w') as f:
+        f.write(modified_content)
+
+    print(f"✅ Added import fix to {file_path}")
+    return True
+
+def main():
+    """Main entry point"""
+    parser = argparse.ArgumentParser(description="Fix import issues in Jarvis AI Assistant Python files")
+    parser.add_argument("file", help="Path to the Python file to fix")
+    parser.add_argument("--no-backup", action="store_true", help="Skip creating a backup of the file")
+    parser.add_argument("--force", action="store_true", help="Apply the fix even if the file doesn't appear to need it")
+
+    args = parser.parse_args()
+
+    file_path = os.path.abspath(args.file)
+
+    if not os.path.exists(file_path):
+        print(f"❌ Error: File {file_path} does not exist.")
+        return 1
+
+    if not file_path.endswith('.py'):
+        print(f"❌ Error: {file_path} is not a Python file.")
+        return 1
+
+    print(f"🔍 Analyzing {file_path}...")
+
+    # Create a backup if requested
+    if not args.no_backup:
+        backup_file(file_path)
+
+    # Apply the fix
+    if args.force:
+        # Skip the check and apply the fix regardless
+        with open(file_path, 'r') as f:
+            content = f.read()
+
+        # Check if the fix has already been applied
+        if "# ===== BEGIN JARVIS IMPORT FIX =====" in content:
+            print("⚠️ Import fix already appears to be applied to this file.")
+            return 0
+
+        # Add the import fix block at the start
+        with open(file_path, 'r') as f:
+            lines = f.read().split('\n')
+
+        # Skip shebang if present
+        start_index = 0
+        if lines and lines[0].startswith('#!'):
+            start_index = 1
+
+        modified_content = '\n'.join(lines[:start_index]) + IMPORT_FIX_BLOCK + '\n'.join(lines[start_index:])
+
+        with open(file_path, 'w') as f:
+            f.write(modified_content)
+
+        print(f"✅ Added import fix to {file_path} (force mode)")
+    else:
+        # Normal mode - only apply if needed
+        if not fix_imports(file_path):
+            print("ℹ️ No changes were made to the file.")
+            return 0
+
+    print("\n✅ Import fix applied successfully!")
+    print("📝 You may now run the file and it should import correctly.")
+
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())
+EOL
+
+# Make fix_jarvis_imports.py executable
+chmod +x /notebooks/src/generative_ai_module/fix_jarvis_imports.py
+
+./setup/install_spacy_isolated.sh
+./setup/fix_spacy_for_paperspace.sh
+
+# Apply fixes to key files
+cd /notebooks
+python src/generative_ai_module/fix_jarvis_imports.py --force src/generative_ai_module/train_models.py
+python src/generative_ai_module/fix_jarvis_imports.py --force src/generative_ai_module/finetune_deepseek.py
+python src/generative_ai_module/fix_jarvis_imports.py --force src/generative_ai_module/evaluate_generation.py
+python src/generative_ai_module/fix_jarvis_imports.py --force src/generative_ai_module/unified_generation_pipeline.py
+
+# Create required directories
+# mkdir -p /notebooks/Jarvis_AI_Assistant/{models,datasets,metrics,logs,checkpoints,evaluation_metrics,visualizations}

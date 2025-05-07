@@ -530,7 +530,14 @@ class CNNTextGenerator(TextGenerator):
         """Initialize the hybrid CNN-Transformer model"""
         import torch
         import torch.nn as nn
-        from transformers import AutoModelForCausalLM, AutoTokenizer
+        from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
+
+        # Determine model type
+        is_gpt2_model = "gpt2" in model_name_or_path.lower()
+        is_t5_model = any(name in model_name_or_path.lower() for name in ["t5", "flan", "ul2"])
+
+        # Set model type attribute for use in forward pass
+        self.model_type = "seq2seq" if is_t5_model else "causal"
 
         # Load tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(model_name_or_path)
@@ -548,22 +555,37 @@ class CNNTextGenerator(TextGenerator):
 
         # Add Flash Attention 2 if requested and possible
         if self.use_flash_attention_2:
-            # Check if flash attention is available
-            try:
-                import flash_attn
-                print("Flash Attention 2 detected - enabling for transformer model")
-                load_kwargs['use_flash_attention_2'] = True
-            except ImportError:
-                print("Flash Attention 2 requested but not installed - continuing without it")
-                print("To install: pip install flash-attn --no-build-isolation")
+            if is_gpt2_model:
+                print("Flash Attention 2 is not supported for GPT2 models - disabling")
+                self.use_flash_attention_2 = False
+            else:
+                # Check if flash attention is available
+                try:
+                    import flash_attn
+                    print("Flash Attention 2 detected - enabling for transformer model")
+                    load_kwargs['use_flash_attention_2'] = True
+                except ImportError:
+                    print("Flash Attention 2 requested but not installed - continuing without it")
+                    print("To install: pip install flash-attn --no-build-isolation")
 
-        # Load the base transformer model
-        self.base_model = AutoModelForCausalLM.from_pretrained(
-            model_name_or_path,
-            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-            device_map="auto" if torch.cuda.is_available() else None,
-            **load_kwargs
-        )
+        # Load the appropriate model type
+        if is_t5_model:
+            print(f"Loading T5-based model: {model_name_or_path}")
+            self.base_model = AutoModelForSeq2SeqLM.from_pretrained(
+                model_name_or_path,
+                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                device_map="auto" if torch.cuda.is_available() else None,
+                **load_kwargs
+            )
+        else:
+            # Default to causal language model (GPT-style)
+            print(f"Loading causal language model: {model_name_or_path}")
+            self.base_model = AutoModelForCausalLM.from_pretrained(
+                model_name_or_path,
+                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                device_map="auto" if torch.cuda.is_available() else None,
+                **load_kwargs
+            )
 
         # Enable gradient checkpointing if requested
         if self.gradient_checkpointing and hasattr(self.base_model, "gradient_checkpointing_enable"):
@@ -618,7 +640,7 @@ class CNNTextGenerator(TextGenerator):
         # Move model to device
         self.to(self.device)
 
-    def forward(self, input_ids, attention_mask=None, labels=None, **kwargs):
+    def forward(self, input_ids, attention_mask=None, labels=None, decoder_input_ids=None, **kwargs):
         """
         Forward pass through the hybrid CNN-Transformer model
 
@@ -626,6 +648,7 @@ class CNNTextGenerator(TextGenerator):
             input_ids: Input token IDs
             attention_mask: Attention mask
             labels: Target labels for loss computation
+            decoder_input_ids: Decoder input IDs (for seq2seq models)
 
         Returns:
             Transformer model outputs with logits
@@ -658,12 +681,29 @@ class CNNTextGenerator(TextGenerator):
         # Add residual connection to preserve original embeddings
         enhanced_embeddings = enhanced_embeddings + embeddings
 
-        # Pass through the base model but replace the embeddings
-        # This uses the base model's full forward pass but with our enhanced embeddings
-        outputs = self.base_model(inputs_embeds=enhanced_embeddings,
-                                 attention_mask=attention_mask,
-                                 labels=labels,
-                                 **kwargs)
+        # Handle different model types
+        if self.model_type == "seq2seq":
+            # For T5/FLAN models (encoder-decoder)
+            if decoder_input_ids is None and labels is not None:
+                # Use labels as decoder_input_ids if not provided (common practice)
+                decoder_input_ids = labels
+
+            # Pass through the seq2seq model with enhanced embeddings
+            outputs = self.base_model(
+                inputs_embeds=enhanced_embeddings,
+                attention_mask=attention_mask,
+                labels=labels,
+                decoder_input_ids=decoder_input_ids,
+                **kwargs
+            )
+        else:
+            # For causal language models (GPT-style)
+            outputs = self.base_model(
+                inputs_embeds=enhanced_embeddings,
+                attention_mask=attention_mask,
+                labels=labels,
+                **kwargs
+            )
 
         return outputs
 
@@ -885,7 +925,7 @@ class CNNTextGenerator(TextGenerator):
         print(f"Model saved to {path}")
         print(f"Tokenizer saved to {tokenizer_path}")
 
-def create_cnn_text_generator(model_name="distilgpt2", force_gpu=True, cnn_layers=2,
+def create_cnn_text_generator(model_name="google/flan-t5-base", force_gpu=True, cnn_layers=2,
                              quantization_config=None, use_flash_attention_2=False,
                              gradient_checkpointing=False):
     """
@@ -902,6 +942,14 @@ def create_cnn_text_generator(model_name="distilgpt2", force_gpu=True, cnn_layer
     Returns:
         Initialized CNNTextGenerator
     """
+    # Check if model is GPT2 - Flash Attention 2 is not supported for GPT2
+    is_gpt2_model = "gpt2" in model_name.lower()
+
+    # Disable Flash Attention 2 for GPT2 models
+    if is_gpt2_model and use_flash_attention_2:
+        print("Flash Attention 2 is not supported for GPT2 models - disabling")
+        use_flash_attention_2 = False
+
     return CNNTextGenerator(
         model_name_or_path=model_name,
         force_gpu=force_gpu,
