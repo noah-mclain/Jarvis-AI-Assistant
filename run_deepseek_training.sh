@@ -55,17 +55,23 @@ if torch.cuda.is_available():
     print(f'Total memory: {total_mem:.2f} GB')
     print(f'Free memory: {free_mem:.2f} GB')
 
-    # Set BF16 flag based on GPU capability
+    # Check if there's sufficient memory for BF16
     if free_mem > 2.0:
         print('Sufficient memory for BF16 mixed precision')
-        BF16_CAPABLE=true
     else:
         print('Limited memory, disabling BF16 mixed precision')
-        BF16_CAPABLE=false
 else:
     print('No GPU available, will use CPU only')
-    BF16_CAPABLE=false
 "
+
+# Set BF16 capability based on available memory
+if python -c "import torch; exit(0 if torch.cuda.is_available() and (torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated()) / (1024**3) > 2.0 else 1)"; then
+    echo "Setting BF16_CAPABLE=true"
+    BF16_CAPABLE=true
+else
+    echo "Setting BF16_CAPABLE=false"
+    BF16_CAPABLE=false
+fi
 
 # Step 4: Create the patch script for transformers library
 echo "Creating transformers patch script..."
@@ -136,16 +142,11 @@ MONITOR_PID=$!
 echo "Starting DeepSeek Coder training with memory optimizations..."
 
 # Check if we're running on a CUDA device and set BF16 flag accordingly
-if python -c "import torch; print(torch.cuda.is_available())" | grep -q "True"; then
-    if [ "$BF16_CAPABLE" = true ]; then
-        echo "CUDA device detected with sufficient memory, enabling BF16 mixed precision"
-        BF16_FLAG="--bf16"
-    else
-        echo "CUDA device detected with limited memory, disabling BF16 mixed precision"
-        BF16_FLAG=""
-    fi
+if [ "$BF16_CAPABLE" = true ]; then
+    echo "GPU detected with sufficient memory, enabling BF16 mixed precision"
+    BF16_FLAG="--bf16"
 else
-    echo "No CUDA device detected, disabling BF16 mixed precision"
+    echo "GPU with limited memory or no GPU detected, disabling BF16 mixed precision"
     BF16_FLAG=""
 fi
 
