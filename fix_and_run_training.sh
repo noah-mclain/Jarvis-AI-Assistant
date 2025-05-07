@@ -119,38 +119,38 @@ case $MODEL_CHOICE in
         python -m src.generative_ai_module.train_models \
             --model_type code \
             --model_name_or_path deepseek-ai/deepseek-coder-5.7b-instruct \
-            --dataset "codeparrot/github-code:0.7,code-search-net/code_search_net:0.3" \  # Weighted dataset mixing
-            --batch_size 2 \
-            --max_length 768 \
-            --gradient_accumulation_steps 32 \
-            --use_8bit_adam \
+            --dataset "codeparrot/github-code:0.7,code-search-net/code_search_net:0.3" \
+            --batch_size 1 \
+            --max_length 512 \
+            --gradient_accumulation_steps 64 \
+            --use_4bit \
             --use_qlora \
-            --lora_r 96 \                     # Increased from 64 → better adaptation
-            --lora_alpha 32 \                 # Scaled with r (α = r * 0.33)
-            --lora_dropout 0.05 \             # Critical for regularization
+            --lora_r 64 \
+            --lora_alpha 16 \
+            --lora_dropout 0.05 \
             --use_flash_attention_2 \
             --gradient_checkpointing \
             --optim adamw_bnb_8bit \
-            --learning_rate 1.5e-5 \          # Tuned for 5.7B + QLoRA
-            --weight_decay 0.05 \             # Balances regularization
-            --lr_scheduler_type cosine \      # Better than linear for code
-            --warmup_ratio 0.03 \             # 3% of total steps
-            --max_grad_norm 0.5 \             # Gradient clipping
-            --fp16 \
-            --num_workers 1 \
+            --learning_rate 1.5e-5 \
+            --weight_decay 0.05 \
+            --lr_scheduler_type cosine \
+            --warmup_ratio 0.03 \
+            --max_grad_norm 0.5 \
+            --bf16 \
+            --num_workers 4 \
             --cache_dir .cache \
             --force_gpu \
             --pad_token_id 50256 \
-            --dataset_subset "python,javascript" \  # Multi-language focus
-            --fim_rate 0.6 \                  # Slightly higher for code
-            --save_total_limit 2 \            # Prevent storage bloat
+            --dataset_subset "python,javascript" \
+            --fim_rate 0.6 \
+            --save_total_limit 1 \
             --evaluation_strategy "steps" \
-            --eval_steps 250 \                # Aligns with grad accumulation
-            --save_steps 500 \
-            --logging_steps 25 \
-            --group_by_length \               # Better packing efficiency
+            --eval_steps 500 \
+            --save_steps 1000 \
+            --logging_steps 50 \
+            --group_by_length \
             --report_to "tensorboard" \
-            --run_name "deepseek-5.7b-ft-$(date +%s)"  # Unique identifier
+            --run_name "deepseek-5.7b-ft-optimized-$(date +%s)"
 
         unset FORCE_CPU_DATA_PIPELINE
         ;;
