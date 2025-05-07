@@ -861,6 +861,14 @@ class CodeGenerator:
         Returns:
             Dictionary with training metrics
         """
+        # Import necessary modules to ensure they're available in this function's scope
+        import os
+        import datetime
+        import time
+        import numpy as np
+        import torch
+        from torch.utils.data import DataLoader
+
         if not self.use_deepseek:
             raise ValueError("This method requires use_deepseek=True. Please initialize CodeGenerator with use_deepseek=True")
 
@@ -1339,9 +1347,14 @@ class CodeGenerator:
         This method bypasses PEFT/LoRA and uses a simpler training approach that's compatible
         with Apple Silicon's MPS backend.
         """
+        # Import necessary modules to ensure they're available in this function's scope
+        import os
+        import datetime
+        import time
+        import torch
         import torch.optim as optim
         from torch.utils.data import DataLoader
-        import os
+        import numpy as np
 
         print("Setting up memory-efficient training for Apple Silicon MPS...")
 
