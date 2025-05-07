@@ -6,10 +6,18 @@
     "ents",
     "filelock",
     "fsspec",
+    "gdrive",
+    "gpteacher",
+    "huggingface",
     "multinomial",
     "numpy",
+    "oasst",
+    "openassistant",
+    "paperspace",
+    "personachat",
     "spacy",
     "tqdm",
+    "truecased",
     "venv"
   ],
   "workbench.colorTheme": "Bearded Theme Aquarelle Lilac"
