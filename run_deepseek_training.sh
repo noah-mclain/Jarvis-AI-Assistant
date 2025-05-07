@@ -105,6 +105,9 @@ export CUDA_LAUNCH_BLOCKING=1
 export FORCE_CPU_ONLY_FOR_TOKENIZATION=1
 export FORCE_CPU_ONLY_FOR_DATASET_PROCESSING=1
 export TRANSFORMERS_OFFLINE=0  # Ensure we're not using cached models that might be on GPU
+export TOKENIZERS_FORCE_CPU=1  # Force tokenizers to use CPU
+export HF_DATASETS_CPU_ONLY=1  # Force datasets to use CPU
+export JARVIS_FORCE_CPU_TOKENIZER=1  # Custom environment variable for our code
 
 # Step 3: Check GPU availability and memory
 echo "Checking GPU availability and memory..."
@@ -193,8 +196,6 @@ python -m src.generative_ai_module.train_models \
     --eval_steps 500 \
     --save_steps 1000 \
     --logging_steps 50 \
-    --force_cpu_tokenizer \
-    --cpu_offload \
     --output_dir "/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-finetuned"
 
 # Step 8: Kill the background monitoring process
