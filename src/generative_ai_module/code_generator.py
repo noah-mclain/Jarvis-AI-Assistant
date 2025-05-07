@@ -845,7 +845,6 @@ class CodeGenerator:
             dataloader_num_workers=2,    # For multiprocessing
             group_by_length=True,        # Keep existing parameter
             remove_unused_columns=False,
-            dataloader_prefetch_factor=2,# Optimize CPU-GPU Pipeline
             hub_model_id=None,           # Disable hub pushing
         )
 
