@@ -1181,6 +1181,28 @@ class CodeGenerator:
             )
             training_metrics = {}
 
+            # Apply attention mask fix before training
+            log_checkpoint("Applying attention mask fix...")
+            try:
+                # Import and apply the fix
+                import sys
+                import os
+
+                # Add the current directory to the path to find the fix_attention_mask module
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                project_root = os.path.dirname(os.path.dirname(current_dir))
+                if project_root not in sys.path:
+                    sys.path.append(project_root)
+
+                # Import and apply the fix
+                from fix_attention_mask import patch_llama_model_forward, patch_attention_mask_in_dataset_collator
+                patch_llama_model_forward()
+                patch_attention_mask_in_dataset_collator()
+                log_checkpoint("Successfully applied attention mask fix")
+            except Exception as e:
+                log_checkpoint(f"Warning: Failed to apply attention mask fix: {e}")
+                log_checkpoint("Will attempt training anyway, but may encounter attention mask errors")
+
             # Resume from checkpoint if available
             if resume_from_checkpoint:
                 log_checkpoint(f"Resuming training from checkpoint: {resume_from_checkpoint}")
@@ -1425,6 +1447,20 @@ class CodeGenerator:
                     input_ids = batch['input_ids'].to(device)
                     attention_mask = batch['attention_mask'].to(device)
 
+                    # Fix attention mask shape if needed
+                    if attention_mask.dim() == 2:
+                        # Convert attention_mask from [batch_size, seq_length] to [batch_size, 1, seq_length, seq_length]
+                        seq_length = attention_mask.size(1)
+                        batch_size = attention_mask.size(0)
+
+                        # First, expand to [batch_size, 1, 1, seq_length]
+                        attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
+
+                        # Then expand to [batch_size, 1, seq_length, seq_length]
+                        attention_mask = attention_mask.expand(-1, -1, seq_length, -1)
+
+                        print(f"Fixed attention mask shape: {attention_mask.shape}")
+
                     # Forward pass
                     outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
                     logits = outputs.logits
@@ -1474,6 +1510,18 @@ class CodeGenerator:
                         # Process on appropriate device
                         input_ids = batch['input_ids'].to(device)
                         attention_mask = batch['attention_mask'].to(device)
+
+                        # Fix attention mask shape if needed
+                        if attention_mask.dim() == 2:
+                            # Convert attention_mask from [batch_size, seq_length] to [batch_size, 1, seq_length, seq_length]
+                            seq_length = attention_mask.size(1)
+                            batch_size = attention_mask.size(0)
+
+                            # First, expand to [batch_size, 1, 1, seq_length]
+                            attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
+
+                            # Then expand to [batch_size, 1, seq_length, seq_length]
+                            attention_mask = attention_mask.expand(-1, -1, seq_length, -1)
 
                         # Forward pass
                         outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
