@@ -317,7 +317,7 @@ class UnifiedDatasetHandler:
                 dataset = load_dataset(
                     dataset_name,
                     name=subset,
-                split=split,
+                    split=split,
                     cache_dir=hf_cache_dir
                 )
                 

@@ -93,8 +93,9 @@ class CombinedModel(nn.Module):
                 # Re-raise the original error
                 raise
     
-class TextGenerator:
+class TextGenerator(nn.Module):
     def __init__(self, force_gpu=False):
+        super().__init__()
         self.all_chars = string.printable
         self.char_to_index = {char: i for i, char in enumerate(self.all_chars)}
         self.unknown_token = "<UNK>"
@@ -500,6 +501,7 @@ class CNNTextGenerator(TextGenerator):
                 quantization_config=None,
                 use_flash_attention_2=False,
                 gradient_checkpointing=False):
+        super().__init__(force_gpu)
         """
         Initialize the CNN-enhanced text generator
         
@@ -520,9 +522,6 @@ class CNNTextGenerator(TextGenerator):
         self.quantization_config = quantization_config
         self.use_flash_attention_2 = use_flash_attention_2
         self.gradient_checkpointing = gradient_checkpointing
-        
-        # Call parent initializer
-        super().__init__(force_gpu)
         
         # Initialize CNN model
         self._initialize_model(model_name_or_path)

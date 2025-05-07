@@ -41,7 +41,7 @@ class CodeGenerator:
             # Load model with appropriate quantization
             self.load_model()
         else:
-            self.text_generator = TextGenerator()
+            self.text_generator = TextGenerator(force_gpu=self.force_gpu)
             self.prompt_enhancer = PromptEnhancer()
             self.dataset_processor = DatasetProcessor(self.text_generator)
             
