@@ -22,6 +22,7 @@ show_help() {
     echo "  --model-type TYPE      Specify model type (code, text, cnn-text)"
     echo "  --skip-cleanup         Skip GPU memory cleanup"
     echo "  --skip-patches         Skip transformer patches"
+    echo "  --force                Skip confirmation prompts (use with caution)"
     echo "  --debug                Enable debug mode"
     echo ""
     echo "Example: $0 --gpu-type A6000 --vram 50 --model-type code"
@@ -52,6 +53,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-patches)
             SKIP_PATCHES=1
+            shift
+            ;;
+        --force)
+            FORCE=1
             shift
             ;;
         --debug)
@@ -134,19 +139,86 @@ echo "===================================================================="
 
 # Clean GPU memory
 if [ -z "$SKIP_CLEANUP" ]; then
-    echo "Performing aggressive GPU memory cleanup..."
-    # Kill all Python processes except this one
-    echo "Killing all other Python processes to free GPU memory..."
+    echo "Performing GPU memory cleanup..."
+
+    # First, try to identify only GPU-using Python processes
+    echo "Checking for Python processes using GPU memory..."
     THIS_PID=$$
-    for pid in $(ps aux | grep python | grep -v grep | awk '{print $2}'); do
-        if [ "$pid" != "$THIS_PID" ] && [ "$pid" != "$MONITOR_PID" ]; then
-            echo "Killing Python process $pid"
-            kill -9 $pid 2>/dev/null
+    GPU_PIDS=()
+
+    # Try to use nvidia-smi to find GPU processes
+    if command -v nvidia-smi &> /dev/null; then
+        echo "Using nvidia-smi to identify GPU processes..."
+        # Get PIDs of processes using GPU
+        NVIDIA_PIDS=$(nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null)
+
+        if [ -n "$NVIDIA_PIDS" ]; then
+            for pid in $NVIDIA_PIDS; do
+                # Check if it's a Python process
+                if ps -p $pid -o comm= | grep -q "python"; then
+                    if [ "$pid" != "$THIS_PID" ] && [ "$pid" != "$MONITOR_PID" ]; then
+                        GPU_PIDS+=($pid)
+                        echo "Found Python process $pid using GPU"
+                    fi
+                fi
+            done
+        else
+            echo "No GPU processes found via nvidia-smi"
         fi
-    done
-    sleep 2
+    else
+        echo "nvidia-smi not found, using alternative method"
+    fi
+
+    # If no GPU processes found with nvidia-smi, use a more conservative approach
+    if [ ${#GPU_PIDS[@]} -eq 0 ]; then
+        echo "No GPU-specific processes identified. Using safer approach..."
+        # Look for Python processes with 'torch' or 'tensorflow' in their command line
+        for pid in $(ps aux | grep -E 'python.*torch|python.*tensorflow' | grep -v grep | awk '{print $2}'); do
+            if [ "$pid" != "$THIS_PID" ] && [ "$pid" != "$MONITOR_PID" ]; then
+                GPU_PIDS+=($pid)
+                echo "Found potential GPU-using process $pid"
+            fi
+        done
+    fi
+
+    # If we found GPU processes, ask for confirmation before killing
+    if [ ${#GPU_PIDS[@]} -gt 0 ]; then
+        echo "Found ${#GPU_PIDS[@]} Python processes potentially using GPU memory."
+        echo "These processes might be using GPU resources needed for training."
+
+        # Add a --force flag check to skip confirmation
+        if [ -n "$FORCE" ]; then
+            CONFIRM="y"
+        else
+            read -p "Do you want to terminate these processes? (y/N): " CONFIRM
+        fi
+
+        if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
+            for pid in "${GPU_PIDS[@]}"; do
+                echo "Terminating Python process $pid (using SIGTERM first)..."
+                # Try SIGTERM first (graceful shutdown)
+                kill $pid 2>/dev/null
+
+                # Wait a moment to see if it terminates
+                sleep 1
+
+                # Check if process still exists
+                if ps -p $pid > /dev/null; then
+                    echo "Process $pid still running, using SIGKILL..."
+                    kill -9 $pid 2>/dev/null
+                fi
+            done
+            echo "Waiting for processes to terminate..."
+            sleep 2
+        else
+            echo "Skipping process termination as requested."
+        fi
+    else
+        echo "No GPU-using Python processes found to terminate."
+    fi
 
     # Clear GPU memory with our utility
+    echo "Clearing GPU memory cache..."
     python gpu_utils.py clear
 else
     echo "Skipping GPU memory cleanup (--skip-cleanup flag set)"
