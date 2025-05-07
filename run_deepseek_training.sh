@@ -170,11 +170,12 @@ else
     BF16_FLAG=""
 fi
 
-# Run the training with memory-efficient settings
-python -m src.generative_ai_module.train_models \
+# Verify the command before execution
+echo "Executing the following command:"
+echo "python -m src.generative_ai_module.train_models \
     --model_type code \
     --model_name_or_path deepseek-ai/deepseek-coder-5.7b-instruct \
-    --dataset "code-search-net/code_search_net" \
+    --dataset \"code-search-net/code_search_net\" \
     --batch_size 1 \
     --max_length 512 \
     --gradient_accumulation_steps 64 \
@@ -189,14 +190,53 @@ python -m src.generative_ai_module.train_models \
     --cache_dir .cache \
     --force_gpu \
     --pad_token_id 50256 \
-    --dataset_subset "python" \
+    --dataset_subset \"python\" \
     --skip_layer_freezing \
     --fim_rate 0.6 \
-    --evaluation_strategy "steps" \
+    --evaluation_strategy \"steps\" \
     --eval_steps 500 \
     --save_steps 1000 \
     --logging_steps 50 \
-    --output_dir "/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-finetuned"
+    --output_dir \"/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-finetuned\""
+
+# Check for unsupported arguments
+if grep -q "force_cpu_tokenizer\|cpu_offload" "$0"; then
+    echo "ERROR: This script contains unsupported arguments!"
+    echo "Please remove the --force_cpu_tokenizer and --cpu_offload arguments."
+    exit 1
+else
+    echo "✅ Command verification successful. No unsupported arguments found."
+fi
+
+# Run the training with memory-efficient settings
+# Verify the command before execution
+echo "Executing the following command:"
+echo "python -m src.generative_ai_module.train_models \
+    --model_type code \
+    --model_name_or_path deepseek-ai/deepseek-coder-5.7b-instruct \
+    --dataset \"code-search-net/code_search_net\" \
+    --batch_size 1 \
+    --max_length 512 \
+    --gradient_accumulation_steps 64 \
+    --use_4bit \
+    --use_qlora \
+    --gradient_checkpointing \
+    --optim adamw_bnb_8bit \
+    --learning_rate 1.5e-5 \
+    --weight_decay 0.05 \
+    $BF16_FLAG \
+    --num_workers 1 \
+    --cache_dir .cache \
+    --force_gpu \
+    --pad_token_id 50256 \
+    --dataset_subset \"python\" \
+    --skip_layer_freezing \
+    --fim_rate 0.6 \
+    --evaluation_strategy \"steps\" \
+    --eval_steps 500 \
+    --save_steps 1000 \
+    --logging_steps 50 \
+    --output_dir \"/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-finetuned\""
 
 # Step 8: Kill the background monitoring process
 kill $MONITOR_PID
