@@ -17,11 +17,53 @@ echo "Clearing GPU memory..."
 python -c "
 import torch
 import gc
+import os
+import psutil
+
+# Kill any zombie Python processes that might be using GPU memory
+def kill_zombie_processes():
+    try:
+        current_process = os.getpid()
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            # Skip the current process
+            if proc.info['pid'] == current_process:
+                continue
+
+            # Look for Python processes that might be using GPU
+            if 'python' in proc.info['name'].lower():
+                cmdline = ' '.join(proc.info['cmdline'] or [])
+                if 'torch' in cmdline or 'tensorflow' in cmdline or 'cuda' in cmdline:
+                    print(f'Found potential GPU-using process: {proc.info}')
+                    try:
+                        # Try to terminate gracefully first
+                        proc.terminate()
+                        print(f'Terminated process {proc.info}')
+                    except Exception as e:
+                        print(f'Error terminating process: {e}')
+    except Exception as e:
+        print(f'Error in kill_zombie_processes: {e}')
+        # Continue with memory cleanup even if process killing fails
+
+# Try to kill zombie processes first
+try:
+    import psutil
+    print('Checking for zombie processes using GPU memory...')
+    kill_zombie_processes()
+except ImportError:
+    print('psutil not available, skipping zombie process check')
+
 if torch.cuda.is_available():
+    # Get initial memory usage
+    initial_mem = torch.cuda.memory_allocated() / (1024**3)
+    initial_reserved = torch.cuda.memory_reserved() / (1024**3)
+    total_mem = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+
+    print(f'Initial GPU memory: {initial_mem:.2f} GB allocated, {initial_reserved:.2f} GB reserved')
+    print(f'Total GPU memory: {total_mem:.2f} GB')
+
+    # First round of cleanup
     torch.cuda.empty_cache()
     gc.collect()
-    initial_mem = torch.cuda.memory_allocated() / (1024**3)
-    print(f'Initial GPU memory: {initial_mem:.2f} GB')
 
     # Force a second round of cleanup
     torch.cuda.empty_cache()
@@ -29,8 +71,18 @@ if torch.cuda.is_available():
 
     # Check memory again
     current_mem = torch.cuda.memory_allocated() / (1024**3)
-    print(f'After cleanup: {current_mem:.2f} GB')
-    print(f'Freed: {initial_mem - current_mem:.2f} GB')
+    current_reserved = torch.cuda.memory_reserved() / (1024**3)
+
+    print(f'After cleanup: {current_mem:.2f} GB allocated, {current_reserved:.2f} GB reserved')
+    print(f'Freed: {initial_mem - current_mem:.2f} GB allocated, {initial_reserved - current_reserved:.2f} GB reserved')
+    print(f'Free GPU memory: {total_mem - current_mem:.2f} GB')
+
+    # Set memory fraction to avoid OOM
+    try:
+        torch.cuda.set_per_process_memory_fraction(0.9)
+        print('Set GPU memory fraction to 90% to avoid OOM errors')
+    except:
+        print('Could not set memory fraction, continuing anyway')
 else:
     print('No GPU available, will use CPU only')
 "
@@ -83,12 +135,17 @@ This specifically targets the _unmask_unattended function that's using .cpu()
 """
 import torch
 import transformers.modeling_attn_mask_utils as attn_utils
+import inspect
 
 # Store the original function
 original_unmask_unattended = attn_utils.AttentionMaskConverter._unmask_unattended
 
+# Check the original function signature
+sig = inspect.signature(original_unmask_unattended)
+print(f"Original function signature: {sig}")
+
 # Define our patched version that doesn't use .cpu()
-def patched_unmask_unattended(attention_mask, unmasked_value=0.0):
+def patched_unmask_unattended(self, attention_mask, unmasked_value=0.0):
     """Patched version that doesn't force CPU conversion"""
     # Get the device of the attention mask
     device = attention_mask.device
@@ -110,6 +167,17 @@ def patched_unmask_unattended(attention_mask, unmasked_value=0.0):
 # Apply the patch
 attn_utils.AttentionMaskConverter._unmask_unattended = patched_unmask_unattended
 print("Successfully patched transformers attention mask function")
+
+# Verify the patch was applied correctly
+try:
+    # Create a simple test tensor
+    test_mask = torch.ones((2, 10), dtype=torch.float32)
+    # Try to call the patched function
+    result = attn_utils.AttentionMaskConverter._unmask_unattended(attn_utils.AttentionMaskConverter, test_mask)
+    print("Patch verification successful!")
+except Exception as e:
+    print(f"Patch verification failed: {e}")
+    print("Please check the function signature and try again.")
 EOF
 
 # Make the script executable
