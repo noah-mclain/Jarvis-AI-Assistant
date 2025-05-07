@@ -12,8 +12,16 @@ echo "  OPTIMIZED DEEPSEEK CODER TRAINING"
 echo "  Memory-efficient with CPU-first loading and GPU training"
 echo "============================================================"
 
-# Step 1: Clear GPU memory aggressively
-echo "Clearing GPU memory..."
+# Step 1: Run diagnostic to check GPU memory usage
+echo "Running GPU memory diagnostic..."
+python diagnose_gpu_memory.py
+
+# Step 2: Fix tokenizer to use CPU memory only
+echo "Fixing tokenizer to use CPU memory only..."
+python fix_tokenizer_memory.py
+
+# Step 3: Clear GPU memory aggressively
+echo "Clearing GPU memory again..."
 python -c "
 import torch
 import gc
@@ -87,13 +95,16 @@ else:
     print('No GPU available, will use CPU only')
 "
 
-# Step 2: Set environment variables for optimal memory usage
+# Step 4: Set environment variables for optimal memory usage
 echo "Setting environment variables for optimal memory usage..."
 export FORCE_CPU_ONLY_FOR_INITIAL_LOAD=1
 export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:32,garbage_collection_threshold:0.8"
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=1
 export CUDA_LAUNCH_BLOCKING=1
+export FORCE_CPU_ONLY_FOR_TOKENIZATION=1
+export FORCE_CPU_ONLY_FOR_DATASET_PROCESSING=1
+export TRANSFORMERS_OFFLINE=0  # Ensure we're not using cached models that might be on GPU
 
 # Step 3: Check GPU availability and memory
 echo "Checking GPU availability and memory..."
@@ -125,73 +136,11 @@ else
     BF16_CAPABLE=false
 fi
 
-# Step 4: Create the patch script for transformers library
-echo "Creating transformers patch script..."
-cat > patch_transformers.py << 'EOF'
-#!/usr/bin/env python3
-"""
-Patch for transformers library to fix device mismatch issues.
-This specifically targets the _unmask_unattended function that's using .cpu()
-"""
-import torch
-import transformers.modeling_attn_mask_utils as attn_utils
-import inspect
+# Step 4: Apply a more robust patch for the attention mask error
+echo "Applying a more robust patch for the attention mask error..."
+python fix_attention_mask_error.py
 
-# Store the original function
-original_unmask_unattended = attn_utils.AttentionMaskConverter._unmask_unattended
-
-# Check the original function signature
-sig = inspect.signature(original_unmask_unattended)
-print(f"Original function signature: {sig}")
-
-# Define our patched version that doesn't use .cpu()
-def patched_unmask_unattended(self, attention_mask, unmasked_value=0.0):
-    """Patched version that doesn't force CPU conversion"""
-    # Get the device of the attention mask
-    device = attention_mask.device
-
-    # Create a temporary tensor on the same device
-    tmp = torch.ones_like(attention_mask) * unmasked_value
-
-    # Use argmax without forcing CPU
-    indices = torch.argmax(attention_mask * tmp, 1, keepdim=True)
-
-    # Create a range tensor on the same device
-    range_tensor = torch.arange(attention_mask.shape[1], device=device).expand_as(attention_mask)
-
-    # Create the expanded mask on the same device
-    expanded_mask = (range_tensor <= indices).to(attention_mask.dtype)
-
-    return expanded_mask
-
-# Apply the patch
-attn_utils.AttentionMaskConverter._unmask_unattended = patched_unmask_unattended
-print("Successfully patched transformers attention mask function")
-
-# Verify the patch was applied correctly
-try:
-    # Create a simple test tensor
-    test_mask = torch.ones((2, 10), dtype=torch.float32)
-    # Try to call the patched function
-    result = attn_utils.AttentionMaskConverter._unmask_unattended(attn_utils.AttentionMaskConverter, test_mask)
-    print("Patch verification successful!")
-except Exception as e:
-    print(f"Patch verification failed: {e}")
-    print("Please check the function signature and try again.")
-EOF
-
-# Make the script executable
-chmod +x patch_transformers.py
-
-# Step 5: Apply the transformers patch
-echo "Applying transformers patch..."
-python -c "
-import sys
-sys.path.insert(0, '.')
-import patch_transformers
-"
-
-# Step 6: Ensure directories exist
+# Step 5: Ensure directories exist
 echo "Ensuring directories exist..."
 mkdir -p /notebooks/Jarvis_AI_Assistant/models
 mkdir -p /notebooks/Jarvis_AI_Assistant/metrics
@@ -201,12 +150,12 @@ mkdir -p /notebooks/Jarvis_AI_Assistant/evaluation_metrics
 mkdir -p /notebooks/Jarvis_AI_Assistant/preprocessed_data
 mkdir -p /notebooks/Jarvis_AI_Assistant/visualization
 
-# Step 7: Start GPU monitoring
+# Step 6: Start GPU monitoring
 echo "Starting GPU monitoring..."
 (nvidia-smi --query-gpu=timestamp,memory.used,memory.free,utilization.gpu --format=csv -l 10 > gpu_memory_log.txt) &
 MONITOR_PID=$!
 
-# Step 8: Run the training with optimal parameters
+# Step 7: Run the training with optimal parameters
 echo "Starting DeepSeek Coder training with memory optimizations..."
 
 # Check if we're running on a CUDA device and set BF16 flag accordingly
@@ -244,9 +193,11 @@ python -m src.generative_ai_module.train_models \
     --eval_steps 500 \
     --save_steps 1000 \
     --logging_steps 50 \
+    --force_cpu_tokenizer \
+    --cpu_offload \
     --output_dir "/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-finetuned"
 
-# Step 9: Kill the background monitoring process
+# Step 8: Kill the background monitoring process
 kill $MONITOR_PID
 
 echo "Training complete!"

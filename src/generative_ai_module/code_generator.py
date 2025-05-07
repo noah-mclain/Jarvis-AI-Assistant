@@ -804,7 +804,14 @@ class CodeGenerator:
             original_unmask_unattended = attn_utils.AttentionMaskConverter._unmask_unattended
 
             # Define our patched version that doesn't use .cpu()
-            def patched_unmask_unattended(attention_mask, unmasked_value=0.0):
+            # The issue is with the function signature - we need to match the original function's signature exactly
+            # Check the original function signature first
+            import inspect
+            sig = inspect.signature(original_unmask_unattended)
+            print(f"Original function signature: {sig}")
+
+            # Define our patched version with the exact same signature
+            def patched_unmask_unattended(self, attention_mask, unmasked_value=0.0):
                 """Patched version that doesn't force CPU conversion"""
                 # Get the device of the attention mask
                 device = attention_mask.device
