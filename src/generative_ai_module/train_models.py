@@ -2246,6 +2246,8 @@ def main():
                       help='Maximum number of samples to use from each dataset')
     parser.add_argument('--dataset_subset', type=str, default=None,
                       help='Specific subset of the dataset to use (for datasets with subsets)')
+    parser.add_argument('--all_subsets', action='store_true',
+                      help='Use all available subsets of the dataset')
 
     # Training hyperparameters
     parser.add_argument('--batch_size', type=int, default=4,
@@ -2278,6 +2280,8 @@ def main():
                       help='Steps between logging')
     parser.add_argument('--eval_steps', type=int, default=None,
                       help='Steps between evaluation if evaluation_strategy is steps')
+    parser.add_argument('--warmup_steps', type=int, default=100,
+                      help='Number of warmup steps for learning rate scheduler')
 
     # Optimization arguments
     parser.add_argument('--use_deepspeed', action='store_true',
@@ -2302,6 +2306,8 @@ def main():
                       help='Whether to use gradient checkpointing for memory efficiency')
     parser.add_argument('--sequence_packing', action='store_true',
                       help='Whether to use sequence packing to maximize batch efficiency')
+    parser.add_argument('--skip_layer_freezing', action='store_true',
+                      help='Skip freezing model layers (useful for models with incompatible architectures)')
     parser.add_argument('--optim', type=str, default='adamw_torch',
                       choices=['adamw_torch', 'adamw_bnb_8bit', 'adamw_hf', 'adamw_apex_fused', 'adafactor'],
                       help='Optimizer to use for training')
@@ -2475,10 +2481,10 @@ def main():
             batch_size=args.batch_size,
             sequence_length=args.max_length,
             learning_rate=args.learning_rate,
-            warmup_steps=args.warmup_steps if hasattr(args, 'warmup_steps') else 100,
+            warmup_steps=args.warmup_steps,
             max_samples=args.max_samples,
-            subset=args.dataset_subset if hasattr(args, 'dataset_subset') else None,
-            all_subsets=hasattr(args, 'all_subsets') and args.all_subsets,
+            subset=args.dataset_subset,
+            all_subsets=args.all_subsets,
             skip_layer_freezing=args.skip_layer_freezing
         )
 
