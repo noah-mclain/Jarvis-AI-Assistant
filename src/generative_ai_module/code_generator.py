@@ -589,41 +589,51 @@ class CodeGenerator:
         Args:
             freeze_proportion: Proportion of layers to freeze (0-1)
         """
-        if not hasattr(self.model, 'base_model'):
-            print("Model doesn't have a base_model attribute, skipping layer freezing")
-            return
+        print(f"Attempting to freeze {freeze_proportion:.1%} of model layers...")
 
-        base_model = self.model.base_model.model
+        # First, try to identify the model structure
+        transformer_layers = None
 
-        # Get layers based on model architecture
-        if hasattr(base_model, 'layers'):
-            # For models that have direct access to layers
-            transformer_layers = base_model.layers
-        elif hasattr(base_model, 'model') and hasattr(base_model.model, 'layers'):
-            # For nested model structures
-            transformer_layers = base_model.model.layers
-        elif hasattr(base_model, 'transformer') and hasattr(base_model.transformer, 'layers'):
-            # For Llama-type models that use transformer.layers structure
-            transformer_layers = base_model.transformer.layers
-        elif hasattr(self.model, 'model') and hasattr(self.model.model, 'layers'):
-            # Direct access via model.model.layers
+        # Print model structure for debugging
+        print(f"Model type: {type(self.model).__name__}")
+
+        # For LLaMA models
+        if hasattr(self.model, 'model') and hasattr(self.model.model, 'layers'):
+            print("Found layers in model.model.layers (LLaMA structure)")
             transformer_layers = self.model.model.layers
-        elif hasattr(self.model.model, 'transformer') and hasattr(self.model.model.transformer, 'h'):
-            # For GPT-2 style models
-            transformer_layers = self.model.model.transformer.h
-        else:
-            # Check if we can find layers directly in base_model
-            found_layers_attr = None
-            for attr_name in dir(base_model):
-                if 'layer' in attr_name.lower() and isinstance(getattr(base_model, attr_name), (list, torch.nn.ModuleList)):
-                    found_layers_attr = attr_name
-                    break
 
-            if found_layers_attr:
-                transformer_layers = getattr(base_model, found_layers_attr)
-            else:
-                print("Could not find transformer layers in model, skipping layer freezing")
-                return
+        # For models with base_model attribute
+        elif hasattr(self.model, 'base_model'):
+            print("Model has base_model attribute")
+            base_model = self.model.base_model
+
+            # Try different paths to find layers
+            if hasattr(base_model, 'model') and hasattr(base_model.model, 'layers'):
+                print("Found layers in base_model.model.layers")
+                transformer_layers = base_model.model.layers
+
+            elif hasattr(base_model, 'layers'):
+                print("Found layers in base_model.layers")
+                transformer_layers = base_model.layers
+
+            elif hasattr(base_model, 'transformer') and hasattr(base_model.transformer, 'layers'):
+                print("Found layers in base_model.transformer.layers")
+                transformer_layers = base_model.transformer.layers
+
+        # For GPT-2 style models
+        elif hasattr(self.model, 'transformer') and hasattr(self.model.transformer, 'h'):
+            print("Found layers in model.transformer.h (GPT-2 style)")
+            transformer_layers = self.model.transformer.h
+
+        # Direct layers
+        elif hasattr(self.model, 'layers'):
+            print("Found layers directly in model.layers")
+            transformer_layers = self.model.layers
+
+        # If we still haven't found layers, skip freezing
+        if transformer_layers is None:
+            print("Could not identify transformer layers in model, skipping layer freezing")
+            return
 
         num_layers = len(transformer_layers)
 
@@ -662,7 +672,8 @@ class CodeGenerator:
 
     def fine_tune_deepseek(self, train_dataset=None, eval_dataset=None, output_dir="deepseek_fine-tuned",
                           epochs=50, batch_size=2, sequence_length=2048, learning_rate=2e-5,
-                          warmup_steps=100, max_samples=None, subset="all", all_subsets=True):
+                          warmup_steps=100, max_samples=None, subset="all", all_subsets=True,
+                          skip_layer_freezing=False):
         """
         Fine-tune the deepseek-coder model on code snippets
 
@@ -756,9 +767,16 @@ class CodeGenerator:
                 epochs, batch_size, learning_rate, warmup_steps
             )
 
-        # Freeze lower layers for more efficient training
-        log_checkpoint("Freezing lower layers for more efficient training...")
-        self.freeze_model_layers(freeze_proportion=0.7)  # Freeze 70% of the layers
+        # Try to freeze lower layers for more efficient training if not skipped
+        if skip_layer_freezing:
+            log_checkpoint("Skipping layer freezing as requested")
+        else:
+            log_checkpoint("Attempting to freeze lower layers for more efficient training...")
+            try:
+                self.freeze_model_layers(freeze_proportion=0.7)  # Freeze 70% of the layers
+            except Exception as e:
+                log_checkpoint(f"Error freezing layers: {e}. Continuing without layer freezing.")
+                # Continue without layer freezing
 
         # Prepare training arguments
         log_checkpoint("Configuring training arguments...")

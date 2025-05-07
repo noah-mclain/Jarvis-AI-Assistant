@@ -359,6 +359,8 @@ def parse_args():
                        default='lora', help='Type of PEFT to use')
     parser.add_argument('--use_int8', action='store_true',
                        help='Use int8 quantization')
+    parser.add_argument('--skip_layer_freezing', action='store_true',
+                       help='Skip freezing model layers (useful for models with incompatible architectures)')
 
     # LoRA parameters
     parser.add_argument('--lora_r', type=int, default=16,
@@ -2476,7 +2478,8 @@ def main():
             warmup_steps=args.warmup_steps if hasattr(args, 'warmup_steps') else 100,
             max_samples=args.max_samples,
             subset=args.dataset_subset if hasattr(args, 'dataset_subset') else None,
-            all_subsets=hasattr(args, 'all_subsets') and args.all_subsets
+            all_subsets=hasattr(args, 'all_subsets') and args.all_subsets,
+            skip_layer_freezing=hasattr(args, 'skip_layer_freezing') and args.skip_layer_freezing
         )
 
         logger.info(f"Code model training completed. Model saved to {args.output_dir}")
