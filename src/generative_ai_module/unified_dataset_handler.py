@@ -526,14 +526,56 @@ class UnifiedDatasetHandler:
 
     def validate_dataset_structure(self, dataset, dataset_name):
         """Validate that the dataset is not empty and log its structure."""
-        if len(dataset) == 0:
-            self.logger.warning(f"Dataset {dataset_name} is empty")
-            return False
+        try:
+            # Check if dataset has length
+            if not hasattr(dataset, '__len__'):
+                self.logger.warning(f"Dataset {dataset_name} doesn't have a length attribute")
+                # Try to convert to list
+                try:
+                    dataset_list = list(dataset)
+                    if len(dataset_list) == 0:
+                        self.logger.warning(f"Dataset {dataset_name} is empty after conversion to list")
+                        return False
+                    # Use the list for further validation
+                    dataset = dataset_list
+                except Exception as e:
+                    self.logger.error(f"Cannot convert dataset to list: {e}")
+                    # Can't validate further
+                    return True  # Assume it's valid and let processing handle it
 
-        # Log dataset structure
-        keys = list(dataset[0].keys())
-        self.logger.info(f"Dataset keys: {keys}")
-        return True
+            # Check if dataset is empty
+            if len(dataset) == 0:
+                self.logger.warning(f"Dataset {dataset_name} is empty")
+                return False
+
+            # Try to access the first item
+            try:
+                first_item = dataset[0]
+
+                # Check if first item is a dictionary
+                if isinstance(first_item, dict):
+                    keys = list(first_item.keys())
+                    self.logger.info(f"Dataset keys: {keys}")
+                    self.logger.info(f"Sample item (first 5 fields): {dict(list(first_item.items())[:5])}")
+                else:
+                    self.logger.info(f"Dataset first item is not a dictionary: {type(first_item)}")
+                    # If it's a string, show a sample
+                    if isinstance(first_item, str):
+                        self.logger.info(f"Sample text: {first_item[:100]}...")
+
+            except Exception as e:
+                self.logger.warning(f"Cannot access first item in dataset: {e}")
+                # Can't validate further, but don't fail
+                return True  # Assume it's valid and let processing handle it
+
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Error validating dataset structure: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+            # Return True to allow processing to continue and handle errors there
+            return True
 
     def _create_empty_dataset(self):
         """Create an empty dataset with the required structure."""
@@ -543,9 +585,53 @@ class UnifiedDatasetHandler:
     def _generate_batches(self, dataset, batch_size, dataset_name):
         """Generate batches from the dataset with progress tracking."""
         from tqdm import tqdm
-        for i in tqdm(range(0, len(dataset), batch_size), desc=f"Processing {dataset_name}"):
-            end_idx = min(i + batch_size, len(dataset))
-            yield dataset[i:end_idx], i // batch_size
+
+        # Handle different dataset types
+        try:
+            # Check if dataset is a list-like object that supports slicing
+            if hasattr(dataset, '__getitem__') and hasattr(dataset, '__len__'):
+                # Standard case - dataset is a list-like object
+                for i in tqdm(range(0, len(dataset), batch_size), desc=f"Processing {dataset_name}"):
+                    end_idx = min(i + batch_size, len(dataset))
+                    try:
+                        batch = dataset[i:end_idx]
+                        yield batch, i // batch_size
+                    except Exception as e:
+                        self.logger.error(f"Error slicing dataset at indices {i}:{end_idx}: {e}")
+                        # Try getting items one by one
+                        try:
+                            batch = [dataset[j] for j in range(i, end_idx)]
+                            yield batch, i // batch_size
+                        except Exception as e2:
+                            self.logger.error(f"Error getting individual items: {e2}")
+                            # As a last resort, yield the entire dataset as one batch
+                            if i == 0:  # Only do this once
+                                self.logger.warning(f"Falling back to processing entire dataset as one batch")
+                                yield dataset, 0
+            else:
+                # Dataset doesn't support slicing - try to convert to list or process as is
+                self.logger.warning(f"Dataset of type {type(dataset)} doesn't support standard slicing")
+
+                # Try to convert to list
+                try:
+                    dataset_list = list(dataset)
+                    self.logger.info(f"Converted dataset to list with {len(dataset_list)} items")
+
+                    for i in tqdm(range(0, len(dataset_list), batch_size), desc=f"Processing {dataset_name}"):
+                        end_idx = min(i + batch_size, len(dataset_list))
+                        yield dataset_list[i:end_idx], i // batch_size
+
+                except Exception as e:
+                    self.logger.error(f"Cannot convert dataset to list: {e}")
+                    # Process as a single batch
+                    self.logger.warning(f"Processing entire dataset as one batch")
+                    yield dataset, 0
+
+        except Exception as e:
+            self.logger.error(f"Error generating batches: {e}")
+            # As a last resort, yield the entire dataset as one batch
+            self.logger.warning(f"Falling back to processing entire dataset as one batch due to error")
+            yield dataset, 0
 
     def _extract_texts_from_batch(self, batch, dataset_name):
         """Extract texts from a batch based on dataset format."""
@@ -564,14 +650,35 @@ class UnifiedDatasetHandler:
         """Extract texts from OpenAssistant format batch."""
         batch_texts = []
 
-        # Log the first item for debugging
-        if batch and len(batch) > 0:
-            self.logger.info(f"OpenAssistant sample item: {batch[0]}")
+        # Log batch type for debugging
+        self.logger.info(f"OpenAssistant batch type: {type(batch)}")
 
-        for item in batch:
+        # Handle different batch types
+        if isinstance(batch, dict):
+            # Process a single item (dictionary)
+            items = [batch]
+            self.logger.info("Processing batch as a single dictionary item")
+        elif isinstance(batch, list):
+            # Process a list of items
+            items = batch
+            # Log the first item for debugging if available
+            if items and len(items) > 0:
+                self.logger.info(f"OpenAssistant sample item: {items[0]}")
+        else:
+            # Try to convert to list or handle as iterable
+            try:
+                items = list(batch)
+                self.logger.info(f"Converted batch to list with {len(items)} items")
+            except Exception as e:
+                self.logger.error(f"Cannot process batch of type {type(batch)}: {e}")
+                return batch_texts
+
+        # Process each item
+        for item in items:
             try:
                 # Skip non-dictionary items
                 if not isinstance(item, dict):
+                    self.logger.warning(f"Skipping non-dictionary item: {type(item)}")
                     continue
 
                 # Handle OpenAssistant v2 structure with message trees
@@ -612,8 +719,11 @@ class UnifiedDatasetHandler:
             except Exception as e:
                 # Log the error and continue with the next item
                 self.logger.warning(f"Error processing OpenAssistant item: {e}")
+                import traceback
+                self.logger.warning(traceback.format_exc())
                 continue
 
+        self.logger.info(f"Extracted {len(batch_texts)} texts from OpenAssistant batch")
         return batch_texts
 
     def _extract_gpteacher_batch(self, batch):
