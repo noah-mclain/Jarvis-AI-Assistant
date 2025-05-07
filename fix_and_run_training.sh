@@ -85,10 +85,16 @@ case $MODEL_CHOICE in
         # First approach - Direct finetune_deepseek.py script with maximum optimizations
         export CUDA_DEVICE_ORDER=PCI_BUS_ID
         export CUDA_VISIBLE_DEVICES=0
-        export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:24,garbage_collection_threshold:0.8"
         export FORCE_CPU_DATA_PIPELINE=1  # Critical for Paperspace GPU constraints
         export NCCL_P2P_DISABLE=1  # Prevent PCIe congestion
         export TOKENIZERS_PARALLELISM=false
+        # Clear GPU cache completely
+        sudo nvidia-pmi -c
+        python -c "import torch; torch.cuda.empty_cache()"
+
+        # Set memory allocator rules
+        export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:32,garbage_collection_threshold:0.9"
+        export HF_HOME="/tmp/hf_cache"  # Prevent default cache bloat
         rm -rf ~/.cache/huggingface/datasets .cache
         # python -m src.generative_ai_module.finetune_deepseek \
         #     --epochs 4 \
@@ -115,9 +121,9 @@ case $MODEL_CHOICE in
             --model_name_or_path deepseek-ai/deepseek-coder-5.7b-instruct \
             --dataset "codeparrot/github-code:0.7,code-search-net/code_search_net:0.3" \  # Weighted dataset mixing
             --batch_size 2 \
-            --max_length 1024 \
+            --max_length 768 \
             --gradient_accumulation_steps 32 \
-            --use_4bit \
+            --use_8bit_adam \
             --use_qlora \
             --lora_r 96 \                     # Increased from 64 → better adaptation
             --lora_alpha 32 \                 # Scaled with r (α = r * 0.33)

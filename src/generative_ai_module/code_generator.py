@@ -1,4 +1,5 @@
 from email.headerregistry import DateHeader
+import gc
 from transformers import AutoModelForCausalLM, AutoTokenizer, Trainer, TrainingArguments, TrainerCallback, BitsAndBytesConfig
 from peft import get_peft_model, LoraConfig, TaskType
 from .code_preprocessing import load_and_preprocess_dataset, save_preprocessing_metrics
@@ -123,7 +124,7 @@ class CodeGenerator:
                     # For CUDA devices (replace existing 4-bit block)
                     quantization_config = BitsAndBytesConfig(
                         load_in_4bit=True,
-                        bnb_4bit_compute_dtype=torch.float16,  # Force FP16 compute
+                        bnb_4bit_compute_dtype=torch.bfloat16,  # Force FP16 compute
                         bnb_4bit_use_double_quant=True,        # Second quantization for 4-bit
                         bnb_4bit_quant_type="nf4",             # Optimal quantization type
                         llm_int8_skip_modules=["lm_head"],     # Keep lm_head in FP16
@@ -132,13 +133,14 @@ class CodeGenerator:
                     self.model = AutoModelForCausalLM.from_pretrained(
                         self.model_name,
                         trust_remote_code=True,
-                        torch_dtype=torch.float16,
                         device_map="auto",
-                        max_memory={0: "14GiB", "cpu": "10GiB"},  # Hard limit GPU allocation
+                        max_memory={0: "13GiB", "cpu": "12GiB"},  # Reduced GPU allocation
                         quantization_config=quantization_config,
-                        use_flash_attention_2=True,
-                        low_cpu_mem_usage=True
+                        use_flash_attention_2=True,  # Must be enabled
+                        low_cpu_mem_usage=True,
+                        torch_dtype=torch.bfloat16  # Match compute dtype
                     )
+
                     print("Successfully loaded model with optimized memory settings")
                     return
                 except Exception as e:
@@ -295,7 +297,12 @@ class CodeGenerator:
                 try:
                     dummy_input = torch.zeros((1, 64), dtype=torch.long, device="cuda")
                     _ = self.model(dummy_input)
+                    # Force release unused memory
                     torch.cuda.empty_cache()
+                    gc.collect()
+
+                    # Limit PyTorch's reserved memory
+                    torch.cuda.set_per_process_memory_fraction(0.85)  # 85% of 16GB = 13.6GB
                 except Exception as e:
                     print(f"GPU warmup failed: {e}")
         finally:
