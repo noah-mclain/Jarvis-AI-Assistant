@@ -161,10 +161,10 @@ if torch.cuda.is_available():
     print(f'Freed: {initial_mem - current_mem:.2f} GB allocated, {initial_reserved - current_reserved:.2f} GB reserved')
     print(f'Free GPU memory: {total_mem - current_mem:.2f} GB')
 
-    # Set memory fraction for high-VRAM setup (47.53 GB)
+    # Set memory fraction for A6000 with 50 GiB VRAM
     try:
-        torch.cuda.set_per_process_memory_fraction(0.95)
-        print('Set GPU memory fraction to 95% for high-VRAM (47.53 GB) setup')
+        torch.cuda.set_per_process_memory_fraction(0.97)
+        print('Set GPU memory fraction to 97% for A6000 with 50 GiB VRAM')
     except:
         print('Could not set memory fraction, continuing anyway')
 else:
@@ -183,17 +183,17 @@ if torch.cuda.is_available():
     print(f'Total memory: {total_mem:.2f} GB')
     print(f'Free memory: {free_mem:.2f} GB')
 
-    # Check if there's sufficient memory for BF16 (high-VRAM setup)
-    if free_mem > 10.0:
-        print('Abundant memory for BF16 mixed precision (high-VRAM setup)')
+    # Check if there's sufficient memory for BF16 (A6000 with 50 GiB VRAM)
+    if free_mem > 15.0:
+        print('Abundant memory for BF16 mixed precision (A6000 with 50 GiB VRAM)')
     else:
-        print('Warning: Less than 10GB free VRAM, but continuing with BF16 mixed precision')
+        print('Warning: Less than 15GB free VRAM, but continuing with BF16 mixed precision')
 else:
     print('No GPU available, will use CPU only')
 "
 
-        # Set BF16 capability - always enabled for high-VRAM setup (47.53 GB)
-        echo "High-VRAM setup detected (47.53 GB) - enabling BF16 mixed precision"
+        # Set BF16 capability - always enabled for A6000 with 50 GiB VRAM
+        echo "A6000 with 50 GiB VRAM detected - enabling BF16 mixed precision"
         BF16_FLAG="--bf16"
 
         # Apply patches for attention mask errors
@@ -214,16 +214,16 @@ else:
         mkdir -p /notebooks/Jarvis_AI_Assistant/preprocessed_data
         mkdir -p /notebooks/Jarvis_AI_Assistant/visualization
 
-        # Run the training with optimized settings for 47.53 GB VRAM
-        echo "Starting DeepSeek Coder training with high-VRAM optimizations (47.53 GB)..."
+        # Run the training with optimized settings for A6000 with 50 GiB VRAM
+        echo "Starting DeepSeek Coder training with A6000 optimizations (50 GiB VRAM)..."
         echo "Executing the following command:"
         echo "python -m src.generative_ai_module.train_models \
     --model_type code \
-    --model_name_or_path deepseek-ai/deepseek-coder-6.7b-base \
+    --model_name_or_path deepseek-ai/deepseek-coder-6.7b-instruct \
     --dataset \"code-search-net/code_search_net\" \
-    --batch_size 4 \
-    --max_length 1024 \
-    --gradient_accumulation_steps 16 \
+    --batch_size 8 \
+    --max_length 2048 \
+    --gradient_accumulation_steps 8 \
     --use_8bit \
     --use_qlora \
     --gradient_checkpointing \
@@ -231,7 +231,7 @@ else:
     --learning_rate 2e-5 \
     --weight_decay 0.05 \
     $BF16_FLAG \
-    --num_workers 4 \
+    --num_workers 8 \
     --cache_dir .cache \
     --force_gpu \
     --pad_token_id 50256 \
@@ -245,14 +245,14 @@ else:
     --epochs 5 \
     --output_dir \"/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-6.7b-finetuned\""
 
-        # Run the training command with optimized parameters for 47.53 GB VRAM
+        # Run the training command with optimized parameters for A6000 with 50 GiB VRAM
         python -m src.generative_ai_module.train_models \
             --model_type code \
-            --model_name_or_path deepseek-ai/deepseek-coder-6.7b-base \
+            --model_name_or_path deepseek-ai/deepseek-coder-6.7b-instruct \
             --dataset "code-search-net/code_search_net" \
-            --batch_size 4 \
-            --max_length 1024 \
-            --gradient_accumulation_steps 16 \
+            --batch_size 8 \
+            --max_length 2048 \
+            --gradient_accumulation_steps 8 \
             --use_8bit \
             --use_qlora \
             --gradient_checkpointing \
@@ -260,7 +260,7 @@ else:
             --learning_rate 2e-5 \
             --weight_decay 0.05 \
             $BF16_FLAG \
-            --num_workers 4 \
+            --num_workers 8 \
             --cache_dir .cache \
             --force_gpu \
             --pad_token_id 50256 \
@@ -277,33 +277,34 @@ else:
         unset FORCE_CPU_DATA_PIPELINE
         ;;
     3)
-        echo "Starting CNN-enhanced TEXT model training with 4 CNN layers..."
+        echo "Starting CNN-enhanced TEXT model training with A6000 optimizations (50 GiB VRAM)..."
         python -m src.generative_ai_module.train_models \
             --model_type text \
             --use_cnn \
-            --cnn_layers 4 \
+            --cnn_layers 6 \
             --dataset "agie-ai/OpenAssistant-oasst1,teknium/GPTeacher-General-Instruct,google/Synthetic-Persona-Chat,euclaise/writingprompts" \
-            --model_name_or_path distilgpt2 \
-            --batch_size 6 \
-            --gradient_accumulation_steps 5 \
-            --max_length 1024 \
-            --max_samples 50000 \
+            --model_name_or_path "google/flan-ul2" \
+            --batch_size 12 \
+            --gradient_accumulation_steps 4 \
+            --max_length 2048 \
             --learning_rate 3e-5 \
             --weight_decay 0.05 \
-            --use_4bit \
-            --use_flash_attention_2 \
+            --use_8bit \
+            --use_qlora \
             --gradient_checkpointing \
             --optim adamw_bnb_8bit \
-            --eval_steps 500 \
-            --save_steps 1000 \
-            --epochs 3 \
+            --eval_steps 250 \
+            --save_steps 500 \
+            --epochs 5 \
             --save_strategy steps \
             --logging_steps 50 \
             --evaluation_strategy steps \
             --sequence_packing \
-            --output_dir Jarvis_AI_Assistant/models \
+            --output_dir "/notebooks/Jarvis_AI_Assistant/models/flan-ul2-finetuned" \
             --visualize_metrics \
             --use_unsloth \
+            --num_workers 8 \
+            --cache_dir .cache \
             --force_gpu
         ;;
     *)
