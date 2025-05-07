@@ -52,9 +52,9 @@ case $MODEL_CHOICE in
             --model_type text \
             --dataset "agie-ai/OpenAssistant-oasst1,teknium/GPTeacher-General-Instruct" \
             --model_name_or_path mistralai/Mistral-7B-v0.1 \
-            --batch_size 12 \
-            --max_length 4096 \
-            --gradient_accumulation_steps 2 \
+            --batch_size 4 \
+            --max_length 2048 \
+            --gradient_accumulation_steps 6 \
             --max_samples 120000 \
             --learning_rate 2e-5 \
             --weight_decay 0.01 \
@@ -62,19 +62,18 @@ case $MODEL_CHOICE in
             --use_flash_attention_2 \
             --gradient_checkpointing \
             --optim adamw_bnb_8bit \
-            --eval_steps 250 \
-            --save_steps 500 \
+            --eval_steps 500 \
+            --save_steps 1000 \
             --epochs 4 \
             --evaluation_strategy steps \
             --save_strategy steps \
-            --logging_steps 50 \
+            --logging_steps 100 \
             --output_dir models/text \
             --visualize_metrics \
-            --warmup_steps 150 \
             --use_unsloth \
             --sequence_packing \
-            --num_workers 6 \
-            --fp16 \
+            --num_workers 4 \
+            --bf16 \
             --force_gpu \
             --cache_dir .cache \
             --use_qlora
@@ -125,17 +124,11 @@ case $MODEL_CHOICE in
             --gradient_accumulation_steps 64 \
             --use_4bit \
             --use_qlora \
-            --lora_r 64 \
-            --lora_alpha 16 \
-            --lora_dropout 0.05 \
             --use_flash_attention_2 \
             --gradient_checkpointing \
             --optim adamw_bnb_8bit \
             --learning_rate 1.5e-5 \
             --weight_decay 0.05 \
-            --lr_scheduler_type cosine \
-            --warmup_ratio 0.03 \
-            --max_grad_norm 0.5 \
             --bf16 \
             --num_workers 4 \
             --cache_dir .cache \
@@ -143,14 +136,10 @@ case $MODEL_CHOICE in
             --pad_token_id 50256 \
             --dataset_subset "python,javascript" \
             --fim_rate 0.6 \
-            --save_total_limit 1 \
             --evaluation_strategy "steps" \
             --eval_steps 500 \
             --save_steps 1000 \
-            --logging_steps 50 \
-            --group_by_length \
-            --report_to "tensorboard" \
-            --run_name "deepseek-5.7b-ft-optimized-$(date +%s)"
+            --logging_steps 50
 
         unset FORCE_CPU_DATA_PIPELINE
         ;;
