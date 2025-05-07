@@ -522,7 +522,7 @@ class CNNTextGenerator(TextGenerator):
         self.gradient_checkpointing = gradient_checkpointing
         
         # Call parent initializer
-        super().__init__(model_name_or_path, force_gpu)
+        super().__init__(force_gpu)
         
         # Initialize CNN model
         self._initialize_model(model_name_or_path)

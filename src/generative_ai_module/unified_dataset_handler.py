@@ -1658,94 +1658,99 @@ class UnifiedDatasetHandler:
         # Extract texts based on dataset format
         texts = []
         
-        # Add check for empty dataset
-        if len(dataset) == 0:
-            self.logger.warning("Dataset is empty after processing!")
-            return {"batches": [], "metadata": {"sample_count": 0, "source": dataset_name}}
-            
         # Get dataset structure to determine formatting
         try:
-            # Get dataset keys safely - dataset might be a dict with 'train' key
+            # Check for empty dataset
+            if len(dataset) == 0:
+                self.logger.warning("Dataset is empty after processing!")
+                return {"batches": [], "metadata": {"sample_count": 0, "source": dataset_name}}
+                
+            # Handle different dataset formats - HuggingFace dict vs direct dataset
             if isinstance(dataset, dict) and 'train' in dataset:
-                # Dataset is a dict with 'train' key (common HuggingFace format)
-                if len(dataset['train']) > 0:
-                    keys = list(dataset['train'][0].keys())
-                    self.logger.info(f"Dataset keys: {keys}")
-                    
-                    # Process the dataset's train split
-                    dataset = dataset['train']
-                else:
-                    self.logger.warning(f"Dataset {dataset_name} train split is empty")
-                    return {"batches": [], "metadata": {"sample_count": 0, "source": dataset_name}}
+                dataset = dataset['train']
+                
+            # Print first item for debugging
+            if len(dataset) > 0:
+                first_item = dataset[0]
+                keys = list(first_item.keys())
+                self.logger.info(f"Dataset keys: {keys}")
+                self.logger.info(f"Sample item (first 5 fields): {dict(list(first_item.items())[:5])}")
+            
+            # Process based on dataset name and structure
+            if "OpenAssistant" in dataset_name or "oasst" in dataset_name:
+                for item in dataset:
+                    # OpenAssistant format uses 'text' and 'role' fields
+                    if 'text' in item and 'role' in item:
+                        if item['role'] == 'assistant':
+                            texts.append(f"User: [Previous question]\nAssistant: {item['text']}")
+                        elif item['role'] == 'prompter':
+                            texts.append(f"User: {item['text']}\nAssistant:")
+            
+            elif "GPTeacher" in dataset_name:
+                for item in dataset:
+                    # Print first few items for debugging
+                    if len(texts) == 0:
+                        self.logger.info(f"GPTeacher sample item: {item}")
+                        
+                    # GPTeacher format
+                    if 'instruction' in item and 'response' in item:
+                        # Combine instruction and response
+                        combined_text = f"User: {item['instruction']}\nAssistant: {item['response']}"
+                        texts.append(combined_text)
+            
+            elif "Persona-Chat" in dataset_name or "Synthetic-Persona-Chat" in dataset_name:
+                for item in dataset:
+                    # Check for Persona structure
+                    if 'user 1 personas' in item and 'Best Generated Conversation' in item:
+                        personas = item['user 1 personas']
+                        if isinstance(personas, list):
+                            persona_text = "\n".join(personas)
+                        else:
+                            persona_text = str(personas)
+                        
+                        conversation = item['Best Generated Conversation']
+                        if conversation:
+                            texts.append(f"Persona: {persona_text}\nConversation: {conversation}")
+            
+            elif "writingprompts" in dataset_name:
+                for item in dataset:
+                    # Print sample for debugging
+                    if len(texts) == 0:
+                        self.logger.info(f"WritingPrompts sample item: {item}")
+                        
+                    # Check for writing prompts structure
+                    if 'prompt' in item and 'story' in item:
+                        prompt = item['prompt']
+                        story = item['story']
+                        texts.append(f"Prompt: {prompt}\nStory: {story}")
+            
+            # Generic fallback for unknown datasets
             else:
-                # Direct dataset object
-                if len(dataset) > 0:
-                    keys = list(dataset[0].keys())
-                    self.logger.info(f"Dataset keys: {keys}")
-                else:
-                    self.logger.warning(f"Dataset {dataset_name} is empty")
-                    return {"batches": [], "metadata": {"sample_count": 0, "source": dataset_name}}
+                for item in dataset:
+                    # Try common patterns
+                    if 'input' in item and 'output' in item:
+                        texts.append(f"Input: {item['input']}\nOutput: {item['output']}")
+                    elif 'question' in item and 'answer' in item:
+                        texts.append(f"Question: {item['question']}\nAnswer: {item['answer']}")
+                    elif 'prompt' in item and 'completion' in item:
+                        texts.append(f"Prompt: {item['prompt']}\nCompletion: {item['completion']}")
+                    elif 'text' in item:
+                        texts.append(item['text'])
+                    elif 'content' in item:
+                        texts.append(item['content'])
+                    
+            # Print diagnostic info
+            self.logger.info(f"Extracted {len(texts)} texts out of {len(dataset)} items")
+            
+            # Print a sample text if available
+            if texts:
+                self.logger.info(f"Sample text: {texts[0][:200]}...")
+            
         except Exception as e:
-            self.logger.error(f"Error examining dataset structure: {e}")
+            self.logger.error(f"Error processing dataset: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
             return {"batches": [], "metadata": {"sample_count": 0, "source": dataset_name}}
-        
-        # Special handling for specific datasets
-        if "OpenAssistant" in dataset_name or "oasst" in dataset_name:
-            for item in dataset:
-                if 'text' in item and 'role' in item:
-                    if item['role'] == 'assistant':
-                        texts.append(f"User: [Previous question]\nAssistant: {item['text']}")
-                    elif item['role'] == 'prompter':
-                        texts.append(f"User: {item['text']}\nAssistant:")
-                # Handle different OpenAssistant format structures
-                elif 'message_id' in item and 'text' in item and 'role' in item:
-                    if item['role'] == 'assistant':
-                        texts.append(f"User: [Previous question]\nAssistant: {item['text']}")
-                    elif item['role'] == 'prompter':
-                        texts.append(f"User: {item['text']}\nAssistant:")
-        
-        elif "GPTeacher" in dataset_name:
-            for item in dataset:
-                if 'instruction' in item and 'response' in item:
-                    # Combine instruction and response
-                    combined_text = f"Instruction: {item['instruction']}\n\nResponse: {item['response']}"
-                    texts.append(combined_text)
-        
-        elif "Persona-Chat" in dataset_name or "Synthetic-Persona-Chat" in dataset_name:
-            for item in dataset:
-                if 'user 1 personas' in item and 'Best Generated Conversation' in item:
-                    # Handle Synthetic-Persona-Chat format
-                    persona = "\n".join(item['user 1 personas']) if isinstance(item['user 1 personas'], list) else item['user 1 personas']
-                    conversation = item['Best Generated Conversation']
-                    if conversation:
-                        texts.append(f"Persona: {persona}\nConversation: {conversation}")
-                elif 'personas' in item and 'utterances' in item:
-                    # Handle regular Persona-Chat format
-                    persona = "\n".join(item['personas']) if isinstance(item['personas'], list) else item['personas']
-                    if isinstance(item['utterances'], list) and len(item['utterances']) > 0:
-                        # Handle different structure variations
-                        utterance = item['utterances'][-1]  # Take last utterance pair
-                        if isinstance(utterance, list) and len(utterance) >= 2:
-                            texts.append(f"Persona: {persona}\nUser: {utterance[0]}\nAssistant: {utterance[1]}")
-        
-        elif "writingprompts" in dataset_name:
-            for item in dataset:
-                if 'prompt' in item and 'story' in item:
-                    texts.append(f"Prompt: {item['prompt']}\nStory: {item['story']}")
-        
-        else:
-            # Generic case - look for common field patterns
-            for item in dataset:
-                if 'input' in item and 'output' in item:
-                    texts.append(f"Input: {item['input']}\nOutput: {item['output']}")
-                elif 'question' in item and 'answer' in item:
-                    texts.append(f"Question: {item['question']}\nAnswer: {item['answer']}")
-                elif 'prompt' in item and 'completion' in item:
-                    texts.append(f"Prompt: {item['prompt']}\nCompletion: {item['completion']}")
-                elif 'text' in item:
-                    texts.append(item['text'])
-                elif 'content' in item:
-                    texts.append(item['content'])
         
         # Filter out empty texts
         texts = [text for text in texts if text and len(text) > 10]  # Min 10 chars
@@ -1754,8 +1759,9 @@ class UnifiedDatasetHandler:
             self.logger.warning(f"No texts extracted from dataset {dataset_name}")
             return {"batches": [], "metadata": {"sample_count": 0, "source": dataset_name}}
         
+        # Continue from where it left off after the logger.info statement:
         self.logger.info(f"Extracted {len(texts)} texts from dataset {dataset_name}")
-        
+
         # Convert to batches if requested
         if return_batches:
             if not hasattr(self, 'tokenizer') or self.tokenizer is None:
@@ -1779,7 +1785,7 @@ class UnifiedDatasetHandler:
                     }
                 }
             else:
-                # Tokenize and create batches with the tokenizer
+                # Use the _create_batches_from_texts method to create proper batches
                 return self._create_batches_from_texts(texts, dataset_name)
         else:
             # Return texts directly
