@@ -69,7 +69,7 @@ def launch_app():
         print("\nLaunching Jarvis AI Assistant...")
         
         python_exe = sys.executable
-        result = subprocess.run([python_exe, "main.py"], env=os.environ)
+        result = subprocess.run([python_exe, "src/main.py"], env=os.environ)
         
         if result.returncode != 0:
             print("Application exited with an error.")

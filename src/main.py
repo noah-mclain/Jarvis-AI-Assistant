@@ -41,7 +41,7 @@ def configure_qt_paths():
     
     if sys.platform == "darwin":
         os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"  # Disable sandboxing (critical for macOS)
-        os.environ["DYLD_FALLBACK_LIBRARY_PATH"] = f"{lib_path}:/usr/lib:/usr/local/lib"  # Safer library resolution
+        # os.environ["DYLD_FALLBACK_LIBRARY_PATH"] = f"{lib_path}:/usr/lib:/usr/local/lib"  # Safer library resolution
         
     return True
 
@@ -54,8 +54,8 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QCoreApplication, QLibraryInfo
 
 # Also set paths programmatically (as a fallback)
-plugin_dir = QLibraryInfo.path(QLibraryInfo.PluginsPath)
-QCoreApplication.addLibraryPath(plugin_dir)
+# plugin_dir = QLibraryInfo.path(QLibraryInfo.PluginsPath)
+# QCoreApplication.addLibraryPath(plugin_dir)
 
 # Check if paths are set correctly
 print(f"Library paths: {QCoreApplication.libraryPaths()}")
