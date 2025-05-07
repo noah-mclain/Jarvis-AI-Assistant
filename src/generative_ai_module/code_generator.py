@@ -50,6 +50,16 @@ class CodeGenerator:
         # Check for CPU-only mode for initial loading
         if os.environ.get('FORCE_CPU_ONLY_FOR_INITIAL_LOAD') == '1':
             print("FORCE_CPU_ONLY_FOR_INITIAL_LOAD is set - using CPU for initial model loading")
+            # Store the actual target device for later use
+            if torch.cuda.is_available():
+                self._target_device = torch.device("cuda")
+                print("Target device for training will be CUDA")
+            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                self._target_device = torch.device("mps")
+                print("Target device for training will be MPS")
+            else:
+                self._target_device = torch.device("cpu")
+                print("Target device for training will be CPU")
             return torch.device("cpu")
 
         if os.environ.get('FORCE_CPU_DATA_PIPELINE') == '1':
@@ -670,6 +680,77 @@ class CodeGenerator:
         print(f"Frozen parameters: {frozen_params:,} ({frozen_params/total_params:.1%})")
         print(f"Total parameters: {total_params:,}")
 
+    def move_model_to_target_device(self):
+        """
+        Move the model from CPU to the target device (GPU/MPS) for training.
+        This should be called right before training starts to ensure all model parts
+        are on the same device.
+        """
+        # If we're already using the target device, no need to move
+        if not hasattr(self, '_target_device'):
+            print("No target device specified, using current device")
+            return
+
+        # Get current device of model
+        current_device = next(self.model.parameters()).device
+
+        # If already on target device, no need to move
+        if current_device == self._target_device:
+            print(f"Model already on target device: {self._target_device}")
+            return
+
+        print(f"Moving model from {current_device} to {self._target_device} for training...")
+
+        # Clear CUDA cache if moving to CUDA
+        if self._target_device.type == "cuda" and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            gc.collect()
+
+        # For MPS device (Apple Silicon)
+        if self._target_device.type == "mps" and hasattr(torch.mps, 'empty_cache'):
+            torch.mps.empty_cache()
+            gc.collect()
+
+        # Move model to target device
+        try:
+            # For PEFT models, we need to handle this differently
+            if hasattr(self.model, 'base_model'):
+                print("Moving PEFT model to target device...")
+                # Move base model parameters
+                for name, param in self.model.base_model.named_parameters():
+                    if not param.data.is_meta:  # Skip meta tensors
+                        param.data = param.data.to(self._target_device)
+
+                # Move adapter parameters
+                for name, param in self.model.named_parameters():
+                    if 'lora' in name and not param.data.is_meta:
+                        param.data = param.data.to(self._target_device)
+            else:
+                # Standard model - move all parameters
+                self.model = self.model.to(self._target_device)
+
+            print(f"Model successfully moved to {self._target_device}")
+
+            # Update device attribute to match target device
+            self.device = self._target_device
+
+            # Verify model device
+            new_device = next(self.model.parameters()).device
+            print(f"Verified model is now on device: {new_device}")
+
+            # Force garbage collection
+            gc.collect()
+            if self._target_device.type == "cuda":
+                torch.cuda.empty_cache()
+            elif self._target_device.type == "mps" and hasattr(torch.mps, 'empty_cache'):
+                torch.mps.empty_cache()
+
+        except Exception as e:
+            print(f"Error moving model to {self._target_device}: {e}")
+            print("Will continue with current device placement")
+            import traceback
+            traceback.print_exc()
+
     def fine_tune_deepseek(self, train_dataset=None, eval_dataset=None, output_dir="deepseek_fine-tuned",
                           epochs=50, batch_size=2, sequence_length=2048, learning_rate=2e-5,
                           warmup_steps=100, max_samples=None, subset="all", all_subsets=True,
@@ -859,6 +940,10 @@ class CodeGenerator:
         # Create the TrainingArguments object
         training_args = TrainingArguments(**training_args_dict)
 
+        # Move model to target device before training
+        log_checkpoint("Moving model to target device before training...")
+        self.move_model_to_target_device()
+
         # Initialize trainer
         log_checkpoint("Initializing Trainer...")
 
@@ -905,16 +990,23 @@ class CodeGenerator:
 
             checkpoint_callback = CheckpointCallback(log_checkpoint)
 
-            # Define CPUSafeDataLoader class with filtering for unexpected keys
-            class CPUSafeDataLoader(DataLoader):
+            # Define DeviceSafeDataLoader class with filtering for unexpected keys
+            class DeviceSafeDataLoader(DataLoader):
+                def __init__(self, *args, target_device=None, model=None, **kwargs):
+                    super().__init__(*args, **kwargs)
+                    self.model = model or self.model  # Use provided model or default
+                    # Use the specified target device or default to the model's device
+                    self.target_device = target_device
+                    log_checkpoint(f"DeviceSafeDataLoader initialized with target device: {self.target_device}")
+
                 def __iter__(self):
                     # List of allowed keys for the model's forward pass
                     allowed_keys = ['input_ids', 'attention_mask', 'labels', 'token_type_ids', 'position_ids']
 
                     for batch in super().__iter__():
-                        # Filter out unexpected keys and move tensors to CPU
+                        # Filter out unexpected keys and move tensors to the target device
                         filtered_batch = {
-                            k: v.to('cpu') if isinstance(v, torch.Tensor) else v
+                            k: v.to(self.target_device) if isinstance(v, torch.Tensor) and self.target_device is not None else v
                             for k, v in batch.items() if k in allowed_keys
                         }
                         yield filtered_batch
@@ -925,12 +1017,16 @@ class CodeGenerator:
             if hasattr(eval_dataset, 'set_format'):
                 eval_dataset = eval_dataset.with_format("torch", device='cpu')
 
-            # Create a custom data collator that ensures tensors are on CPU
+            # Create a custom data collator that ensures tensors are on the correct device
             # and filters out unexpected keys like 'repository_name'
-            def cpu_safe_collator(features):
+            def device_safe_collator(features):
                 batch = {}
                 # List of allowed keys for the model's forward pass
                 allowed_keys = ['input_ids', 'attention_mask', 'labels', 'token_type_ids', 'position_ids']
+
+                # Get current model device
+                current_device = next(self.model.parameters()).device
+                log_checkpoint(f"Collator using device: {current_device}")
 
                 for key in features[0].keys():
                     # Skip keys that aren't in the allowed list
@@ -938,7 +1034,8 @@ class CodeGenerator:
                         continue
 
                     if isinstance(features[0][key], torch.Tensor):
-                        batch[key] = torch.stack([f[key].to('cpu') for f in features])
+                        # Stack tensors and move to the model's device
+                        batch[key] = torch.stack([f[key] for f in features]).to(current_device)
                     else:
                         batch[key] = [f[key] for f in features]
                 return batch
@@ -949,18 +1046,25 @@ class CodeGenerator:
                 train_dataset=train_dataset,
                 eval_dataset=eval_dataset,
                 callbacks=[checkpoint_callback],
-                data_collator=cpu_safe_collator,
+                data_collator=device_safe_collator,
             )
 
             # Fine-tune the model and track metrics
             log_checkpoint(f"Starting fine-tuning for {epochs} epochs...")
 
-            trainer.train_dataloader = CPUSafeDataLoader(
+            # Get current model device for the dataloader
+            current_device = next(self.model.parameters()).device
+            log_checkpoint(f"Using device for training: {current_device}")
+
+            # Replace the default dataloader with our device-aware dataloader
+            trainer.train_dataloader = DeviceSafeDataLoader(
                 trainer.train_dataset,
                 batch_size=training_args.per_device_train_batch_size,
                 shuffle=True,
                 num_workers=training_args.dataloader_num_workers,
-                pin_memory=training_args.dataloader_pin_memory
+                pin_memory=training_args.dataloader_pin_memory,
+                target_device=current_device,
+                model=self.model  # Pass the model reference
             )
             training_metrics = {}
 
