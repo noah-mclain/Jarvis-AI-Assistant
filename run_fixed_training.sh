@@ -20,12 +20,22 @@ export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:32,garbage_collection_threshol
 export TOKENIZERS_PARALLELISM=false
 export FORCE_CPU_ONLY_FOR_INITIAL_LOAD=1
 
-# Step 3: Run the training with optimal parameters
+# Step 3: Ensure directories exist
+echo "Ensuring directories exist..."
+mkdir -p /notebooks/Jarvis_AI_Assistant/models
+mkdir -p /notebooks/Jarvis_AI_Assistant/metrics
+mkdir -p /notebooks/Jarvis_AI_Assistant/checkpoints
+mkdir -p /notebooks/Jarvis_AI_Assistant/logs
+mkdir -p /notebooks/Jarvis_AI_Assistant/evaluation_metrics
+mkdir -p /notebooks/Jarvis_AI_Assistant/preprocessed_data
+mkdir -p /notebooks/Jarvis_AI_Assistant/visualization
+
+# Step 4: Run the training with optimal parameters
 echo "Starting DeepSeek Coder training..."
 python -m src.generative_ai_module.train_models \
     --model_type code \
     --model_name_or_path deepseek-ai/deepseek-coder-5.7b-instruct \
-    --dataset "codeparrot/github-code:0.7,code-search-net/code_search_net:0.3" \
+    --dataset "code-search-net/code_search_net" \
     --batch_size 1 \
     --max_length 512 \
     --gradient_accumulation_steps 64 \
@@ -46,6 +56,7 @@ python -m src.generative_ai_module.train_models \
     --evaluation_strategy "steps" \
     --eval_steps 500 \
     --save_steps 1000 \
-    --logging_steps 50
+    --logging_steps 50 \
+    --output_dir "/notebooks/Jarvis_AI_Assistant/models"
 
 echo "Training complete!"

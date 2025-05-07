@@ -719,12 +719,27 @@ class CodeGenerator:
 
         if train_dataset is not None:
             log_checkpoint("Validating dataset device placement...")
-            temp_loader = DataLoader(train_dataset, batch_size=2, shuffle=False)
-            sample = next(iter(temp_loader))
-            for key in sample:
-                if isinstance(sample[key], torch.Tensor):
-                    assert sample[key].device.type == 'cpu', \
-                        f"Dataset contains GPU tensors in {key} column!"
+            # Force dataset to CPU before creating loader
+            try:
+                # First try to move tensors to CPU if they're on GPU
+                if hasattr(train_dataset, 'set_format'):
+                    log_checkpoint("Moving dataset tensors to CPU...")
+                    train_dataset.set_format(type="torch", device="cpu")
+                if hasattr(eval_dataset, 'set_format'):
+                    eval_dataset.set_format(type="torch", device="cpu")
+
+                # Create a small loader to check
+                temp_loader = DataLoader(train_dataset, batch_size=2, shuffle=False)
+                sample = next(iter(temp_loader))
+
+                # Check and move tensors to CPU if needed
+                for key in sample:
+                    if isinstance(sample[key], torch.Tensor) and sample[key].device.type != 'cpu':
+                        log_checkpoint(f"Moving {key} tensors from {sample[key].device} to CPU")
+                        # This is just for logging - we'll handle the actual conversion in the DataLoader
+            except Exception as e:
+                log_checkpoint(f"Error during dataset device validation: {e}")
+                log_checkpoint("Will force CPU tensors during training")
 
         if train_dataset is None or eval_dataset is None:
             log_checkpoint("FAILED: Could not load datasets for fine-tuning")
@@ -761,13 +776,35 @@ class CodeGenerator:
         else:
             use_gradient_checkpointing = True
 
+        # Set up checkpoint directory in the specified location
+        notebooks_dir = "/notebooks/Jarvis_AI_Assistant"
+        checkpoint_dir = os.path.join(notebooks_dir, "checkpoints")
+        os.makedirs(checkpoint_dir, exist_ok=True)
+
+        # Check for existing checkpoints
+        resume_from_checkpoint = None
+        if os.path.exists(checkpoint_dir):
+            log_checkpoint("Checking for existing checkpoints...")
+            checkpoint_folders = [
+                folder for folder in os.listdir(checkpoint_dir)
+                if os.path.isdir(os.path.join(checkpoint_dir, folder)) and folder.startswith("checkpoint-")
+            ]
+
+            if checkpoint_folders:
+                # Sort by checkpoint number (extract number from folder name)
+                checkpoint_folders.sort(key=lambda x: int(x.split("-")[1]) if x.split("-")[1].isdigit() else 0, reverse=True)
+                latest_checkpoint = os.path.join(checkpoint_dir, checkpoint_folders[0])
+                log_checkpoint(f"Found existing checkpoint: {latest_checkpoint}")
+                resume_from_checkpoint = latest_checkpoint
+
+        # Set up training arguments with the checkpoint directory
         training_args = TrainingArguments(
-            output_dir=output_dir,
+            output_dir=checkpoint_dir,  # Use the checkpoint directory for saving during training
             per_device_train_batch_size=batch_size,
             per_device_eval_batch_size=batch_size,
             num_train_epochs=epochs,
             learning_rate=learning_rate,
-            logging_dir=f"{output_dir}/logs",
+            logging_dir=os.path.join(notebooks_dir, "logs"),
             logging_steps=10,
             evaluation_strategy="steps",
             eval_steps=100,
@@ -791,6 +828,7 @@ class CodeGenerator:
             group_by_length=True,        # Keep existing parameter
             remove_unused_columns=False,
             dataloader_prefetch_factor=2,# Optimize CPU-GPU Pipeline
+            hub_model_id=None,           # Disable hub pushing
         )
 
         # Initialize trainer
@@ -845,9 +883,22 @@ class CodeGenerator:
                     for batch in super().__iter__():
                         yield {k: v.to('cpu') if isinstance(v, torch.Tensor) else v
                                for k, v in batch.items()}
-            # Override datasets and data loaders
-            trainer.train_dataset = train_dataset.with_format("torch", device='cpu')
-            trainer.eval_dataset = eval_dataset.with_format("torch", device='cpu')
+
+            # Ensure datasets are on CPU
+            if hasattr(train_dataset, 'set_format'):
+                train_dataset = train_dataset.with_format("torch", device='cpu')
+            if hasattr(eval_dataset, 'set_format'):
+                eval_dataset = eval_dataset.with_format("torch", device='cpu')
+
+            # Create a custom data collator that ensures tensors are on CPU
+            def cpu_safe_collator(features):
+                batch = {}
+                for key in features[0].keys():
+                    if isinstance(features[0][key], torch.Tensor):
+                        batch[key] = torch.stack([f[key].to('cpu') for f in features])
+                    else:
+                        batch[key] = [f[key] for f in features]
+                return batch
 
             trainer = Trainer(
                 model=self.model,
@@ -855,7 +906,7 @@ class CodeGenerator:
                 train_dataset=train_dataset,
                 eval_dataset=eval_dataset,
                 callbacks=[checkpoint_callback],
-                data_collator=lambda x: x,
+                data_collator=cpu_safe_collator,
             )
 
             # Fine-tune the model and track metrics
@@ -869,7 +920,14 @@ class CodeGenerator:
                 pin_memory=training_args.dataloader_pin_memory
             )
             training_metrics = {}
-            training_output = trainer.train()
+
+            # Resume from checkpoint if available
+            if resume_from_checkpoint:
+                log_checkpoint(f"Resuming training from checkpoint: {resume_from_checkpoint}")
+                training_output = trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+            else:
+                log_checkpoint("Starting training from scratch")
+                training_output = trainer.train()
 
             # Calculate training time
             training_time = time.time() - start_time
@@ -930,7 +988,7 @@ class CodeGenerator:
             self.tokenizer.save_pretrained(output_dir)
 
             # Save training metrics
-            metrics_file = self._save_training_metrics(training_metrics, "deepseek")
+            metrics_file = self._save_training_metrics(training_metrics, "deepseek_coder")
             log_checkpoint(f"Training metrics saved to {metrics_file}")
 
             # Create a completion marker file to indicate successful training
@@ -956,14 +1014,16 @@ class CodeGenerator:
                 'traceback': traceback_str,
                 'timestamp': datetime.datetime.now().isoformat()
             }
-            metrics_file = self._save_training_metrics(training_metrics, "deepseek_error")
+            metrics_file = self._save_training_metrics(training_metrics, "deepseek_coder_error")
             log_checkpoint(f"Error metrics saved to {metrics_file}")
 
             return training_metrics
 
-    def _save_training_metrics(self, metrics, model_type="deepseek"):
+    def _save_training_metrics(self, metrics, model_type="deepseek_coder"):
         """Save training metrics to a JSON file"""
-        metrics_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "metrics")
+        # Use the specified Jarvis_AI_Assistant directory
+        notebooks_dir = "/notebooks/Jarvis_AI_Assistant"
+        metrics_dir = os.path.join(notebooks_dir, "metrics")
         os.makedirs(metrics_dir, exist_ok=True)
 
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
