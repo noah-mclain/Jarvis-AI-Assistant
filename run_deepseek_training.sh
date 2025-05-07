@@ -209,12 +209,10 @@ else
 fi
 
 # Run the training with memory-efficient settings
-# Verify the command before execution
-echo "Executing the following command:"
-echo "python -m src.generative_ai_module.train_models \
+python -m src.generative_ai_module.train_models \
     --model_type code \
     --model_name_or_path deepseek-ai/deepseek-coder-5.7b-instruct \
-    --dataset \"code-search-net/code_search_net\" \
+    --dataset "code-search-net/code_search_net" \
     --batch_size 1 \
     --max_length 512 \
     --gradient_accumulation_steps 64 \
@@ -229,14 +227,14 @@ echo "python -m src.generative_ai_module.train_models \
     --cache_dir .cache \
     --force_gpu \
     --pad_token_id 50256 \
-    --dataset_subset \"python\" \
+    --dataset_subset "python" \
     --skip_layer_freezing \
     --fim_rate 0.6 \
-    --evaluation_strategy \"steps\" \
+    --evaluation_strategy "steps" \
     --eval_steps 500 \
     --save_steps 1000 \
     --logging_steps 50 \
-    --output_dir \"/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-finetuned\""
+    --output_dir "/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-finetuned"
 
 # Step 8: Kill the background monitoring process
 kill $MONITOR_PID
