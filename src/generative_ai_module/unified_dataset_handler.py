@@ -475,7 +475,7 @@ class UnifiedDatasetHandler:
                     if 'role' in sample_item and 'text' in sample_item:
                         self.logger.info("Using role/text fields directly for extraction")
 
-        # Check for empty dataset
+        # Check for empty dataset and validate structure
         if not self.validate_dataset_structure(dataset, dataset_name):
             self.logger.warning(f"Dataset {dataset_name} failed validation. Creating empty dataset with placeholder text.")
             return {
@@ -485,6 +485,22 @@ class UnifiedDatasetHandler:
                     "attention_mask": []
                 })
             }
+
+        # Log dataset structure for debugging
+        if len(dataset) > 0:
+            sample_item = dataset[0]
+            if isinstance(sample_item, dict):
+                self.logger.debug(f"Dataset sample item keys: {list(sample_item.keys())}")
+                # Log a sample of the first few keys and values
+                sample_data = {}
+                for k, v in list(sample_item.items())[:5]:  # First 5 items
+                    if isinstance(v, str):
+                        sample_data[k] = v[:50] + "..." if len(v) > 50 else v
+                    else:
+                        sample_data[k] = str(type(v))
+                self.logger.debug(f"Sample data: {sample_data}")
+            else:
+                self.logger.debug(f"Dataset sample item type: {type(sample_item)}")
 
         # Initialize collection containers
         all_texts, all_input_ids, all_attention_masks = [], [], []
@@ -678,27 +694,64 @@ class UnifiedDatasetHandler:
             # Log the dataset name and batch type for debugging
             self.logger.info(f"Extracting texts from dataset: {dataset_name}, batch type: {type(batch)}")
 
+            # Check if batch is empty or None
+            if not batch:
+                self.logger.warning(f"Empty batch received for {dataset_name}. Creating placeholder text.")
+                return ["This is a placeholder text for an empty batch. It was automatically generated because the batch was empty."]
+
+            # Log batch structure for debugging
+            if isinstance(batch, list) and len(batch) > 0:
+                if isinstance(batch[0], dict):
+                    self.logger.debug(f"First batch item keys: {list(batch[0].keys())}")
+                    # Log a sample of the first few keys and values
+                    sample_data = {}
+                    for k, v in list(batch[0].items())[:5]:  # First 5 items
+                        if isinstance(v, str):
+                            sample_data[k] = v[:50] + "..." if len(v) > 50 else v
+                        else:
+                            sample_data[k] = str(type(v))
+                    self.logger.debug(f"Sample data: {sample_data}")
+            elif isinstance(batch, dict):
+                self.logger.debug(f"Batch keys: {list(batch.keys())}")
+
             # Try to extract texts using the appropriate method based on dataset name
+            self.logger.info(f"Using extractor for dataset: {dataset_name}")
             if "OpenAssistant" in dataset_name or "oasst" in dataset_name:
                 texts = self._extract_openassistant_batch(batch)
             elif "GPTeacher" in dataset_name:
                 texts = self._extract_gpteacher_batch(batch)
             elif "Persona-Chat" in dataset_name or "Synthetic-Persona-Chat" in dataset_name:
                 texts = self._extract_persona_chat_batch(batch)
-            elif "writingprompts" in dataset_name:
+            elif "writingprompts" in dataset_name or "writing_prompts" in dataset_name:
                 texts = self._extract_writing_prompts_batch(batch)
+            elif "pile" in dataset_name.lower() or "EleutherAI" in dataset_name:
+                texts = self._extract_pile_batch(batch)
             else:
+                self.logger.info(f"No specific extractor for {dataset_name}, using generic extractor")
                 texts = self._extract_generic_batch(batch)
+
+            # Ensure texts is a list and not None
+            if texts is None:
+                self.logger.warning(f"Extraction method for {dataset_name} returned None. Creating empty list.")
+                texts = []
 
             # If no texts were extracted, try the generic extractor as a fallback
             if not texts and batch:
                 self.logger.warning(f"No texts extracted using the {dataset_name} extractor. Trying generic extractor as fallback.")
-                texts = self._extract_generic_batch(batch)
+                generic_texts = self._extract_generic_batch(batch)
+                if generic_texts:
+                    texts = generic_texts
+                    self.logger.info(f"Generic extractor found {len(texts)} texts")
 
             # If still no texts, create a placeholder
             if not texts:
                 self.logger.warning(f"All extraction methods failed for {dataset_name}. Creating placeholder text.")
                 texts = ["This is a placeholder text for training. It was automatically generated because no text could be extracted from the dataset."]
+
+            # Log the extraction results
+            self.logger.info(f"Extracted {len(texts)} texts from batch")
+            if texts:
+                self.logger.info(f"Sample extracted text: {texts[0][:100]}")
 
             return texts
 
@@ -947,7 +1000,7 @@ class UnifiedDatasetHandler:
         return batch_texts
 
     def _extract_persona_chat_batch(self, batch):
-        """Extract texts from Persona-Chat format batch."""
+        """Extract texts from Persona-Chat format batch (including google/Synthetic-Persona-Chat)"""
         batch_texts = []
 
         # Log batch type for debugging
@@ -971,7 +1024,7 @@ class UnifiedDatasetHandler:
             except Exception as e:
                 self.logger.error(f"Cannot process Persona-Chat batch of type {type(batch)}: {e}")
                 # Create a fallback text
-                batch_texts.append("Persona: I am a helpful assistant.\nUser: Hello\nAssistant: Hi there! How can I help you today?")
+                batch_texts.append("<PERSONA>\nI am a helpful assistant.\n<DIALOGUE>\nUSER: Hello\nASSISTANT: Hi there! How can I help you today?\n<END>")
                 return batch_texts
 
         # Process each item
@@ -984,51 +1037,103 @@ class UnifiedDatasetHandler:
                 # Dump the first item for debugging
                 if len(batch_texts) == 0:
                     self.logger.info(f"Persona-Chat item structure: {item}")
+                    self.logger.debug(f"Persona-Chat item keys: {list(item.keys())}")
 
-                # Handle Synthetic-Persona-Chat format
-                if 'user 1 personas' in item and 'Best Generated Conversation' in item:
+                # Handle google/Synthetic-Persona-Chat format
+                if 'context' in item and 'response' in item:
+                    try:
+                        # Extract persona information from context
+                        if isinstance(item['context'], dict) and 'user_info' in item['context']:
+                            persona = "\n".join(item['context']['user_info'])
+                            dialogue = item['context'].get('dialogue', '')
+                            response = item['response']
+                            batch_texts.append(f"<PERSONA>\n{persona}\n<DIALOGUE>\nUSER: {dialogue}\nASSISTANT: {response}\n<END>")
+                        else:
+                            # Fallback if context structure is different
+                            context = str(item['context'])
+                            response = item['response']
+                            batch_texts.append(f"<CONTEXT>\n{context}\n<RESPONSE>\n{response}\n<END>")
+                    except Exception as e:
+                        self.logger.warning(f"Error processing Synthetic-Persona-Chat item: {e}")
+                        import traceback
+                        self.logger.warning(traceback.format_exc())
+
+                # Handle Synthetic-Persona-Chat alternative format
+                elif 'user 1 personas' in item and 'Best Generated Conversation' in item:
                     persona = self._format_persona(item['user 1 personas'])
                     conversation = item['Best Generated Conversation']
                     if conversation:
-                        batch_texts.append(f"Persona: {persona}\nConversation: {conversation}")
+                        # Try to extract USER/ASSISTANT exchanges
+                        formatted_conversation = ""
+                        for line in conversation.split('\n'):
+                            if line.startswith('User 1:'):
+                                formatted_conversation += f"USER: {line.replace('User 1:', '').strip()}\n"
+                            elif line.startswith('User 2:'):
+                                formatted_conversation += f"ASSISTANT: {line.replace('User 2:', '').strip()}\n"
+
+                        batch_texts.append(f"<PERSONA>\n{persona}\n<DIALOGUE>\n{formatted_conversation}\n<END>")
+
                 # Handle regular Persona-Chat format
                 elif 'personas' in item and 'utterances' in item:
                     persona = self._format_persona(item['personas'])
-                    if isinstance(item['utterances'], list) and len(item['utterances']) > 0:
-                        # Handle different structure variations
-                        utterance = item['utterances'][-1]  # Take last utterance pair
-                        if isinstance(utterance, list) and len(utterance) >= 2:
-                            batch_texts.append(f"Persona: {persona}\nUser: {utterance[0]}\nAssistant: {utterance[1]}")
+                    if isinstance(item['utterances'], list):
+                        # Process all utterances in the conversation
+                        for utterance in item['utterances']:
+                            if isinstance(utterance, list) and len(utterance) >= 2:
+                                user_msg = utterance[0]
+                                assistant_msg = utterance[1]
+                                batch_texts.append(f"<PERSONA>\n{persona}\n<DIALOGUE>\nUSER: {user_msg}\nASSISTANT: {assistant_msg}\n<END>")
+
                 # Handle alternative format with dialogue field
                 elif 'persona' in item and 'dialogue' in item:
                     persona = self._format_persona(item['persona'])
                     dialogue = item['dialogue']
                     if isinstance(dialogue, list) and len(dialogue) > 0:
-                        dialogue_text = "\n".join(dialogue)
-                        batch_texts.append(f"Persona: {persona}\nDialogue: {dialogue_text}")
+                        # Format dialogue as USER/ASSISTANT exchanges
+                        formatted_dialogue = ""
+                        for i, message in enumerate(dialogue):
+                            if i % 2 == 0:  # Even indices are user messages
+                                formatted_dialogue += f"USER: {message}\n"
+                            else:  # Odd indices are assistant messages
+                                formatted_dialogue += f"ASSISTANT: {message}\n"
+
+                        batch_texts.append(f"<PERSONA>\n{persona}\n<DIALOGUE>\n{formatted_dialogue}\n<END>")
                     elif isinstance(dialogue, str):
-                        batch_texts.append(f"Persona: {persona}\nDialogue: {dialogue}")
+                        batch_texts.append(f"<PERSONA>\n{persona}\n<DIALOGUE>\n{dialogue}\n<END>")
+
                 # Handle any item with conversation field
                 elif 'conversation' in item:
                     conversation = item['conversation']
                     if isinstance(conversation, list):
-                        conversation_text = "\n".join(conversation)
-                        batch_texts.append(f"Conversation: {conversation_text}")
+                        # Format conversation as USER/ASSISTANT exchanges
+                        formatted_conversation = ""
+                        for i, message in enumerate(conversation):
+                            if i % 2 == 0:  # Even indices are user messages
+                                formatted_conversation += f"USER: {message}\n"
+                            else:  # Odd indices are assistant messages
+                                formatted_conversation += f"ASSISTANT: {message}\n"
+
+                        batch_texts.append(f"<DIALOGUE>\n{formatted_conversation}\n<END>")
                     elif isinstance(conversation, str):
-                        batch_texts.append(f"Conversation: {conversation}")
+                        batch_texts.append(f"<DIALOGUE>\n{conversation}\n<END>")
+
                 # Fallback to any text field
                 elif 'text' in item:
                     batch_texts.append(item['text'])
             except Exception as e:
                 self.logger.warning(f"Error processing Persona-Chat item: {e}")
+                import traceback
+                self.logger.warning(traceback.format_exc())
                 continue
 
         # If we couldn't extract any texts, create a fallback
         if not batch_texts and items:
             self.logger.warning("No texts extracted from Persona-Chat batch. Creating fallback text.")
-            batch_texts.append("Persona: I am a helpful assistant.\nUser: Hello\nAssistant: Hi there! How can I help you today?")
+            batch_texts.append("<PERSONA>\nI am a helpful assistant.\n<DIALOGUE>\nUSER: Hello\nASSISTANT: Hi there! How can I help you today?\n<END>")
 
         self.logger.info(f"Extracted {len(batch_texts)} texts from Persona-Chat batch")
+        if batch_texts:
+            self.logger.info(f"Sample Persona-Chat text: {batch_texts[0][:100]}...")
         return batch_texts
 
     def _format_persona(self, personas):
@@ -1044,7 +1149,7 @@ class UnifiedDatasetHandler:
             return str(personas)
 
     def _extract_writing_prompts_batch(self, batch):
-        """Extract texts from WritingPrompts format batch."""
+        """Extract texts from WritingPrompts format batch (euclaise/writingprompts)"""
         batch_texts = []
 
         # Log batch type for debugging
@@ -1068,7 +1173,7 @@ class UnifiedDatasetHandler:
             except Exception as e:
                 self.logger.error(f"Cannot process WritingPrompts batch of type {type(batch)}: {e}")
                 # Create a fallback text
-                batch_texts.append("Prompt: Write a short story.\nStory: Once upon a time, there was a helpful AI assistant.")
+                batch_texts.append("<PROMPT>\nWrite a short story.\n<STORY>\nOnce upon a time, there was a helpful AI assistant.\n<END>")
                 return batch_texts
 
         # Process each item
@@ -1081,29 +1186,124 @@ class UnifiedDatasetHandler:
                 # Dump the first item for debugging
                 if len(batch_texts) == 0:
                     self.logger.info(f"WritingPrompts item structure: {item}")
+                    self.logger.debug(f"WritingPrompts item keys: {list(item.keys())}")
 
-                # Standard WritingPrompts format
+                # Standard WritingPrompts format (euclaise/writingprompts)
                 if 'prompt' in item and 'story' in item:
-                    batch_texts.append(f"Prompt: {item['prompt']}\nStory: {item['story']}")
-                # Alternative format
-                elif 'title' in item and 'text' in item:
-                    batch_texts.append(f"Title: {item['title']}\nText: {item['text']}")
-                # Another alternative format
+                    batch_texts.append(f"<PROMPT>\n{item['prompt']}\n<STORY>\n{item['story']}\n<END>")
+                # Alternative format with wp/response
                 elif 'wp' in item and 'response' in item:
-                    batch_texts.append(f"Prompt: {item['wp']}\nStory: {item['response']}")
-                # Fallback to any text field
+                    batch_texts.append(f"<PROMPT>\n{item['wp']}\n<STORY>\n{item['response']}\n<END>")
+                # Alternative format with title/content
+                elif 'title' in item and 'content' in item:
+                    batch_texts.append(f"<PROMPT>\n{item['title']}\n<STORY>\n{item['content']}\n<END>")
+                # Alternative format with title/text
+                elif 'title' in item and 'text' in item:
+                    batch_texts.append(f"<PROMPT>\n{item['title']}\n<STORY>\n{item['text']}\n<END>")
+                # Try to extract from text field
                 elif 'text' in item:
-                    batch_texts.append(item['text'])
+                    text = item['text']
+                    if '<PROMPT>' in text and '<STORY>' in text:
+                        batch_texts.append(text)
+                    else:
+                        # Assume it's just a story
+                        batch_texts.append(f"<PROMPT>\n[Implied prompt]\n<STORY>\n{text}\n<END>")
             except Exception as e:
                 self.logger.warning(f"Error processing WritingPrompts item: {e}")
+                import traceback
+                self.logger.warning(traceback.format_exc())
                 continue
 
         # If we couldn't extract any texts, create a fallback
         if not batch_texts and items:
             self.logger.warning("No texts extracted from WritingPrompts batch. Creating fallback text.")
-            batch_texts.append("Prompt: Write a short story.\nStory: Once upon a time, there was a helpful AI assistant.")
+            batch_texts.append("<PROMPT>\nWrite a short story.\n<STORY>\nOnce upon a time, there was a helpful AI assistant.\n<END>")
 
         self.logger.info(f"Extracted {len(batch_texts)} texts from WritingPrompts batch")
+        if batch_texts:
+            self.logger.info(f"Sample WritingPrompts text: {batch_texts[0][:100]}...")
+        return batch_texts
+
+    def _extract_pile_batch(self, batch):
+        """Extract texts from The Pile format batch (EleutherAI/pile)"""
+        batch_texts = []
+
+        # Log batch type for debugging
+        self.logger.info(f"Pile batch type: {type(batch)}")
+
+        # Handle different batch types
+        if isinstance(batch, dict):
+            items = [batch]
+            self.logger.info(f"Processing Pile batch as a single dictionary item with keys: {list(batch.keys())}")
+        elif isinstance(batch, list):
+            items = batch
+            if items and len(items) > 0:
+                if isinstance(items[0], dict):
+                    self.logger.info(f"Pile sample item keys: {list(items[0].keys())}")
+                else:
+                    self.logger.info(f"Pile sample item type: {type(items[0])}")
+        else:
+            try:
+                items = list(batch)
+                self.logger.info(f"Converted Pile batch to list with {len(items)} items")
+            except Exception as e:
+                self.logger.error(f"Cannot process Pile batch of type {type(batch)}: {e}")
+                # Create a fallback text
+                batch_texts.append("This is a placeholder text for The Pile dataset.")
+                return batch_texts
+
+        # Process each item
+        for item in items:
+            try:
+                # If item is a string, use it directly
+                if isinstance(item, str):
+                    batch_texts.append(item)
+                    continue
+
+                # Skip non-dictionary items if it's not a string
+                if not isinstance(item, dict):
+                    continue
+
+                # Dump the first item for debugging
+                if len(batch_texts) == 0:
+                    self.logger.info(f"Pile item structure: {item}")
+                    self.logger.debug(f"Pile item keys: {list(item.keys())}")
+
+                # Direct text extraction from 'text' field (most common in The Pile)
+                if 'text' in item:
+                    batch_texts.append(item['text'])
+                # Handle different subsets
+                elif 'contents' in item:  # For academic papers subset
+                    batch_texts.append(item['contents'])
+                elif 'body' in item:  # For some document formats
+                    batch_texts.append(item['body'])
+                elif 'content' in item:  # Alternative field name
+                    batch_texts.append(item['content'])
+                elif 'article' in item:  # For news articles
+                    if 'title' in item:
+                        batch_texts.append(f"Title: {item['title']}\n\n{item['article']}")
+                    else:
+                        batch_texts.append(item['article'])
+                # If nothing else works, try to use the first string value in the dictionary
+                else:
+                    for key, value in item.items():
+                        if isinstance(value, str) and len(value) > 0:
+                            batch_texts.append(value)
+                            break
+            except Exception as e:
+                self.logger.warning(f"Error processing Pile item: {e}")
+                import traceback
+                self.logger.warning(traceback.format_exc())
+                continue
+
+        # If we couldn't extract any texts, create a fallback
+        if not batch_texts and items:
+            self.logger.warning("No texts extracted from Pile batch. Creating fallback text.")
+            batch_texts.append("This is a placeholder text for The Pile dataset.")
+
+        self.logger.info(f"Extracted {len(batch_texts)} texts from Pile batch")
+        if batch_texts:
+            self.logger.info(f"Sample Pile text: {batch_texts[0][:100]}...")
         return batch_texts
 
     def _extract_generic_batch(self, batch):
@@ -1149,6 +1349,7 @@ class UnifiedDatasetHandler:
                 # Dump the first item for debugging
                 if len(batch_texts) == 0:
                     self.logger.info(f"Generic item structure: {item}")
+                    self.logger.debug(f"Generic item keys: {list(item.keys())}")
 
                 # Try all common patterns
                 if 'input' in item and 'output' in item:
@@ -1173,6 +1374,8 @@ class UnifiedDatasetHandler:
                             break
             except Exception as e:
                 self.logger.warning(f"Error processing generic item: {e}")
+                import traceback
+                self.logger.warning(traceback.format_exc())
                 continue
 
         # If we couldn't extract any texts, create a fallback
@@ -1181,6 +1384,8 @@ class UnifiedDatasetHandler:
             batch_texts.append("This is a placeholder text for generic dataset.")
 
         self.logger.info(f"Extracted {len(batch_texts)} texts from generic batch")
+        if batch_texts:
+            self.logger.info(f"Sample generic text: {batch_texts[0][:100]}...")
         return batch_texts
 
     def _log_batch_extraction_results(self, batch_texts, batch, dataset_name):
@@ -1244,21 +1449,38 @@ class UnifiedDatasetHandler:
         """Create the final dataset object and optionally cache it."""
         from datasets import Dataset
 
-        # Create the dataset dictionary
-        processed_dataset = {
-            "text": all_texts,
-            "input_ids": all_input_ids if self.tokenizer else [],
-            "attention_mask": all_attention_masks if self.tokenizer else []
-        }
+        # Check if we have tokenized data
+        if not all_input_ids or len(all_input_ids) == 0:
+            self.logger.warning("No input_ids available. Creating dataset with text only.")
+            # Create a dataset with just the text field
+            processed_dataset = {"text": all_texts}
+        elif len(all_input_ids) != len(all_texts):
+            self.logger.warning(f"Mismatch between text length ({len(all_texts)}) and input_ids length ({len(all_input_ids)}). Creating dataset with text only.")
+            # Create a dataset with just the text field
+            processed_dataset = {"text": all_texts}
+        else:
+            # Create the full dataset dictionary with tokenized data
+            processed_dataset = {
+                "text": all_texts,
+                "input_ids": all_input_ids,
+                "attention_mask": all_attention_masks
+            }
 
         # Convert to Dataset object
-        dataset_dict = {"train": Dataset.from_dict(processed_dataset)}
+        try:
+            dataset_dict = {"train": Dataset.from_dict(processed_dataset)}
 
-        # Cache the processed dataset if cache_file is provided
-        if cache_file:
-            self._cache_dataset(dataset_dict, cache_file)
+            # Cache the processed dataset if cache_file is provided
+            if cache_file:
+                self._cache_dataset(dataset_dict, cache_file)
 
-        return dataset_dict
+            return dataset_dict
+        except Exception as e:
+            self.logger.error(f"Error creating dataset: {e}")
+            # Fallback to a simpler dataset with just text
+            self.logger.info("Falling back to text-only dataset")
+            simple_dataset = {"train": Dataset.from_dict({"text": all_texts})}
+            return simple_dataset
 
     def _cache_dataset(self, dataset_dict, cache_file):
         """Cache the processed dataset to a file."""

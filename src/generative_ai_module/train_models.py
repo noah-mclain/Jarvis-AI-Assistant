@@ -2435,7 +2435,18 @@ def main():
         # Import code generator and call its methods directly
         from .code_generator import CodeGenerator
 
-        # Create a code generator instance
+        # Create a code generator instance with memory optimization
+        # Force garbage collection and clear CUDA cache before creating the generator
+        import gc
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            # Set environment variables for better memory management
+            os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+            # Limit GPU memory usage
+            torch.cuda.set_per_process_memory_fraction(0.85)
+
+        logger.info(f"Creating CodeGenerator with 4-bit quantization: {args.use_4bit}")
         code_gen = CodeGenerator(
             use_deepseek=True,  # Always use DeepSeek for code
             load_in_8bit=not args.use_4bit,  # If 4-bit requested, don't use 8-bit

@@ -34,27 +34,27 @@ class CodeGenerator:
         if self.use_deepseek:
             self.model_name = "deepseek-ai/deepseek-coder-6.7b-base"
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, trust_remote_code=True)
-            
+
             # Configure tokenizer
             self.tokenizer.pad_token = self.tokenizer.eos_token
-            
+
             # Load model with appropriate quantization
             self.load_model()
         else:
             self.text_generator = TextGenerator(force_gpu=self.force_gpu)
             self.prompt_enhancer = PromptEnhancer()
             self.dataset_processor = DatasetProcessor(self.text_generator)
-            
+
     def _get_device(self):
         """Determine the best available device (MPS for Apple Silicon, CUDA for NVIDIA, or CPU)"""
         if os.environ.get('FORCE_CPU_DATA_PIPELINE') == '1':
             return torch.device("cpu")
-        
+
         # Force GPU usage only when not in CPU mode
         self.force_gpu = True
-        
+
         print("Setting up GPU for all operations...")
-        
+
         try:
             device, gpu_config = setup_gpu_for_training(force_gpu=True)
             self.gpu_config = gpu_config
@@ -67,25 +67,25 @@ class CodeGenerator:
                         print("RTX 5000 GPU detected - applying optimized settings")
                         self.load_in_4bit = True
                         self.load_in_8bit = False
-                
+
                 # Conditional CUDA setup
                 if os.environ.get('FORCE_CPU_DATA_PIPELINE') != '1':
                     torch.set_default_tensor_type('torch.cuda.FloatTensor')
                     if hasattr(torch, 'set_default_device'):
                         torch.set_default_device('cuda')
                     print(f"GPU enforcement successful: Using CUDA device {device}")
-                
+
                 return device
-            
+
             elif device.type == "mps":
                 print("Using Apple Silicon MPS device")
                 if hasattr(torch.mps, 'empty_cache'):
                     torch.mps.empty_cache()
                 return device
-            
+
             else:
                 print("Warning: setup_gpu_for_training returned CPU despite force_gpu=True")
-        
+
         except Exception as e:
             print(f"GPU setup error: {e}, trying fallback detection")
 
@@ -100,7 +100,7 @@ class CodeGenerator:
         else:
             print("Warning: Falling back to CPU")
             return torch.device("cpu")
-    
+
     def load_model(self):
         """Load the deepseek model with appropriate quantization settings"""
         if getattr(self, '_loading', False):  # Prevent recursion
@@ -108,17 +108,26 @@ class CodeGenerator:
         self._loading = True
         try:
             print(f"Loading {self.model_name}...")
-        
+
+            # Force garbage collection and clear CUDA cache before loading model
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                # Set memory fraction to avoid OOM
+                torch.cuda.set_per_process_memory_fraction(0.9)
+                print(f"Available GPU memory: {torch.cuda.get_device_properties(0).total_memory / (1024**3):.2f} GB")
+                print(f"Current GPU memory usage: {torch.cuda.memory_allocated() / (1024**3):.2f} GB")
+
             # Special case for Apple Silicon (M1/M2/M3)
             if self.device.type == "mps":
                 print("Loading model for Apple Silicon GPU with memory-efficient settings")
-                
+
                 # First load model with a device_map that spreads across CPU and GPU
                 try:
                     # Set environment variables to optimize MPS memory usage
                     os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"  # Avoid offloading to disk
                     os.environ["PYTORCH_MPS_ACTIVE_MEMORY_MANAGER"] = "1"   # Better memory management
-                    
+
                     print("Using 'auto' device mapping to optimize memory usage...")
                     # Use device_map="auto" to let HuggingFace optimize placement
                     # For CUDA devices (replace existing 4-bit block)
@@ -146,7 +155,7 @@ class CodeGenerator:
                 except Exception as e:
                     print(f"Error loading with optimized settings: {e}")
                     print("Trying alternative loading approach...")
-                    
+
                     try:
                         print("Loading in smaller segments...")
                         # Use transformers' loading in smaller segments
@@ -163,7 +172,7 @@ class CodeGenerator:
                     except Exception as e2:
                         print(f"Error with alternative loading: {e2}")
                         print("Falling back to basic CPU loading then MPS transfer...")
-                        
+
                         # Last resort: load on CPU first then move to MPS
                         self.model = AutoModelForCausalLM.from_pretrained(
                             self.model_name,
@@ -171,7 +180,7 @@ class CodeGenerator:
                             torch_dtype=torch.float32,
                             device_map="cpu"
                         )
-                        
+
                         print("Moving model to MPS device (without LoRA)")
                         try:
                             # Move to MPS in chunks to avoid OOM
@@ -182,85 +191,245 @@ class CodeGenerator:
                             print(f"Error moving model to MPS, will use CPU instead: {e}")
                             self.device = torch.device("cpu")
                 return
-                
+
             # Set quantization parameters based on user settings (for CUDA devices)
             elif self.load_in_4bit and self.device.type == "cuda":
                 print("Optimized 4-bit loading for RTX A4000")
                 try:
+                    # More aggressive memory management for RTX A4000
                     from transformers import BitsAndBytesConfig
+
+                    # Check available GPU memory and adjust settings accordingly
+                    total_gpu_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                    print(f"Total GPU memory: {total_gpu_memory:.2f} GB")
+
+                    # More aggressive quantization for limited memory
                     quantization_config = BitsAndBytesConfig(
                         load_in_4bit=True,
                         bnb_4bit_compute_dtype=torch.float16,
-                        bnb_4bit_use_double_quant=True,
-                        bnb_4bit_quant_type="nf4",
-                        llm_int8_skip_modules=["lm_head"]
+                        bnb_4bit_use_double_quant=True,  # Double quantization for more memory savings
+                        bnb_4bit_quant_type="nf4",       # More efficient quantization type
+                        llm_int8_skip_modules=["lm_head"],
+                        bnb_4bit_quant_storage=torch.float16  # Use float16 for storage
                     )
-                    
+
+                    # Set environment variables for better memory management
+                    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+
+                    # Offload more aggressively to CPU
+                    device_map = {
+                        "model.embed_tokens": 0,
+                        "model.norm": 0,
+                        "lm_head": 0,
+                        # Offload some layers to CPU to save GPU memory
+                        "model.layers.0": 0,
+                        "model.layers.1": 0,
+                        "model.layers.2": "cpu",
+                        "model.layers.3": "cpu",
+                        "model.layers.4": 0,
+                        "model.layers.5": 0,
+                        "model.layers.6": "cpu",
+                        "model.layers.7": "cpu",
+                        "model.layers.8": 0,
+                        "model.layers.9": 0,
+                        "model.layers.10": "cpu",
+                        "model.layers.11": "cpu",
+                        "model.layers.12": 0,
+                        "model.layers.13": 0,
+                        "model.layers.14": "cpu",
+                        "model.layers.15": "cpu",
+                        "model.layers.16": 0,
+                        "model.layers.17": 0,
+                        "model.layers.18": "cpu",
+                        "model.layers.19": "cpu",
+                        "model.layers.20": 0,
+                        "model.layers.21": 0,
+                        "model.layers.22": "cpu",
+                        "model.layers.23": "cpu",
+                        "model.layers.24": 0,
+                        "model.layers.25": 0,
+                        "model.layers.26": "cpu",
+                        "model.layers.27": "cpu",
+                        "model.layers.28": 0,
+                        "model.layers.29": 0,
+                        "model.layers.30": "cpu",
+                        "model.layers.31": "cpu",
+                    }
+
+                    print("Loading model with custom device map and aggressive memory optimization...")
                     self.model = AutoModelForCausalLM.from_pretrained(
                         self.model_name,
                         trust_remote_code=True,
                         torch_dtype=torch.float16,
-                        device_map="auto",
-                        max_memory={0: "14GiB", "cpu": "10GiB"},
+                        device_map=device_map,  # Use custom device map instead of "auto"
+                        max_memory={0: "12GiB", "cpu": "24GiB"},  # Reduced GPU allocation, more CPU
                         quantization_config=quantization_config,
-                        use_flash_attention_2=True,  # <<<<<<<<<<
+                        offload_folder="offload_folder",  # Enable disk offloading if needed
+                        offload_state_dict=True,  # Offload state dict during loading
                         low_cpu_mem_usage=True
                     )
-                    
+
                     # Memory verification
-                    mem_used = torch.cuda.memory_allocated() / 1e9
-                    print(f"Model loaded using {mem_used:.2f}GB/16GB VRAM")
-                    
+                    mem_used = torch.cuda.memory_allocated() / (1024**3)
+                    print(f"Model loaded using {mem_used:.2f} GB / {total_gpu_memory:.2f} GB VRAM")
+
                 except Exception as e:
-                    print(f"4-bit load failed: {e}")
-                    print("Attempting 4-bit with reduced constraints...")
+                    print(f"4-bit load with custom device map failed: {e}")
+                    print("Attempting simplified 4-bit loading...")
+                    try:
+                        # Try with simpler settings but still with aggressive memory optimization
+                        quantization_config = BitsAndBytesConfig(
+                            load_in_4bit=True,
+                            bnb_4bit_compute_dtype=torch.float16,
+                            bnb_4bit_use_double_quant=True,
+                            bnb_4bit_quant_type="nf4"
+                        )
+
+                        self.model = AutoModelForCausalLM.from_pretrained(
+                            self.model_name,
+                            trust_remote_code=True,
+                            device_map="auto",
+                            max_memory={0: "12GiB", "cpu": "24GiB"},
+                            quantization_config=quantization_config,
+                            offload_state_dict=True,
+                            low_cpu_mem_usage=True
+                        )
+
+                        print("Successfully loaded model with simplified 4-bit settings")
+                    except Exception as e2:
+                        print(f"Simplified 4-bit loading failed: {e2}")
+                        print("Attempting basic 4-bit loading...")
+                        try:
+                            # Last resort: basic 4-bit loading
+                            self.model = AutoModelForCausalLM.from_pretrained(
+                                self.model_name,
+                                trust_remote_code=True,
+                                load_in_4bit=True,
+                                device_map="auto"
+                            )
+                            print("Successfully loaded model with basic 4-bit settings")
+                        except Exception as e3:
+                            print(f"Basic 4-bit loading failed: {e3}")
+                            print("Falling back to 8-bit quantization...")
+                            try:
+                                self.model = AutoModelForCausalLM.from_pretrained(
+                                    self.model_name,
+                                    trust_remote_code=True,
+                                    load_in_8bit=True,
+                                    device_map="auto"
+                                )
+                                print("Successfully loaded model with 8-bit quantization")
+                            except Exception as e4:
+                                print(f"8-bit loading failed: {e4}")
+                                raise RuntimeError("Failed to load model with any quantization method")
+            elif self.load_in_8bit and self.device.type == "cuda":
+                print("Loading model in 8-bit quantization")
+                try:
+                    # Try with custom device map for 8-bit quantization
+                    device_map = {
+                        "model.embed_tokens": 0,
+                        "model.norm": 0,
+                        "lm_head": 0,
+                        # Alternate between GPU and CPU for layers
+                        "model.layers.0": 0,
+                        "model.layers.1": 0,
+                        "model.layers.2": "cpu",
+                        "model.layers.3": "cpu",
+                        "model.layers.4": 0,
+                        "model.layers.5": 0,
+                        "model.layers.6": "cpu",
+                        "model.layers.7": "cpu",
+                        "model.layers.8": 0,
+                        "model.layers.9": 0,
+                        "model.layers.10": "cpu",
+                        "model.layers.11": "cpu",
+                        "model.layers.12": 0,
+                        "model.layers.13": 0,
+                        "model.layers.14": "cpu",
+                        "model.layers.15": "cpu",
+                        "model.layers.16": 0,
+                        "model.layers.17": 0,
+                        "model.layers.18": "cpu",
+                        "model.layers.19": "cpu",
+                        "model.layers.20": 0,
+                        "model.layers.21": 0,
+                        "model.layers.22": "cpu",
+                        "model.layers.23": "cpu",
+                        "model.layers.24": 0,
+                        "model.layers.25": 0,
+                        "model.layers.26": "cpu",
+                        "model.layers.27": "cpu",
+                        "model.layers.28": 0,
+                        "model.layers.29": 0,
+                        "model.layers.30": "cpu",
+                        "model.layers.31": "cpu",
+                    }
+
+                    self.model = AutoModelForCausalLM.from_pretrained(
+                        self.model_name,
+                        trust_remote_code=True,
+                        torch_dtype=torch.float16,
+                        device_map=device_map,
+                        load_in_8bit=True,
+                        max_memory={0: "12GiB", "cpu": "24GiB"},
+                        offload_state_dict=True,
+                        low_cpu_mem_usage=True
+                    )
+                    print("Successfully loaded model with 8-bit quantization and custom device map")
+                except Exception as e:
+                    print(f"8-bit loading with custom device map failed: {e}")
+                    print("Attempting basic 8-bit loading...")
                     try:
                         self.model = AutoModelForCausalLM.from_pretrained(
                             self.model_name,
                             trust_remote_code=True,
-                            load_in_4bit=True,  # Let HF handle defaults
-                            device_map="auto"
+                            torch_dtype=torch.float16,
+                            device_map="auto",
+                            load_in_8bit=True,
+                            max_memory={0: "12GiB", "cpu": "24GiB"},
+                            offload_state_dict=True
                         )
-                    except:
-                        raise RuntimeError("Failed to load model even with 4-bit")
-                        # print("Falling back to 16-bit precision...")
-                        # self.model = AutoModelForCausalLM.from_pretrained(
-                        #     self.model_name,
-                        #     trust_remote_code=True,
-                        #     torch_dtype=torch.float16,
-                        #     device_map="auto",
-                        # )
-            elif self.load_in_8bit and self.device.type == "cuda":
-                print("Loading model in 8-bit quantization")
-                try:
-                    self.model = AutoModelForCausalLM.from_pretrained(
-                        self.model_name,
-                        trust_remote_code=True,
-                        torch_dtype=torch.float16,
-                        device_map="auto",
-                        load_in_8bit=True,
-                    )
-                except Exception as e:
-                    print(f"Error loading with 8-bit quantization: {e}")
-                    print("Falling back to 16-bit precision...")
-                    self.model = AutoModelForCausalLM.from_pretrained(
-                        self.model_name,
-                        trust_remote_code=True,
-                        torch_dtype=torch.float16,
-                        device_map="auto",
-                    )
+                        print("Successfully loaded model with basic 8-bit quantization")
+                    except Exception as e2:
+                        print(f"Basic 8-bit loading failed: {e2}")
+                        print("Falling back to CPU loading...")
+                        self.model = AutoModelForCausalLM.from_pretrained(
+                            self.model_name,
+                            trust_remote_code=True,
+                            device_map="cpu",
+                            torch_dtype=torch.float32
+                        )
+                        print("Model loaded on CPU. Performance will be slow.")
+                        self.device = torch.device("cpu")
             else:
-                print("Loading model in full precision")
-                self.model = AutoModelForCausalLM.from_pretrained(
-                    self.model_name,
-                    trust_remote_code=True,
-                    torch_dtype=torch.float16,
-                    device_map="auto",
-                )
-            
+                print("Loading model with auto device map and memory optimization")
+                try:
+                    # Try to load with auto device map and memory optimization
+                    self.model = AutoModelForCausalLM.from_pretrained(
+                        self.model_name,
+                        trust_remote_code=True,
+                        torch_dtype=torch.float16,
+                        device_map="auto",
+                        max_memory={0: "12GiB", "cpu": "24GiB"},
+                        offload_state_dict=True,
+                        low_cpu_mem_usage=True
+                    )
+                    print("Successfully loaded model with auto device map")
+                except Exception as e:
+                    print(f"Auto device map loading failed: {e}")
+                    print("Falling back to CPU loading...")
+                    self.model = AutoModelForCausalLM.from_pretrained(
+                        self.model_name,
+                        trust_remote_code=True,
+                        device_map="cpu",
+                        torch_dtype=torch.float32
+                    )
+                    print("Model loaded on CPU. Performance will be slow.")
+                    self.device = torch.device("cpu")
+
             print(f"\n=== Model Load Verification ===")
             print(f"Model type: {type(self.model)}")
-            
+
             # Apply LoRA - only for non-MPS devices
             if self.device.type != "mps":
                 lora_config = LoraConfig(
@@ -292,7 +461,7 @@ class CodeGenerator:
                         f"Model requires {mem_alloc:.1f}GB/16GB VRAM. "
                         "Reduce --max_length or enable --gradient_checkpointing"
                     )
-                
+
                 # Warm up GPU memory
                 try:
                     dummy_input = torch.zeros((1, 64), dtype=torch.long, device="cuda")
@@ -307,17 +476,17 @@ class CodeGenerator:
                     print(f"GPU warmup failed: {e}")
         finally:
             self._loading = False
-    
+
     def generate_code(self, prompt, length=100, temperature=0.7, top_p=0.95):
         """
         Generate code from a prompt using either deepseek or text_generator
-        
+
         Args:
             prompt: Text prompt for code generation
             length: Maximum length of generated code (used only for non-deepseek)
             temperature: Sampling temperature (higher = more random)
             top_p: Top-p sampling parameter (only for deepseek)
-            
+
         Returns:
             Generated code
         """
@@ -326,11 +495,11 @@ class CodeGenerator:
             formatted_prompt = f"### Instruction: Write code for this task:\n{prompt}\n\n### Response:"
             # Ensure return_tensors="pt" is set to get PyTorch tensors
             inputs = self.tokenizer(formatted_prompt, return_tensors="pt", padding=True, truncation=True)
-                    
+
             # Make sure the model and inputs are on the same device
             current_device = next(self.model.parameters()).device
             inputs = {k: v.to(current_device) for k, v in inputs.items()}
-            
+
             # Generate with deepseek model
             with torch.no_grad():
                 outputs = self.model.generate(
@@ -342,7 +511,7 @@ class CodeGenerator:
                     do_sample=True,
                     pad_token_id=self.tokenizer.eos_token_id
                 )
-            
+
             # Decode and return generated code (excluding the prompt)
             generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
             # Extract just the generated response part
@@ -356,42 +525,42 @@ class CodeGenerator:
             return self.text_generator.generate(
                 initial_str=enhanced_prompt, pred_len=length, temperature=temperature
             )
-    
+
     def train_on_codebase(self, source_path, epochs=50, sequence_length=100, batch_size=64):
         """
         Train the code generator on a specific codebase
-        
+
         Args:
             source_path: Path to codebase (file, directory, or zip)
             epochs: Number of training epochs
             sequence_length: Sequence length for training
             batch_size: Batch size for training
-            
+
         Returns:
             Training loss history
         """
         # Prepare code-specific dataset
         batched_data = self.dataset_processor.prepare_code_dataset(
-            source_path, 
-            sequence_length=sequence_length, 
+            source_path,
+            sequence_length=sequence_length,
             batch_size=batch_size
         )
 
-        return self.text_generator.train(batched_data, eπpochs=epochs)
-    
+        return self.text_generator.train(batched_data, epochs=epochs)
+
     def freeze_model_layers(self, freeze_proportion=0.7):
         """
         Freeze a portion of lower transformer layers for efficient fine-tuning
-        
+
         Args:
             freeze_proportion: Proportion of layers to freeze (0-1)
         """
         if not hasattr(self.model, 'base_model'):
             print("Model doesn't have a base_model attribute, skipping layer freezing")
             return
-            
+
         base_model = self.model.base_model.model
-        
+
         # Get layers based on model architecture
         if hasattr(base_model, 'layers'):
             # For models that have direct access to layers
@@ -415,20 +584,20 @@ class CodeGenerator:
                 if 'layer' in attr_name.lower() and isinstance(getattr(base_model, attr_name), (list, torch.nn.ModuleList)):
                     found_layers_attr = attr_name
                     break
-            
+
             if found_layers_attr:
                 transformer_layers = getattr(base_model, found_layers_attr)
             else:
                 print("Could not find transformer layers in model, skipping layer freezing")
                 return
-        
+
         num_layers = len(transformer_layers)
-        
+
         # Calculate how many layers to freeze
         num_to_freeze = int(num_layers * freeze_proportion)
-        
+
         print(f"Freezing {num_to_freeze} out of {num_layers} transformer layers")
-        
+
         # Freeze embedding layer if available
         if hasattr(base_model, 'embed_tokens'):
             for param in base_model.embed_tokens.parameters():
@@ -436,33 +605,33 @@ class CodeGenerator:
         elif hasattr(base_model, 'embeddings'):
             for param in base_model.embeddings.parameters():
                 param.requires_grad = False
-        
+
         # Freeze lower transformer layers
         for i in range(num_to_freeze):
             for param in transformer_layers[i].parameters():
                 param.requires_grad = False
-        
+
         # Count trainable vs frozen parameters
         trainable_params = 0
         frozen_params = 0
-        
+
         for param in self.model.parameters():
             if param.requires_grad:
                 trainable_params += param.numel()
             else:
                 frozen_params += param.numel()
-                
+
         total_params = trainable_params + frozen_params
         print(f"Trainable parameters: {trainable_params:,} ({trainable_params/total_params:.1%})")
         print(f"Frozen parameters: {frozen_params:,} ({frozen_params/total_params:.1%})")
         print(f"Total parameters: {total_params:,}")
 
-    def fine_tune_deepseek(self, train_dataset=None, eval_dataset=None, output_dir="deepseek_fine-tuned", 
+    def fine_tune_deepseek(self, train_dataset=None, eval_dataset=None, output_dir="deepseek_fine-tuned",
                           epochs=50, batch_size=2, sequence_length=2048, learning_rate=2e-5,
                           warmup_steps=100, max_samples=None, subset="all", all_subsets=True):
         """
         Fine-tune the deepseek-coder model on code snippets
-        
+
         Args:
             train_dataset: Optional pre-loaded training dataset
             eval_dataset: Optional pre-loaded evaluation dataset
@@ -475,7 +644,7 @@ class CodeGenerator:
             max_samples: Maximum number of samples to use (if loading dataset)
             subset: Language subset of code_search_net (if loading dataset)
             all_subsets: Whether to use all language subsets (default: True)
-            
+
         Returns:
             Dictionary with training metrics
         """
@@ -485,7 +654,7 @@ class CodeGenerator:
         # Set up checkpointing directories
         checkpoint_dir = os.path.join(output_dir, "checkpoints")
         os.makedirs(checkpoint_dir, exist_ok=True)
-        
+
         # Create a checkpoint log file
         checkpoint_log = os.path.join(output_dir, "checkpoint_log.txt")
         with open(checkpoint_log, 'w') as f:
@@ -513,7 +682,7 @@ class CodeGenerator:
                 all_subsets=all_subsets
             )
             log_checkpoint(f"Dataset loaded - Train: {len(train_dataset)} samples, Eval: {len(eval_dataset)} samples")
-            
+
         if train_dataset is not None:
             log_checkpoint("Validating dataset device placement...")
             temp_loader = DataLoader(train_dataset, batch_size=2, shuffle=False)
@@ -529,26 +698,26 @@ class CodeGenerator:
 
         # Create the output directory
         os.makedirs(output_dir, exist_ok=True)
-        
+
         # For Apple Silicon (MPS), use a simplified training approach without PEFT
         if self.device.type == "mps":
             log_checkpoint("Using simplified training for Apple Silicon...")
             return self._fine_tune_mps(
-                train_dataset, eval_dataset, output_dir, 
+                train_dataset, eval_dataset, output_dir,
                 epochs, batch_size, learning_rate, warmup_steps
             )
-        
+
         # Freeze lower layers for more efficient training
         log_checkpoint("Freezing lower layers for more efficient training...")
         self.freeze_model_layers(freeze_proportion=0.7)  # Freeze 70% of the layers
-        
+
         # Prepare training arguments
         log_checkpoint("Configuring training arguments...")
         # Check if we're on MPS (Apple Silicon) - fp16 is not compatible with MPS
         use_fp16 = self.device.type != "mps"
         if not use_fp16:
             log_checkpoint("Disabling mixed precision training (fp16) as it's not supported on MPS devices")
-        
+
         # On MPS, use even smaller batch size and disable gradient checkpointing
         if self.device.type == "mps":
             batch_size = min(2, batch_size)  # Respect 2 as the specified batch size
@@ -557,7 +726,7 @@ class CodeGenerator:
             log_checkpoint("Disabling gradient checkpointing for MPS device")
         else:
             use_gradient_checkpointing = True
-        
+
         training_args = TrainingArguments(
             output_dir=output_dir,
             per_device_train_batch_size=batch_size,
@@ -592,7 +761,7 @@ class CodeGenerator:
 
         # Initialize trainer
         log_checkpoint("Initializing Trainer...")
-        
+
         # Special handling for MPS device
         if self.device.type == "mps":
             log_checkpoint("Using Apple Silicon GPU. Ensuring model is properly configured...")
@@ -600,52 +769,52 @@ class CodeGenerator:
             if not next(self.model.parameters()).is_meta:
                 log_checkpoint("Moving model to MPS before training...")
                 self.model = self.model.to("mps")
-                
+
             # Use smaller batch size for MPS if needed
             if batch_size > 32:
                 log_checkpoint(f"Reducing batch size from {batch_size} to 32 for MPS device")
                 training_args.per_device_train_batch_size = 32
                 training_args.per_device_eval_batch_size = 32
-        
+
         # Initialize the trainer with our model and datasets
         try:
             # Define a custom callback for additional checkpointing
             class CheckpointCallback(TrainerCallback):
                 def __init__(self, log_func):
                     self.log_func = log_func
-                
+
                 def on_step_end(self, args, state, control, **kwargs):
                     if state.global_step % 50 == 0:  # Log every 50 steps
                         self.log_func(f"Completed step {state.global_step}, Loss: {state.log_history[-1]['loss'] if state.log_history else 'N/A'}")
-                
+
                 def on_evaluate(self, args, state, control, metrics=None, **kwargs):
                     if metrics:
                         self.log_func(f"Evaluation - Step: {state.global_step}, Loss: {metrics.get('eval_loss', 'N/A')}")
-                
+
                 def on_save(self, args, state, control, **kwargs):
                     self.log_func(f"Saved checkpoint at step {state.global_step}")
-                    
+
                 def on_epoch_end(self, args, state, control, **kwargs):
                     self.log_func(f"Completed epoch {state.epoch}")
-                    
+
                 def on_train_begin(self, args, state, control, **kwargs):
                     self.log_func("Training started")
-                    
+
                 def on_train_end(self, args, state, control, **kwargs):
                     self.log_func(f"Training completed after {state.global_step} steps")
-            
+
             checkpoint_callback = CheckpointCallback(log_checkpoint)
-            
+
             # Define CPUSafeDataLoader class
             class CPUSafeDataLoader(DataLoader):
                 def __iter__(self):
                     for batch in super().__iter__():
-                        yield {k: v.to('cpu') if isinstance(v, torch.Tensor) else v 
+                        yield {k: v.to('cpu') if isinstance(v, torch.Tensor) else v
                                for k, v in batch.items()}
             # Override datasets and data loaders
             trainer.train_dataset = train_dataset.with_format("torch", device='cpu')
             trainer.eval_dataset = eval_dataset.with_format("torch", device='cpu')
-            
+
             trainer = Trainer(
                 model=self.model,
                 args=training_args,
@@ -654,10 +823,10 @@ class CodeGenerator:
                 callbacks=[checkpoint_callback],
                 data_collator=lambda x: x,
             )
-        
+
             # Fine-tune the model and track metrics
             log_checkpoint(f"Starting fine-tuning for {epochs} epochs...")
-            
+
             trainer.train_dataloader = CPUSafeDataLoader(
                 trainer.train_dataset,
                 batch_size=training_args.per_device_train_batch_size,
@@ -676,7 +845,7 @@ class CodeGenerator:
             dataset_name = "code_search_net_all_languages" if all_subsets else f"code_search_net_{subset}"
             if max_samples:
                 dataset_name += f"_{max_samples}"
-                
+
             training_metrics = {
                 'model_name': self.model_name,
                 'dataset': dataset_name,
@@ -712,7 +881,7 @@ class CodeGenerator:
 
             # Save the fine-tuned model
             log_checkpoint(f"Saving fine-tuned model to {output_dir}...")
-            
+
             # Move model to CPU for saving if it's on MPS
             if self.device.type == "mps":
                 try:
@@ -723,22 +892,22 @@ class CodeGenerator:
                     self.model = self.model.to("mps")  # Move back to MPS
             else:
                 self.model.save_pretrained(output_dir)
-                
+
             self.tokenizer.save_pretrained(output_dir)
 
             # Save training metrics
             metrics_file = self._save_training_metrics(training_metrics, "deepseek")
             log_checkpoint(f"Training metrics saved to {metrics_file}")
-            
+
             # Create a completion marker file to indicate successful training
             with open(os.path.join(output_dir, "TRAINING_COMPLETE"), 'w') as f:
                 f.write(f"Training completed successfully at {datetime.datetime.now().isoformat()}\n")
                 f.write(f"Final loss: {training_output.training_loss:.4f}\n")
                 f.write(f"Evaluation loss: {eval_metrics.get('eval_loss', 'N/A')}\n")
                 f.write(f"Perplexity: {training_metrics['perplexity']:.4f}\n")
-            
+
             return training_metrics
-            
+
         except Exception as e:
             error_msg = f"Error during fine-tuning: {e}"
             log_checkpoint(error_msg)
@@ -755,17 +924,17 @@ class CodeGenerator:
             }
             metrics_file = self._save_training_metrics(training_metrics, "deepseek_error")
             log_checkpoint(f"Error metrics saved to {metrics_file}")
-            
+
             return training_metrics
-    
+
     def _save_training_metrics(self, metrics, model_type="deepseek"):
         """Save training metrics to a JSON file"""
         metrics_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "metrics")
         os.makedirs(metrics_dir, exist_ok=True)
-        
+
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         metrics_path = os.path.join(metrics_dir, f"{model_type}_training_{timestamp}.json")
-        
+
         # Ensure all numeric values are converted to float for JSON serialization
         serializable_metrics = {}
         for key, value in metrics.items():
@@ -780,64 +949,64 @@ class CodeGenerator:
                 }
             else:
                 serializable_metrics[key] = value
-        
+
         with open(metrics_path, 'w') as f:
             json.dump(serializable_metrics, f, indent=4)
-        
+
         print(f"Training metrics saved to {metrics_path}")
         return metrics_path
-        
-    def _fine_tune_mps(self, train_dataset, eval_dataset, output_dir, 
+
+    def _fine_tune_mps(self, train_dataset, eval_dataset, output_dir,
                       epochs, batch_size, learning_rate, warmup_steps):
         """Simplified fine-tuning approach for Apple Silicon MPS devices
-        
+
         This method bypasses PEFT/LoRA and uses a simpler training approach that's compatible
         with Apple Silicon's MPS backend.
         """
         import torch.optim as optim
         from torch.utils.data import DataLoader
         import os
-        
+
         print("Setting up memory-efficient training for Apple Silicon MPS...")
-        
+
         self.model.gradient_checkpointing_enable()
-        
+
         # Use extremely small batch size for MPS to avoid memory issues
         batch_size = 1  # Always use batch size of 1 for MPS to avoid OOM
         print(f"Using batch size of {batch_size} for MPS training (enforced to avoid memory issues)")
-        
+
         # Create model save directory
         os.makedirs(output_dir, exist_ok=True)
-        
+
         # Check current device
         print(f"Current device: {next(self.model.parameters()).device}")
-        
+
         # Empty cache before starting
         if hasattr(torch.mps, 'empty_cache'):
             torch.mps.empty_cache()
-        
+
         # Create data loaders with very small batch size
         train_loader = DataLoader(
-            train_dataset, 
-            batch_size=batch_size, 
+            train_dataset,
+            batch_size=batch_size,
             shuffle=True,
             pin_memory=True  # Pin memory for faster transfers
         )
-        
+
         # Validate that the model is on the CPU
         sample = next(iter(train_loader))
         for key in sample:
             if isinstance(sample[key], torch.Tensor):
                 assert sample[key].device.type == 'cpu', \
                     f"Dataset contains GPU tensors in {key} column!"
-        
+
         eval_loader = DataLoader(
             eval_dataset,
             batch_size=batch_size,
             shuffle=False,
             pin_memory=True  # Pin memory for faster transfers
         )
-        
+
         # Initialize optimizer with lower learning rate for stability
         optimizer = optim.AdamW(
             self.model.parameters(),
@@ -845,15 +1014,15 @@ class CodeGenerator:
             weight_decay=0.01,
             eps=1e-8  # Increase epsilon for numerical stability
         )
-        
+
         # Shorter training for quick completion
         actual_epochs = min(epochs, 3)
         if actual_epochs < epochs:
             print(f"Reducing epochs from {epochs} to {actual_epochs} for Apple Silicon")
-        
+
         total_steps = len(train_loader) * actual_epochs
         warmup_steps = min(warmup_steps, int(total_steps * 0.1))
-        
+
         # Learning rate scheduler with warmup
         def lr_lambda(current_step):
             if current_step < warmup_steps:
@@ -861,12 +1030,12 @@ class CodeGenerator:
             return max(
                 0.0, float(total_steps - current_step) / float(max(1, total_steps - warmup_steps))
             )
-        
+
         scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
-        
+
         # Loss function - causal language modeling loss
         loss_fn = torch.nn.CrossEntropyLoss()
-        
+
         # Initial evaluation metrics
         best_eval_loss = float('inf')
         training_metrics = {
@@ -881,40 +1050,40 @@ class CodeGenerator:
             'eval_loss': [],
             'timestamp': datetime.datetime.now().isoformat()
         }
-        
+
         start_time = time.time()
-        
+
         try:
             for epoch in range(actual_epochs):
                 # Training
                 self.model.train()
                 total_train_loss = 0
                 step = 0
-                
+
                 device = "mps"
-                
+
                 for batch in tqdm(train_loader, desc=f"Epoch {epoch+1}/{actual_epochs}"):
                     # Empty cache before each batch
                     if hasattr(torch.mps, 'empty_cache'):
                         torch.mps.empty_cache()
-                        
+
                     # Move data to device
                     input_ids = batch['input_ids'].to(device)
                     attention_mask = batch['attention_mask'].to(device)
-                    
+
                     # Forward pass
                     outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
                     logits = outputs.logits
-                    
+
                     # Calculate loss
                     shift_logits = logits[..., :-1, :].contiguous()
                     shift_labels = input_ids[..., 1:].contiguous()
-                    
+
                     # Cast both to same type to avoid mismatch
                     shift_logits = shift_logits.to(torch.float32)
-                    
+
                     loss = loss_fn(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-                    
+
                     # Backward pass
                     optimizer.zero_grad()
                     loss.backward()
@@ -922,117 +1091,117 @@ class CodeGenerator:
                     torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
                     optimizer.step()
                     scheduler.step()
-                    
+
                     total_train_loss += loss.item()
                     step += 1
-                    
+
                     # Empty cache after each batch
                     if step % 2 == 0 and hasattr(torch.mps, 'empty_cache'):
                         torch.mps.empty_cache()
-                    
+
                     # Log every 10 steps
                     if step % 10 == 0:
                         print(f"Epoch {epoch+1}, Step {step}/{len(train_loader)}: Loss = {loss.item():.4f}")
-                
+
                 avg_train_loss = total_train_loss / len(train_loader)
                 training_metrics['training_loss'].append(avg_train_loss)
                 print(f"Epoch {epoch+1} completed. Average training loss: {avg_train_loss:.4f}")
-                
+
                 # Empty cache before evaluation
                 if hasattr(torch.mps, 'empty_cache'):
                     torch.mps.empty_cache()
-                
+
                 # Evaluation
                 self.model.eval()
                 total_eval_loss = 0
-                
+
                 with torch.no_grad():
                     for batch in tqdm(eval_loader, desc="Evaluating"):
                         # Process on appropriate device
                         input_ids = batch['input_ids'].to(device)
                         attention_mask = batch['attention_mask'].to(device)
-                        
+
                         # Forward pass
                         outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
                         logits = outputs.logits
-                        
+
                         # Calculate loss
                         shift_logits = logits[..., :-1, :].contiguous()
                         shift_labels = input_ids[..., 1:].contiguous()
-                        
+
                         # Cast to same type
                         shift_logits = shift_logits.to(torch.float32)
-                        
+
                         loss = loss_fn(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-                        
+
                         total_eval_loss += loss.item()
-                
+
                 avg_eval_loss = total_eval_loss / len(eval_loader)
                 training_metrics['eval_loss'].append(avg_eval_loss)
                 print(f"Evaluation loss: {avg_eval_loss:.4f}")
-                
+
                 # Empty cache after evaluation
                 if hasattr(torch.mps, 'empty_cache'):
                     torch.mps.empty_cache()
-                
+
                 # Save model if it's the best so far
                 if avg_eval_loss < best_eval_loss:
                     best_eval_loss = avg_eval_loss
                     print(f"New best model found! Saving to {output_dir}")
-                    
+
                     # Ensure output directory exists
                     os.makedirs(output_dir, exist_ok=True)
-                    
+
                     # Create full paths for model files
                     model_path = os.path.join(output_dir, "best_model.pt")
-                    
+
                     # Save model to output directory - first move to CPU for reliable saving
                     save_device = "cpu"
                     print("Moving model to CPU for saving...")
                     model_to_save = self.model.to(save_device)
                     torch.save(model_to_save.state_dict(), model_path)
                     print(f"Model saved to {model_path}")
-                    
+
                     # Move back to original device
                     print("Moving model back to MPS...")
                     self.model = self.model.to(device)
-                    
+
                     # Also save tokenizer
                     self.tokenizer.save_pretrained(output_dir)
-            
+
             # Training completed
             training_time = time.time() - start_time
-            
+
             # Update metrics with final values
             training_metrics['training_time'] = training_time
             training_metrics['final_loss'] = training_metrics['training_loss'][-1]
             training_metrics['best_eval_loss'] = best_eval_loss
             training_metrics['perplexity'] = np.exp(best_eval_loss)
-            
+
             print(f"Training completed in {training_time:.2f} seconds")
             print(f"Best evaluation loss: {best_eval_loss:.4f}")
             print(f"Perplexity: {np.exp(best_eval_loss):.4f}")
-            
+
             # Save training metrics
             self._save_training_metrics(training_metrics, "deepseek_mps")
-            
+
             # Empty cache for good measure
             if hasattr(torch.mps, 'empty_cache'):
                 torch.mps.empty_cache()
-            
+
             return training_metrics
-            
+
         except Exception as e:
             print(f"Error during MPS training: {e}")
             import traceback
             traceback.print_exc()
-            
+
             # Save partial metrics
             training_metrics['error'] = str(e)
             self._save_training_metrics(training_metrics, "deepseek_mps_error")
-            
+
             return training_metrics
-        
+
 if __name__ == "__main__":
     # Parse command line arguments
     import argparse
@@ -1044,7 +1213,7 @@ if __name__ == "__main__":
     parser.add_argument("--sequence-length", type=int, default=512, help="Maximum sequence length")
     parser.add_argument("--learning-rate", type=float, default=2e-5, help="Learning rate")
     parser.add_argument("--subset", type=str, default="python", help="Code dataset subset")
-    
+
     args = parser.parse_args()
 
     # Load and preprocess dataset
@@ -1056,10 +1225,10 @@ if __name__ == "__main__":
 
     # Initialize code generator with deepseek
     code_gen = CodeGenerator(use_deepseek=True)
-    
+
     # Fine-tune the model
     code_gen.fine_tune_deepseek(
-        train_dataset=train_data, 
+        train_dataset=train_data,
         eval_dataset=valid_data,
         output_dir=args.output_dir,
         epochs=args.epochs,
