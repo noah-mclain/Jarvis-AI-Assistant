@@ -381,7 +381,7 @@ class UnifiedDatasetHandler:
             # Process based on common dataset formats
             if "OpenAssistant" in dataset_name or "oasst" in dataset_name:
                 for item in batch:
-                    if 'text' in item and 'role' in item:
+                    if 'message' in item and 'role' in item:
                         if item['role'] == 'assistant':
                             batch_texts.append(f"User: [Previous question]\nAssistant: {item['text']}")
                         elif item['role'] == 'prompter':
@@ -1603,11 +1603,19 @@ class UnifiedDatasetHandler:
         # Handle different dataset formats based on keys
         keys = dataset[0].keys()
         
+        self.logger.info(f"Processing HuggingFace dataset ({len(dataset)} samples)")
+        
+        # Add check for empty dataset
+        if len(dataset) > 0:
+            self.logger.info(f"Dataset keys: {list(dataset[0].keys())}")
+        else:
+            self.logger.warning("Dataset is empty after processing!")
+        
         # Special handling for specific datasets
         if dataset_name == "agie-ai/OpenAssistant-oasst1":
             for item in dataset:
-                if 'text' in item:
-                    texts.append(item['text'])
+                if 'message' in item:
+                    texts.append(item['message'])
         
         elif dataset_name == "teknium/GPTeacher-General-Instruct":
             for item in dataset:

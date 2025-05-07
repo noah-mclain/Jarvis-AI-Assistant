@@ -170,7 +170,6 @@ case $MODEL_CHOICE in
             --sequence_packing \
             --output_dir Jarvis_AI_Assistant/models \
             --visualize_metrics \
-            --warmup_steps 100 \
             --use_unsloth \
             --force_gpu
         ;;
