@@ -689,7 +689,15 @@ class CodeGenerator:
         # If we're already using the target device, no need to move
         if not hasattr(self, '_target_device'):
             print("No target device specified, using current device")
-            return
+            if torch.cuda.is_available():
+                self._target_device = torch.device("cuda")
+                print(f"Setting target device to CUDA")
+            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                self._target_device = torch.device("mps")
+                print(f"Setting target device to MPS")
+            else:
+                self._target_device = torch.device("cpu")
+                print(f"Setting target device to CPU")
 
         # Get current device of model
         current_device = next(self.model.parameters()).device
@@ -705,6 +713,14 @@ class CodeGenerator:
         if self._target_device.type == "cuda" and torch.cuda.is_available():
             torch.cuda.empty_cache()
             gc.collect()
+
+            # CRITICAL FIX: Patch the problematic function in transformers library
+            self._patch_transformers_attention_mask()
+
+            # Set default tensor type to CUDA
+            torch.set_default_tensor_type('torch.cuda.FloatTensor')
+            if hasattr(torch, 'set_default_device'):
+                torch.set_default_device('cuda')
 
         # For MPS device (Apple Silicon)
         if self._target_device.type == "mps" and hasattr(torch.mps, 'empty_cache'):
@@ -725,6 +741,11 @@ class CodeGenerator:
                 for name, param in self.model.named_parameters():
                     if 'lora' in name and not param.data.is_meta:
                         param.data = param.data.to(self._target_device)
+
+                # Move buffers too (important for attention masks)
+                for name, buffer in self.model.base_model.named_buffers():
+                    if not buffer.is_meta:
+                        buffer.data = buffer.data.to(self._target_device)
             else:
                 # Standard model - move all parameters
                 self.model = self.model.to(self._target_device)
@@ -750,6 +771,45 @@ class CodeGenerator:
             print("Will continue with current device placement")
             import traceback
             traceback.print_exc()
+
+    def _patch_transformers_attention_mask(self):
+        """
+        Patch the problematic function in transformers library that's causing device mismatch.
+        This specifically targets the _unmask_unattended function that's using .cpu()
+        """
+        try:
+            import transformers.modeling_attn_mask_utils as attn_utils
+
+            # Store the original function
+            original_unmask_unattended = attn_utils.AttentionMaskConverter._unmask_unattended
+
+            # Define our patched version that doesn't use .cpu()
+            def patched_unmask_unattended(attention_mask, unmasked_value=0.0):
+                """Patched version that doesn't force CPU conversion"""
+                # Get the device of the attention mask
+                device = attention_mask.device
+
+                # Create a temporary tensor on the same device
+                tmp = torch.ones_like(attention_mask) * unmasked_value
+
+                # Use argmax without forcing CPU
+                indices = torch.argmax(attention_mask * tmp, 1, keepdim=True)
+
+                # Create a range tensor on the same device
+                range_tensor = torch.arange(attention_mask.shape[1], device=device).expand_as(attention_mask)
+
+                # Create the expanded mask on the same device
+                expanded_mask = (range_tensor <= indices).to(attention_mask.dtype)
+
+                return expanded_mask
+
+            # Apply the patch
+            attn_utils.AttentionMaskConverter._unmask_unattended = patched_unmask_unattended
+            print("Successfully patched transformers attention mask function")
+
+        except Exception as e:
+            print(f"Error patching transformers attention mask function: {e}")
+            print("Will continue without patching")
 
     def fine_tune_deepseek(self, train_dataset=None, eval_dataset=None, output_dir="deepseek_fine-tuned",
                           epochs=50, batch_size=2, sequence_length=2048, learning_rate=2e-5,
@@ -1019,25 +1079,41 @@ class CodeGenerator:
 
             # Create a custom data collator that ensures tensors are on the correct device
             # and filters out unexpected keys like 'repository_name'
+            model_ref = self.model  # Store reference to model for closure
+
             def device_safe_collator(features):
                 batch = {}
                 # List of allowed keys for the model's forward pass
                 allowed_keys = ['input_ids', 'attention_mask', 'labels', 'token_type_ids', 'position_ids']
 
-                # Get current model device
-                current_device = next(self.model.parameters()).device
-                log_checkpoint(f"Collator using device: {current_device}")
+                # Get current model device - always get the latest device
+                current_device = next(model_ref.parameters()).device
 
+                # Force all tensors to be on the same device as the model
                 for key in features[0].keys():
                     # Skip keys that aren't in the allowed list
                     if key not in allowed_keys:
                         continue
 
                     if isinstance(features[0][key], torch.Tensor):
-                        # Stack tensors and move to the model's device
-                        batch[key] = torch.stack([f[key] for f in features]).to(current_device)
+                        try:
+                            # Stack tensors and move to the model's device
+                            batch[key] = torch.stack([f[key] for f in features]).to(current_device)
+                        except Exception as e:
+                            # If stacking fails, try a different approach
+                            log_checkpoint(f"Error stacking tensors for {key}: {e}")
+                            # Try to move each tensor individually
+                            tensors = [f[key].to(current_device) for f in features]
+                            batch[key] = torch.stack(tensors)
                     else:
                         batch[key] = [f[key] for f in features]
+
+                # Double-check that all tensors are on the correct device
+                for key, value in batch.items():
+                    if isinstance(value, torch.Tensor) and value.device != current_device:
+                        log_checkpoint(f"Warning: {key} tensor still on {value.device}, moving to {current_device}")
+                        batch[key] = value.to(current_device)
+
                 return batch
 
             trainer = Trainer(
@@ -1057,14 +1133,25 @@ class CodeGenerator:
             log_checkpoint(f"Using device for training: {current_device}")
 
             # Replace the default dataloader with our device-aware dataloader
-            trainer.train_dataloader = DeviceSafeDataLoader(
+            # Store a reference to the model in a local variable for the dataloader
+            model_ref = self.model
+
+            # Create a custom dataloader class that has access to the model
+            class ModelAwareDataLoader(DeviceSafeDataLoader):
+                def __init__(self, *args, **kwargs):
+                    super().__init__(*args, **kwargs)
+                    self.model = model_ref
+                    # Get the device directly from the model
+                    self.target_device = next(model_ref.parameters()).device
+                    log_checkpoint(f"ModelAwareDataLoader using device: {self.target_device}")
+
+            # Use our model-aware dataloader
+            trainer.train_dataloader = ModelAwareDataLoader(
                 trainer.train_dataset,
                 batch_size=training_args.per_device_train_batch_size,
                 shuffle=True,
                 num_workers=training_args.dataloader_num_workers,
-                pin_memory=training_args.dataloader_pin_memory,
-                target_device=current_device,
-                model=self.model  # Pass the model reference
+                pin_memory=training_args.dataloader_pin_memory
             )
             training_metrics = {}
 
