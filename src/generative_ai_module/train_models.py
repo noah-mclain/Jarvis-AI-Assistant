@@ -2442,9 +2442,17 @@ def main():
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             # Set environment variables for better memory management
-            os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+            os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:32,garbage_collection_threshold:0.9"
             # Limit GPU memory usage
-            torch.cuda.set_per_process_memory_fraction(0.85)
+            torch.cuda.set_per_process_memory_fraction(0.8)
+
+            # Force CPU-first loading to avoid GPU OOM during model loading
+            os.environ["FORCE_CPU_ONLY_FOR_INITIAL_LOAD"] = "1"
+            logger.info("Enabled CPU-first loading to avoid GPU OOM during model loading")
+
+            # Print GPU memory information
+            logger.info(f"Available GPU memory: {torch.cuda.get_device_properties(0).total_memory / (1024**3):.2f} GB")
+            logger.info(f"Current GPU memory usage: {torch.cuda.memory_allocated() / (1024**3):.2f} GB")
 
         logger.info(f"Creating CodeGenerator with 4-bit quantization: {args.use_4bit}")
         code_gen = CodeGenerator(

@@ -17,7 +17,7 @@ except ImportError:
     # If that fails, define them locally
     import torch
     import numpy as np
-    
+
     def calculate_metrics(model, data_batches, device):
         """Calculate metrics on a dataset (loss, perplexity, accuracy)"""
         model.eval()
@@ -25,9 +25,9 @@ except ImportError:
         total_batches = 0
         total_correct = 0
         total_samples = 0
-        
+
         criterion = torch.nn.CrossEntropyLoss()
-        
+
         with torch.no_grad():
             for input_batch, target_batch in data_batches:
                 input_batch = input_batch.to(device)
@@ -40,75 +40,75 @@ except ImportError:
                 total_correct += correct
                 total_samples += target_batch.numel()
                 total_batches += 1
-        
+
         avg_loss = total_loss / max(1, total_batches)
         perplexity = np.exp(avg_loss)
         accuracy = total_correct / max(1, total_samples)
-        
+
         return {
             'loss': avg_loss,
             'perplexity': perplexity,
             'accuracy': accuracy
         }
-    
+
     class EvaluationMetrics:
         """Class for evaluating generative models"""
         def __init__(self, metrics_dir="evaluation_metrics", use_gpu=None):
             self.metrics_dir = metrics_dir
             os.makedirs(metrics_dir, exist_ok=True)
             self.use_gpu = torch.cuda.is_available() if use_gpu is None else use_gpu
-        
-        def evaluate_generation(self, prompt, generated_text, reference_text=None, 
+
+        def evaluate_generation(self, prompt, generated_text, reference_text=None,
                               dataset_name="unknown", save_results=True):
             import json
             from datetime import datetime
-            
+
             results = {
                 "prompt": prompt,
                 "generated_text": generated_text,
                 "dataset": dataset_name,
                 "timestamp": datetime.now().isoformat()
             }
-            
+
             if reference_text:
                 results["reference_text"] = reference_text
-            
+
             if save_results:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                results_path = os.path.join(self.metrics_dir, 
+                results_path = os.path.join(self.metrics_dir,
                                            f"evaluation_{dataset_name}_{timestamp}.json")
                 with open(results_path, 'w') as f:
                     json.dump(results, f, indent=2)
-            
+
             return results
-    
+
     def save_metrics(metrics, model_name, dataset_name, timestamp=None):
         """Save evaluation metrics to a JSON file"""
         import json
         from datetime import datetime
-        
+
         if timestamp is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
+
         metrics_dir = "metrics"
         os.makedirs(metrics_dir, exist_ok=True)
-        
+
         model_name_clean = model_name.replace('/', '_')
         dataset_name_clean = dataset_name.replace('/', '_')
-        
+
         filename = f"{model_name_clean}_{dataset_name_clean}_{timestamp}.json"
         filepath = os.path.join(metrics_dir, filename)
-        
+
         metrics_with_meta = {
             "model_name": model_name,
             "dataset_name": dataset_name,
             "timestamp": timestamp,
             "metrics": metrics
         }
-        
+
         with open(filepath, 'w') as f:
             json.dump(metrics_with_meta, f, indent=2)
-        
+
         print(f"Saved metrics to {filepath}")
         return filepath
 # ===== END JARVIS IMPORT FIX =====
@@ -148,68 +148,68 @@ __all__ = ['main', 'parse_args', 'create_mini_dataset', 'setup_environment']
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Fine-tune DeepSeek-Coder on code datasets")
-    
+
     # Training parameters
-    parser.add_argument("--epochs", type=int, default=50, 
+    parser.add_argument("--epochs", type=int, default=50,
                       help="Number of training epochs")
-    parser.add_argument("--batch-size", type=int, default=8, 
+    parser.add_argument("--batch-size", type=int, default=8,
                       help="Batch size for training")
-    parser.add_argument("--learning-rate", type=float, default=2e-5, 
+    parser.add_argument("--learning-rate", type=float, default=2e-5,
                       help="Learning rate for fine-tuning")
-    parser.add_argument("--warmup-steps", type=int, default=100, 
+    parser.add_argument("--warmup-steps", type=int, default=100,
                       help="Number of warmup steps")
-    parser.add_argument("--sequence-length", type=int, default=512, 
+    parser.add_argument("--sequence-length", type=int, default=512,
                       help="Maximum sequence length")
-    
+
     # Dataset options
-    parser.add_argument("--max-samples", type=int, default=5000, 
+    parser.add_argument("--max-samples", type=int, default=5000,
                       help="Maximum number of samples to use (None for all, default 5000 for memory constraints)")
-    parser.add_argument("--subset", type=str, default="python", 
+    parser.add_argument("--subset", type=str, default="python",
                       choices=["python", "java", "go", "php", "ruby", "javascript"],
                       help="Language subset for code dataset (only used if --all-subsets=False)")
     parser.add_argument("--all-subsets", action="store_true", default=True,
                       help="Whether to use all language subsets (default: True)")
-    parser.add_argument("--eval-split", type=float, default=0.1, 
+    parser.add_argument("--eval-split", type=float, default=0.1,
                       help="Fraction of data to use for evaluation")
     parser.add_argument("--use-mini-dataset", action="store_true",
                       help="Use mini dataset for quick testing instead of code_search_net")
-    
+
     # Get root directory (up two levels from the script)
     root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     default_output_dir = os.path.join(root_dir, "models", "deepseek_finetuned")
-    
+
     # Output options
-    parser.add_argument("--output-dir", type=str, default=default_output_dir, 
+    parser.add_argument("--output-dir", type=str, default=default_output_dir,
                       help="Output directory for fine-tuned model")
-    parser.add_argument("--save-steps", type=int, default=100, 
+    parser.add_argument("--save-steps", type=int, default=100,
                       help="Save checkpoint every X steps")
-    parser.add_argument("--save-total-limit", type=int, default=3, 
+    parser.add_argument("--save-total-limit", type=int, default=3,
                       help="Maximum number of checkpoints to keep")
-    
+
     # Hardware options
     parser.add_argument("--gpu", action="store_true", default=True,
                       help="Force GPU usage (will use GPU by default if available)")
-    parser.add_argument("--cpu", action="store_true", 
+    parser.add_argument("--cpu", action="store_true",
                       help="Force CPU usage even if GPU is available")
     parser.add_argument("--load-in-8bit", action="store_true", default=True,
                       help="Load model in 8-bit precision to reduce memory usage")
-    parser.add_argument("--load-in-4bit", action="store_true", 
+    parser.add_argument("--load-in-4bit", action="store_true",
                       help="Load model in 4-bit precision for extreme memory saving (overrides 8-bit)")
     parser.add_argument("--force-gpu", action="store_true", default=True,
                       help="Force the use of GPU (MPS for Apple Silicon, CUDA for NVIDIA)")
-    
+
     # Reproducibility options
-    parser.add_argument("--seed", type=int, default=42, 
+    parser.add_argument("--seed", type=int, default=42,
                       help="Random seed for reproducibility")
-    
+
     # Logging options
-    parser.add_argument("--verbose", action="store_true", 
+    parser.add_argument("--verbose", action="store_true",
                       help="Enable verbose logging")
-    
+
     # Unsloth optimization option
-    parser.add_argument("--use-unsloth", action="store_true", 
+    parser.add_argument("--use-unsloth", action="store_true",
                       help="Use Unsloth for faster training and reduced memory usage")
-    
+
     return parser.parse_args()
 
 def setup_environment(args):
@@ -218,40 +218,40 @@ def setup_environment(args):
     import datetime
     import logging
     import os
-    
+
     # Import utilities for GPU configuration
     from src.generative_ai_module.utils import setup_gpu_for_training, force_cuda_device, is_paperspace_environment
-    
+
     # Always Force GPU usage regardless of args
     args.gpu = True
     args.force_gpu = True
     args.cpu = False  # Override any CPU request
-    
+
     print("⚡ Enforcing GPU usage for all fine-tuning operations")
-    
+
     # Apply GPU configuration with maximum enforcement
     device, gpu_config = setup_gpu_for_training(force_gpu=True)
-    
+
     # Apply RTX5000-specific configurations (will only affect RTX5000 on Paperspace)
     if is_paperspace_environment() and torch.cuda.is_available():
         gpu_name = torch.cuda.get_device_name(0)
         if "RTX5000" in gpu_name or "RTX 5000" in gpu_name:
             # Apply the recommended optimizations for RTX5000
             args.load_in_4bit = True  # Force 4-bit quantization for RTX5000
-            
+
             # Set environment variables
             os.environ["CUDA_VISIBLE_DEVICES"] = "0"
             os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
-            
+
             # Adjust other parameters for optimal RTX5000 performance
             if not hasattr(args, 'gradient_accumulation_steps'):
                 args.gradient_accumulation_steps = gpu_config.get("gradient_accumulation_steps", 8)
-            
+
             # Check for specific training optimizations for RTX5000
             if hasattr(torch.cuda, 'get_device_properties'):
                 props = torch.cuda.get_device_properties(0)
                 memory_gb = props.total_memory / (1024**3)
-                
+
                 # Memory-based optimizations
                 if memory_gb < 17:  # RTX5000 has 16GB VRAM
                     print(f"Optimizing for RTX5000 with {memory_gb:.2f}GB VRAM")
@@ -259,30 +259,30 @@ def setup_environment(args):
                     if args.batch_size > 2:
                         print(f"Reducing batch size from {args.batch_size} to 1 for RTX5000")
                         args.batch_size = 1
-    
+
     # Force CUDA as default tensor type if available
     if torch.cuda.is_available():
         torch.set_default_tensor_type('torch.cuda.FloatTensor')
-        
+
         # Set default device in PyTorch 2.0+
         if hasattr(torch, 'set_default_device'):
             torch.set_default_device('cuda')
-            
+
         return torch.device("cuda")
-    
+
     # For Apple Silicon, use MPS
     elif hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
         print("Using Apple Silicon GPU via MPS backend (CUDA not available)")
-        
+
         # Clear any existing MPS cache to free up memory
         if hasattr(torch.mps, 'empty_cache'):
             torch.mps.empty_cache()
-        
+
         # Set appropriate tensor type for MPS
         torch.set_default_tensor_type(torch.FloatTensor)
-        
+
         return torch.device("mps")
-    
+
     # This should only happen if no GPU is available despite attempts to force it
     print("Warning: No GPU available despite GPU enforcement. Training will be VERY slow on CPU.")
     return torch.device("cpu")
@@ -290,7 +290,7 @@ def setup_environment(args):
 def create_mini_dataset(sequence_length=512):
     """Create a small dataset for testing fine-tuning without external data"""
     print("Creating mini test dataset instead of using code_search_net...")
-    
+
     # Sample code examples
     examples = [
         {
@@ -309,51 +309,51 @@ def create_mini_dataset(sequence_length=512):
             "text": "### Instruction: Write a function to check if a number is prime.\n\n### Response:\ndef is_prime(n):\n    if n <= 1:\n        return False\n    if n <= 3:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True"
         }
     ]
-    
+
     # Create dataset
     dataset = Dataset.from_dict({"text": [ex["text"] for ex in examples]})
-    
+
     # Load tokenizer
     tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/deepseek-coder-6.7b-base", trust_remote_code=True)
     tokenizer.pad_token = tokenizer.eos_token
-    
+
     # Tokenize
     def tokenize_function(examples):
         return tokenizer(
-            examples["text"], 
-            truncation=True, 
-            padding="max_length", 
+            examples["text"],
+            truncation=True,
+            padding="max_length",
             max_length=sequence_length,
-            return_tensors="pt",
-            device_map='cpu'
+            return_tensors="pt"
+            # device_map parameter removed to fix the error
         ).to("cpu")
-    
+
     # Process dataset
     tokenized_dataset = dataset.map(tokenize_function, batched=True, remove_columns=["text"])
     tokenized_dataset = tokenized_dataset.with_format("torch", device="cpu")
 
-    
+
     # Split into train and validation
     train_size = int(0.8 * len(tokenized_dataset))
     train_dataset = tokenized_dataset.select(range(train_size))
     eval_dataset = tokenized_dataset.select(range(train_size, len(tokenized_dataset)))
-    
+
     print(f"Created mini dataset with {len(train_dataset)} training and {len(eval_dataset)} validation examples")
-    
+
     return train_dataset, eval_dataset
 
 def main(args=None):
-    """Main entry point for fine-tuning""" 
-    
+    """Main entry point for fine-tuning"""
+
     # Set multiprocessing start method to 'spawn' for CUDA compatibility
     multiprocessing.set_start_method('spawn', force=True)
     # Set up logging to file
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     log_file = f"finetune_deepseek_{timestamp}.log"
     setup_logging(log_file)
-    
+
     logger.info("Starting DeepSeek fine-tuning process")
-    
+
     start_time = time.time()
 
     # Parse command line arguments
@@ -395,7 +395,7 @@ def main(args=None):
         )
         train_dataset = train_dataset.with_format("torch")  # Keep on CPU
         eval_dataset = eval_dataset.with_format("torch")    # Keep on CPU
-        
+
         # After loading datasets:
         print("\n=== Dataset Device Verification ===")
         print(f"Train dataset device: {train_dataset['input_ids'].device}")  # Should show "cpu"
@@ -408,7 +408,7 @@ def main(args=None):
         load_in_4bit=args.load_in_4bit,
         force_gpu=args.force_gpu
     )
-    
+
     # After model initialization:
     print("\n=== Model Type Verification ===")
     print(type(code_gen.model))  # Should show PeftModelForCausalLM
@@ -473,8 +473,8 @@ def main(args=None):
         logger.info("Synced models, metrics, and logs to Google Drive")
     except Exception as e:
         logger.warning(f"Error syncing to Google Drive: {str(e)}")
-    
+
     logger.info("Fine-tuning complete!")
 
 if __name__ == "__main__":
-    main() 
+    main()

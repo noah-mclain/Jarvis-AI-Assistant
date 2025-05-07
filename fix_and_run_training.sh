@@ -115,31 +115,33 @@ case $MODEL_CHOICE in
         # Second approach (uncomment if the first one fails)
         # This uses train_models.py with all optimizations
         # echo "Alternatively trying code model training with train_models.py..."
-        python -m src.generative_ai_module.train_models \
-            --model_type code \
-            --model_name_or_path deepseek-ai/deepseek-coder-5.7b-instruct \
-            --dataset "codeparrot/github-code:0.7,code-search-net/code_search_net:0.3" \
-            --batch_size 1 \
-            --max_length 512 \
-            --gradient_accumulation_steps 64 \
-            --use_4bit \
-            --use_qlora \
-            --use_flash_attention_2 \
-            --gradient_checkpointing \
-            --optim adamw_bnb_8bit \
-            --learning_rate 1.5e-5 \
-            --weight_decay 0.05 \
-            --bf16 \
-            --num_workers 4 \
-            --cache_dir .cache \
-            --force_gpu \
-            --pad_token_id 50256 \
-            --dataset_subset "python,javascript" \
-            --fim_rate 0.6 \
-            --evaluation_strategy "steps" \
-            --eval_steps 500 \
-            --save_steps 1000 \
-            --logging_steps 50
+        # python -m src.generative_ai_module.train_models \
+        #     --model_type code \
+        #     --model_name_or_path deepseek-ai/deepseek-coder-5.7b-instruct \
+        #     --dataset "codeparrot/github-code:0.7,code-search-net/code_search_net:0.3" \
+        #     --batch_size 1 \
+        #     --max_length 512 \
+        #     --gradient_accumulation_steps 64 \
+        #     --use_4bit \
+        #     --use_qlora \
+        #     --use_flash_attention_2 \
+        #     --gradient_checkpointing \
+        #     --optim adamw_bnb_8bit \
+        #     --learning_rate 1.5e-5 \
+        #     --weight_decay 0.05 \
+        #     --bf16 \
+        #     --num_workers 4 \
+        #     --cache_dir .cache \
+        #     --force_gpu \
+        #     --pad_token_id 50256 \
+        #     --dataset_subset "python,javascript" \
+        #     --fim_rate 0.6 \
+        #     --evaluation_strategy "steps" \
+        #     --eval_steps 500 \
+        #     --save_steps 1000 \
+        #     --logging_steps 50
+
+        ./run_fixed_training.sh
 
         unset FORCE_CPU_DATA_PIPELINE
         ;;
