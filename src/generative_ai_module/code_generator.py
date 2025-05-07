@@ -709,18 +709,29 @@ class CodeGenerator:
 
         print(f"Moving model from {current_device} to {self._target_device} for training...")
 
-        # Clear CUDA cache if moving to CUDA
+        # CRITICAL FIX: Patch the problematic function in transformers library
+        # Do this regardless of target device to ensure consistent behavior
+        self._patch_transformers_attention_mask()
+
+        # Check available GPU memory if moving to CUDA
         if self._target_device.type == "cuda" and torch.cuda.is_available():
+            # Aggressively clear CUDA cache
             torch.cuda.empty_cache()
             gc.collect()
 
-            # CRITICAL FIX: Patch the problematic function in transformers library
-            self._patch_transformers_attention_mask()
+            # Check available memory
+            total_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            allocated_memory = torch.cuda.memory_allocated() / (1024**3)
+            free_memory = total_memory - allocated_memory
 
-            # Set default tensor type to CUDA
-            torch.set_default_tensor_type('torch.cuda.FloatTensor')
-            if hasattr(torch, 'set_default_device'):
-                torch.set_default_device('cuda')
+            print(f"GPU memory: Total={total_memory:.2f}GB, Used={allocated_memory:.2f}GB, Free={free_memory:.2f}GB")
+
+            # If free memory is less than 2GB, don't try to move to GPU
+            if free_memory < 2.0:
+                print(f"WARNING: Not enough GPU memory available ({free_memory:.2f}GB). Keeping model on CPU.")
+                self._target_device = torch.device("cpu")
+                self.device = torch.device("cpu")
+                return
 
         # For MPS device (Apple Silicon)
         if self._target_device.type == "mps" and hasattr(torch.mps, 'empty_cache'):
@@ -729,46 +740,55 @@ class CodeGenerator:
 
         # Move model to target device
         try:
-            # For PEFT models, we need to handle this differently
-            if hasattr(self.model, 'base_model'):
-                print("Moving PEFT model to target device...")
-                # Move base model parameters
-                for name, param in self.model.base_model.named_parameters():
-                    if not param.data.is_meta:  # Skip meta tensors
-                        param.data = param.data.to(self._target_device)
+            # For PEFT models with LoRA adapters, we can keep the base model on CPU
+            # and only move the LoRA adapters to GPU to save memory
+            if hasattr(self.model, 'base_model') and hasattr(self.model, 'peft_config'):
+                print("Using memory-efficient approach: keeping base model on CPU and moving only LoRA adapters to GPU")
 
-                # Move adapter parameters
+                # Only move LoRA adapter parameters to GPU
+                lora_params_moved = 0
                 for name, param in self.model.named_parameters():
                     if 'lora' in name and not param.data.is_meta:
-                        param.data = param.data.to(self._target_device)
+                        try:
+                            param.data = param.data.to(self._target_device)
+                            lora_params_moved += 1
+                        except Exception as e:
+                            print(f"Warning: Could not move {name} to {self._target_device}: {e}")
 
-                # Move buffers too (important for attention masks)
-                for name, buffer in self.model.base_model.named_buffers():
-                    if not buffer.is_meta:
-                        buffer.data = buffer.data.to(self._target_device)
+                print(f"Moved {lora_params_moved} LoRA parameters to {self._target_device}")
+
+                # Keep track of the fact that we're using a mixed device approach
+                self._using_mixed_devices = True
+
+                # Update device attribute but note that it's a mixed setup
+                self.device = self._target_device
+                print(f"Using mixed device setup: LoRA adapters on {self._target_device}, base model on CPU")
             else:
-                # Standard model - move all parameters
-                self.model = self.model.to(self._target_device)
-
-            print(f"Model successfully moved to {self._target_device}")
-
-            # Update device attribute to match target device
-            self.device = self._target_device
-
-            # Verify model device
-            new_device = next(self.model.parameters()).device
-            print(f"Verified model is now on device: {new_device}")
+                # For non-PEFT models, try to move the entire model
+                # This might fail due to memory constraints
+                try:
+                    print(f"Attempting to move entire model to {self._target_device}")
+                    self.model = self.model.to(self._target_device)
+                    self.device = self._target_device
+                    print(f"Successfully moved entire model to {self._target_device}")
+                except Exception as e:
+                    print(f"Error moving entire model: {e}")
+                    print(f"Falling back to CPU for model")
+                    self._target_device = torch.device("cpu")
+                    self.device = torch.device("cpu")
 
             # Force garbage collection
             gc.collect()
-            if self._target_device.type == "cuda":
+            if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-            elif self._target_device.type == "mps" and hasattr(torch.mps, 'empty_cache'):
+            elif hasattr(torch.mps, 'empty_cache'):
                 torch.mps.empty_cache()
 
         except Exception as e:
-            print(f"Error moving model to {self._target_device}: {e}")
-            print("Will continue with current device placement")
+            print(f"Error during device transition: {e}")
+            print("Falling back to CPU for all operations")
+            self._target_device = torch.device("cpu")
+            self.device = torch.device("cpu")
             import traceback
             traceback.print_exc()
 
@@ -1077,19 +1097,16 @@ class CodeGenerator:
             if hasattr(eval_dataset, 'set_format'):
                 eval_dataset = eval_dataset.with_format("torch", device='cpu')
 
-            # Create a custom data collator that ensures tensors are on the correct device
-            # and filters out unexpected keys like 'repository_name'
-            model_ref = self.model  # Store reference to model for closure
-
-            def device_safe_collator(features):
+            # Create a simple data collator that works with CPU or GPU
+            def memory_efficient_collator(features):
                 batch = {}
                 # List of allowed keys for the model's forward pass
                 allowed_keys = ['input_ids', 'attention_mask', 'labels', 'token_type_ids', 'position_ids']
 
-                # Get current model device - always get the latest device
-                current_device = next(model_ref.parameters()).device
+                # Get current device - use CPU for collation to save GPU memory
+                # The dataloader will move tensors to the right device later
+                device = torch.device('cpu')
 
-                # Force all tensors to be on the same device as the model
                 for key in features[0].keys():
                     # Skip keys that aren't in the allowed list
                     if key not in allowed_keys:
@@ -1097,22 +1114,14 @@ class CodeGenerator:
 
                     if isinstance(features[0][key], torch.Tensor):
                         try:
-                            # Stack tensors and move to the model's device
-                            batch[key] = torch.stack([f[key] for f in features]).to(current_device)
+                            # Stack tensors on CPU
+                            batch[key] = torch.stack([f[key] for f in features])
                         except Exception as e:
-                            # If stacking fails, try a different approach
                             log_checkpoint(f"Error stacking tensors for {key}: {e}")
-                            # Try to move each tensor individually
-                            tensors = [f[key].to(current_device) for f in features]
-                            batch[key] = torch.stack(tensors)
+                            # Try a different approach if stacking fails
+                            batch[key] = torch.cat([f[key].unsqueeze(0) for f in features])
                     else:
                         batch[key] = [f[key] for f in features]
-
-                # Double-check that all tensors are on the correct device
-                for key, value in batch.items():
-                    if isinstance(value, torch.Tensor) and value.device != current_device:
-                        log_checkpoint(f"Warning: {key} tensor still on {value.device}, moving to {current_device}")
-                        batch[key] = value.to(current_device)
 
                 return batch
 
@@ -1122,32 +1131,42 @@ class CodeGenerator:
                 train_dataset=train_dataset,
                 eval_dataset=eval_dataset,
                 callbacks=[checkpoint_callback],
-                data_collator=device_safe_collator,
+                data_collator=memory_efficient_collator,
             )
 
             # Fine-tune the model and track metrics
             log_checkpoint(f"Starting fine-tuning for {epochs} epochs...")
 
-            # Get current model device for the dataloader
+            # Get the current model device for the dataloader
             current_device = next(self.model.parameters()).device
             log_checkpoint(f"Using device for training: {current_device}")
 
-            # Replace the default dataloader with our device-aware dataloader
-            # Store a reference to the model in a local variable for the dataloader
-            model_ref = self.model
+            # Create a custom dataloader that ensures tensors are on the right device
+            class MemorySafeDataLoader(DataLoader):
+                def __init__(self, dataset, device, **kwargs):
+                    super().__init__(dataset, **kwargs)
+                    self.device = device
+                    log_checkpoint(f"MemorySafeDataLoader initialized with device: {self.device}")
 
-            # Create a custom dataloader class that has access to the model
-            class ModelAwareDataLoader(DeviceSafeDataLoader):
-                def __init__(self, *args, **kwargs):
-                    super().__init__(*args, **kwargs)
-                    self.model = model_ref
-                    # Get the device directly from the model
-                    self.target_device = next(model_ref.parameters()).device
-                    log_checkpoint(f"ModelAwareDataLoader using device: {self.target_device}")
+                def __iter__(self):
+                    for batch in super().__iter__():
+                        # Filter out unexpected keys and move tensors to the right device
+                        allowed_keys = ['input_ids', 'attention_mask', 'labels', 'token_type_ids', 'position_ids']
+                        filtered_batch = {}
 
-            # Use our model-aware dataloader
-            trainer.train_dataloader = ModelAwareDataLoader(
+                        for k, v in batch.items():
+                            if k in allowed_keys:
+                                if isinstance(v, torch.Tensor):
+                                    filtered_batch[k] = v.to(self.device)
+                                else:
+                                    filtered_batch[k] = v
+
+                        yield filtered_batch
+
+            # Use our memory-safe dataloader
+            trainer.train_dataloader = MemorySafeDataLoader(
                 trainer.train_dataset,
+                device=current_device,
                 batch_size=training_args.per_device_train_batch_size,
                 shuffle=True,
                 num_workers=training_args.dataloader_num_workers,
