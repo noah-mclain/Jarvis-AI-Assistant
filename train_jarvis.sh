@@ -75,9 +75,41 @@ if [ -n "$MODEL_TYPE" ]; then
 fi
 echo "========================================"
 
+# Check for required Python packages
+echo "Checking for required Python packages..."
+python -c "
+import sys
+required_packages = ['torch', 'transformers', 'datasets', 'bitsandbytes']
+missing_packages = []
+
+for package in required_packages:
+    try:
+        __import__(package)
+        print(f'✓ {package} is installed')
+    except ImportError:
+        missing_packages.append(package)
+        print(f'✗ {package} is NOT installed')
+
+if missing_packages:
+    print('\\n⚠️ Some required packages are missing. Please install them with:')
+    print(f'pip install {\" \".join(missing_packages)}')
+    print('\\nContinuing anyway, but training may fail...')
+"
+
 # Step 1: Clear CUDA cache
 echo "Clearing CUDA cache..."
-python -c "import torch; torch.cuda.empty_cache(); print('✓ CUDA cache cleared')"
+python -c "
+try:
+    import torch
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        print('✓ CUDA cache cleared')
+    else:
+        print('✓ No CUDA device available, skipping cache clearing')
+except ImportError:
+    print('⚠️ PyTorch not installed, skipping cache clearing')
+    print('⚠️ Make sure PyTorch is installed with: pip install torch')
+"
 
 # Step 2: Set environment variables to prevent memory fragmentation
 export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:128,garbage_collection_threshold:0.8"
@@ -113,7 +145,7 @@ if [ -z "$SKIP_CLEANUP" ]; then
         fi
     done
     sleep 2
-    
+
     # Clear GPU memory with our utility
     python gpu_utils.py clear
 else
@@ -147,13 +179,25 @@ BF16_FLAG="--bf16"
 
 # Ensure directories exist
 echo "Ensuring directories exist..."
-mkdir -p /notebooks/Jarvis_AI_Assistant/models
-mkdir -p /notebooks/Jarvis_AI_Assistant/metrics
-mkdir -p /notebooks/Jarvis_AI_Assistant/checkpoints
-mkdir -p /notebooks/Jarvis_AI_Assistant/logs
-mkdir -p /notebooks/Jarvis_AI_Assistant/evaluation_metrics
-mkdir -p /notebooks/Jarvis_AI_Assistant/preprocessed_data
-mkdir -p /notebooks/Jarvis_AI_Assistant/visualization
+# Check if we're in Paperspace environment
+if [ -d "/notebooks" ]; then
+    # Paperspace environment
+    BASE_DIR="/notebooks/Jarvis_AI_Assistant"
+else
+    # Local environment
+    BASE_DIR="./Jarvis_AI_Assistant"
+fi
+
+mkdir -p "$BASE_DIR/models"
+mkdir -p "$BASE_DIR/metrics"
+mkdir -p "$BASE_DIR/checkpoints"
+mkdir -p "$BASE_DIR/logs"
+mkdir -p "$BASE_DIR/evaluation_metrics"
+mkdir -p "$BASE_DIR/preprocessed_data"
+mkdir -p "$BASE_DIR/visualization"
+
+# Set output directory variable for later use
+OUTPUT_DIR="$BASE_DIR"
 
 # If model type not specified, ask user
 if [ -z "$MODEL_TYPE" ]; then
@@ -162,7 +206,7 @@ if [ -z "$MODEL_TYPE" ]; then
     echo "2) Code model (optimized for code generation)"
     echo "3) CNN-enhanced text model"
     read -p "Enter choice (1-3): " choice
-    
+
     case $choice in
         1) MODEL_TYPE="text" ;;
         2) MODEL_TYPE="code" ;;
@@ -254,7 +298,7 @@ case $MODEL_TYPE in
     --save_steps 500 \
     --logging_steps 50 \
     --epochs 5 \
-    --output_dir \"/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-6.7b-finetuned\""
+    --output_dir \"$OUTPUT_DIR/models/deepseek-coder-6.7b-finetuned\""
 
         # Run the training command
         python -m src.generative_ai_module.train_models \
@@ -283,7 +327,7 @@ case $MODEL_TYPE in
             --save_steps 500 \
             --logging_steps 50 \
             --epochs 5 \
-            --output_dir "/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-6.7b-finetuned"
+            --output_dir "$OUTPUT_DIR/models/deepseek-coder-6.7b-finetuned"
         ;;
     "text")
         echo "Starting text model training with $GPU_TYPE optimizations ($VRAM_SIZE GiB VRAM)..."
@@ -315,7 +359,7 @@ case $MODEL_TYPE in
             --save_steps 500 \
             --logging_steps 50 \
             --epochs 3 \
-            --output_dir "/notebooks/Jarvis_AI_Assistant/models/flan-ul2-finetuned"
+            --output_dir "$OUTPUT_DIR/models/flan-ul2-finetuned"
         ;;
     "cnn-text")
         echo "Starting CNN-enhanced text model training with $GPU_TYPE optimizations ($VRAM_SIZE GiB VRAM)..."
@@ -341,7 +385,7 @@ case $MODEL_TYPE in
             --logging_steps 50 \
             --evaluation_strategy steps \
             --sequence_packing \
-            --output_dir "/notebooks/Jarvis_AI_Assistant/models/flan-ul2-cnn-finetuned" \
+            --output_dir "$OUTPUT_DIR/models/flan-ul2-cnn-finetuned" \
             --visualize_metrics \
             --use_unsloth \
             --num_workers $NUM_WORKERS \
