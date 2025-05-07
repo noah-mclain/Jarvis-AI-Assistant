@@ -905,12 +905,19 @@ class CodeGenerator:
 
             checkpoint_callback = CheckpointCallback(log_checkpoint)
 
-            # Define CPUSafeDataLoader class
+            # Define CPUSafeDataLoader class with filtering for unexpected keys
             class CPUSafeDataLoader(DataLoader):
                 def __iter__(self):
+                    # List of allowed keys for the model's forward pass
+                    allowed_keys = ['input_ids', 'attention_mask', 'labels', 'token_type_ids', 'position_ids']
+
                     for batch in super().__iter__():
-                        yield {k: v.to('cpu') if isinstance(v, torch.Tensor) else v
-                               for k, v in batch.items()}
+                        # Filter out unexpected keys and move tensors to CPU
+                        filtered_batch = {
+                            k: v.to('cpu') if isinstance(v, torch.Tensor) else v
+                            for k, v in batch.items() if k in allowed_keys
+                        }
+                        yield filtered_batch
 
             # Ensure datasets are on CPU
             if hasattr(train_dataset, 'set_format'):
@@ -919,9 +926,17 @@ class CodeGenerator:
                 eval_dataset = eval_dataset.with_format("torch", device='cpu')
 
             # Create a custom data collator that ensures tensors are on CPU
+            # and filters out unexpected keys like 'repository_name'
             def cpu_safe_collator(features):
                 batch = {}
+                # List of allowed keys for the model's forward pass
+                allowed_keys = ['input_ids', 'attention_mask', 'labels', 'token_type_ids', 'position_ids']
+
                 for key in features[0].keys():
+                    # Skip keys that aren't in the allowed list
+                    if key not in allowed_keys:
+                        continue
+
                     if isinstance(features[0][key], torch.Tensor):
                         batch[key] = torch.stack([f[key].to('cpu') for f in features])
                     else:
