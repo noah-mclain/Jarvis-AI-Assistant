@@ -47,6 +47,11 @@ class CodeGenerator:
 
     def _get_device(self):
         """Determine the best available device (MPS for Apple Silicon, CUDA for NVIDIA, or CPU)"""
+        # Check for CPU-only mode for initial loading
+        if os.environ.get('FORCE_CPU_ONLY_FOR_INITIAL_LOAD') == '1':
+            print("FORCE_CPU_ONLY_FOR_INITIAL_LOAD is set - using CPU for initial model loading")
+            return torch.device("cpu")
+
         if os.environ.get('FORCE_CPU_DATA_PIPELINE') == '1':
             return torch.device("cpu")
 
@@ -117,6 +122,35 @@ class CodeGenerator:
                 torch.cuda.set_per_process_memory_fraction(0.9)
                 print(f"Available GPU memory: {torch.cuda.get_device_properties(0).total_memory / (1024**3):.2f} GB")
                 print(f"Current GPU memory usage: {torch.cuda.memory_allocated() / (1024**3):.2f} GB")
+
+            # Check for CPU-only initial loading mode
+            if os.environ.get('FORCE_CPU_ONLY_FOR_INITIAL_LOAD') == '1':
+                print("Using CPU-only for initial model loading (FORCE_CPU_ONLY_FOR_INITIAL_LOAD=1)")
+                try:
+                    # Load model on CPU first
+                    print("Loading model on CPU first...")
+                    self.model = AutoModelForCausalLM.from_pretrained(
+                        self.model_name,
+                        trust_remote_code=True,
+                        torch_dtype=torch.float32,  # Use float32 for CPU
+                        device_map="cpu",           # Force CPU
+                        low_cpu_mem_usage=True      # Reduce CPU memory usage
+                    )
+
+                    print("Model loaded on CPU successfully")
+
+                    # If GPU is available, we'll transfer parts of the model later
+                    # after training setup is complete
+                    if torch.cuda.is_available():
+                        print("GPU is available - will transfer critical parts to GPU during training")
+                        # We'll keep the model on CPU for now and transfer parts during training
+                        return
+                    else:
+                        print("No GPU available - keeping model on CPU")
+                        return
+                except Exception as e:
+                    print(f"Error loading model on CPU: {e}")
+                    print("Falling back to standard loading approach")
 
             # Special case for Apple Silicon (M1/M2/M3)
             if self.device.type == "mps":
