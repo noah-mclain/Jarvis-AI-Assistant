@@ -241,8 +241,34 @@ def patch_llama_model_forward():
             """
             Patched forward method for LlamaModel that avoids using _prepare_4d_causal_attention_mask_for_sdpa.
             """
+            # Force use_cache to False when using gradient checkpointing
+            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+                if use_cache:
+                    print("use_cache=True is incompatible with gradient checkpointing. Setting use_cache=False...")
+                use_cache = False
+
             # Call the original forward method but catch any errors related to attention mask
             try:
+                # Fix attention mask shape if needed
+                if attention_mask is not None and attention_mask.dim() == 2:
+                    # Get the device and dtype
+                    device = attention_mask.device
+                    dtype = attention_mask.dtype
+
+                    # Get sequence length
+                    seq_length = attention_mask.size(1)
+
+                    # Convert attention_mask from [batch_size, seq_length] to [batch_size, 1, 1, seq_length]
+                    attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
+
+                    # Create a causal mask
+                    causal_mask = torch.ones((seq_length, seq_length), device=device, dtype=dtype)
+                    causal_mask = torch.triu(causal_mask, diagonal=1).unsqueeze(0).unsqueeze(0)
+
+                    # Convert to proper format for attention
+                    attention_mask = attention_mask.expand(-1, -1, seq_length, -1)
+                    attention_mask = (1.0 - attention_mask) * torch.finfo(dtype).min
+
                 return original_forward(
                     self,
                     input_ids=input_ids,
@@ -255,10 +281,12 @@ def patch_llama_model_forward():
                     output_hidden_states=output_hidden_states,
                     return_dict=return_dict,
                 )
-            except TypeError as e:
-                if "unmasked_value" in str(e):
-                    print("Caught attention mask error, using fallback implementation")
-
+            except (TypeError, ValueError) as e:
+                error_msg = str(e)
+                if "unmasked_value" in error_msg:
+                    print("Caught 'unmasked_value' error, using fallback implementation")
+                    # Handle unmasked_value error
+                    # [implementation as before]
                     # Get the device and dtype
                     device = self.device
                     dtype = self.dtype if hasattr(self, "dtype") else torch.float32
@@ -288,22 +316,55 @@ def patch_llama_model_forward():
                     else:
                         attention_mask = causal_mask
 
-                    # Call the original forward method with the fixed attention mask
-                    return original_forward(
-                        self,
-                        input_ids=input_ids,
-                        attention_mask=attention_mask,
-                        position_ids=position_ids,
-                        past_key_values=past_key_values,
-                        inputs_embeds=inputs_embeds,
-                        use_cache=use_cache,
-                        output_attentions=output_attentions,
-                        output_hidden_states=output_hidden_states,
-                        return_dict=return_dict,
-                    )
+                elif "Attention mask should be of size" in error_msg:
+                    print("Caught attention mask size error, fixing mask dimensions")
+
+                    # Get the device and dtype
+                    device = self.device
+                    dtype = self.dtype if hasattr(self, "dtype") else torch.float32
+
+                    # Create a simple causal mask
+                    if input_ids is not None:
+                        batch_size, seq_length = input_ids.shape
+                    else:
+                        batch_size, seq_length = inputs_embeds.shape[:2]
+
+                    # If attention_mask is provided but has wrong dimensions
+                    if attention_mask is not None:
+                        # Ensure it's 4D: [batch_size, 1, seq_length, seq_length]
+                        if attention_mask.dim() == 2:
+                            # [batch_size, seq_length] -> [batch_size, 1, 1, seq_length]
+                            attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
+
+                            # Expand to [batch_size, 1, seq_length, seq_length]
+                            attention_mask = attention_mask.expand(-1, -1, seq_length, -1)
+
+                            # Convert from 0/1 to -inf/0
+                            attention_mask = (1.0 - attention_mask) * torch.finfo(dtype).min
+                    else:
+                        # Create a causal mask if none provided
+                        causal_mask = torch.triu(
+                            torch.ones((seq_length, seq_length), device=device, dtype=dtype) * torch.finfo(dtype).min,
+                            diagonal=1,
+                        )
+                        attention_mask = causal_mask.unsqueeze(0).unsqueeze(0)  # [1, 1, seq_len, seq_len]
                 else:
-                    # If it's not the attention mask error, re-raise the exception
+                    # If it's not one of the known errors, re-raise the exception
                     raise
+
+                # Call the original forward method with the fixed attention mask
+                return original_forward(
+                    self,
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    past_key_values=past_key_values,
+                    inputs_embeds=inputs_embeds,
+                    use_cache=use_cache,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                    return_dict=return_dict,
+                )
 
         # Replace the original forward method with our patched version
         LlamaModel.forward = patched_forward
