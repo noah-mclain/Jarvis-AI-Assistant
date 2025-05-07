@@ -458,6 +458,23 @@ class UnifiedDatasetHandler:
 
         self.logger.info(f"Processing HuggingFace dataset ({len(dataset)} samples)")
 
+        # Special handling for OpenAssistant datasets
+        if "OpenAssistant" in dataset_name or "oasst" in dataset_name:
+            self.logger.info("Detected OpenAssistant dataset format")
+            # Log the dataset structure for debugging
+            if len(dataset) > 0:
+                sample_item = dataset[0]
+                self.logger.info(f"OpenAssistant sample item structure: {sample_item}")
+
+                # Check if we need to convert the dataset format
+                if 'message_tree' in sample_item and isinstance(sample_item['message_tree'], str):
+                    self.logger.warning("OpenAssistant message_tree is a string, not a dictionary. This format is not directly supported.")
+                    self.logger.info("Attempting to process with alternative method...")
+
+                    # Try to extract using direct role/text fields
+                    if 'role' in sample_item and 'text' in sample_item:
+                        self.logger.info("Using role/text fields directly for extraction")
+
         # Check for empty dataset
         if not self.validate_dataset_structure(dataset, dataset_name):
             return self._create_empty_dataset()
@@ -470,31 +487,39 @@ class UnifiedDatasetHandler:
         for batch_data in self._generate_batches(dataset, batch_size, dataset_name):
             batch, batch_index = batch_data
 
-            # Extract texts from batch based on dataset format
-            batch_texts = self._extract_texts_from_batch(batch, dataset_name)
+            try:
+                # Extract texts from batch based on dataset format
+                batch_texts = self._extract_texts_from_batch(batch, dataset_name)
 
-            # Log extraction results
-            self._log_batch_extraction_results(batch_texts, batch, dataset_name)
+                # Log extraction results
+                self._log_batch_extraction_results(batch_texts, batch, dataset_name)
 
-            # Skip empty batches
-            if not batch_texts:
-                self.logger.warning(f"No texts extracted from batch {batch_index} in dataset {dataset_name}")
+                # Skip empty batches
+                if not batch_texts:
+                    self.logger.warning(f"No texts extracted from batch {batch_index} in dataset {dataset_name}")
+                    continue
+
+                # Tokenize texts if tokenizer is available
+                if self.tokenizer:
+                    if tokenized_data := self._tokenize_batch(
+                        batch_texts, dataset_name
+                    ):
+                        all_input_ids.extend(tokenized_data['input_ids'])
+                        all_attention_masks.extend(tokenized_data['attention_mask'])
+
+                # Always keep texts for future use or debug
+                all_texts.extend(batch_texts)
+
+            except Exception as e:
+                # Log the error but continue processing other batches
+                self.logger.error(f"Error processing batch {batch_index} in dataset {dataset_name}: {e}")
+                import traceback
+                self.logger.error(traceback.format_exc())
                 continue
-
-            # Tokenize texts if tokenizer is available
-            if self.tokenizer:
-                if tokenized_data := self._tokenize_batch(
-                    batch_texts, dataset_name
-                ):
-                    all_input_ids.extend(tokenized_data['input_ids'])
-                    all_attention_masks.extend(tokenized_data['attention_mask'])
-
-            # Always keep texts for future use or debug
-            all_texts.extend(batch_texts)
-
-            # Force garbage collection after each batch
-            del batch
-            gc.collect()
+            finally:
+                # Force garbage collection after each batch
+                del batch
+                gc.collect()
 
         # Create and return the final dataset
         return self._create_final_dataset(all_texts, all_input_ids, all_attention_masks, cache_file)
@@ -538,24 +563,57 @@ class UnifiedDatasetHandler:
     def _extract_openassistant_batch(self, batch):
         """Extract texts from OpenAssistant format batch."""
         batch_texts = []
+
+        # Log the first item for debugging
+        if batch and len(batch) > 0:
+            self.logger.info(f"OpenAssistant sample item: {batch[0]}")
+
         for item in batch:
-            # Handle OpenAssistant v2 structure with message trees
-            if 'message_tree' in item:
-                prompt = None
-                messages = item['message_tree']['messages']
-                for msg in messages:
-                    if msg['role'] == 'prompter':
-                        prompt = msg['text']
-                    elif msg['role'] == 'assistant' and prompt:
-                        response = msg['text']
-                        batch_texts.append(f"USER: {prompt}\nASSISTANT: {response}")
-                        prompt = None  # Reset for next pair
-            # Handle simpler structure with direct role and text
-            elif 'text' in item and 'role' in item:
-                if item['role'] == 'assistant':
-                    batch_texts.append(f"USER: [Previous question]\nASSISTANT: {item['text']}")
-                elif item['role'] == 'prompter':
-                    batch_texts.append(f"USER: {item['text']}\nASSISTANT:")
+            try:
+                # Skip non-dictionary items
+                if not isinstance(item, dict):
+                    continue
+
+                # Handle OpenAssistant v2 structure with message trees
+                if 'message_tree' in item and isinstance(item['message_tree'], dict) and 'messages' in item['message_tree']:
+                    prompt = None
+                    messages = item['message_tree']['messages']
+
+                    # Ensure messages is a list
+                    if not isinstance(messages, list):
+                        continue
+
+                    for msg in messages:
+                        if not isinstance(msg, dict):
+                            continue
+
+                        if 'role' in msg and 'text' in msg:
+                            if msg['role'] == 'prompter':
+                                prompt = msg['text']
+                            elif msg['role'] == 'assistant' and prompt:
+                                response = msg['text']
+                                batch_texts.append(f"USER: {prompt}\nASSISTANT: {response}")
+                                prompt = None  # Reset for next pair
+
+                # Handle OpenAssistant v1 structure with message_tree_id
+                elif 'message_tree_id' in item and 'text' in item and 'role' in item:
+                    if item['role'] == 'assistant':
+                        batch_texts.append(f"USER: [Previous question]\nASSISTANT: {item['text']}")
+                    elif item['role'] == 'prompter':
+                        batch_texts.append(f"USER: {item['text']}\nASSISTANT:")
+
+                # Handle simpler structure with direct role and text
+                elif 'text' in item and 'role' in item:
+                    if item['role'] == 'assistant':
+                        batch_texts.append(f"USER: [Previous question]\nASSISTANT: {item['text']}")
+                    elif item['role'] == 'prompter':
+                        batch_texts.append(f"USER: {item['text']}\nASSISTANT:")
+
+            except Exception as e:
+                # Log the error and continue with the next item
+                self.logger.warning(f"Error processing OpenAssistant item: {e}")
+                continue
+
         return batch_texts
 
     def _extract_gpteacher_batch(self, batch):
@@ -1954,8 +2012,19 @@ class UnifiedDatasetHandler:
         Returns:
             List of extracted texts
         """
-        # Use the same extraction logic as for batches
-        return self._extract_texts_from_batch(dataset, dataset_name)
+        try:
+            # Log dataset structure for debugging
+            if len(dataset) > 0:
+                sample_item = dataset[0]
+                self.logger.info(f"Dataset sample item: {sample_item}")
+
+            # Use the same extraction logic as for batches
+            return self._extract_texts_from_batch(dataset, dataset_name)
+        except Exception as e:
+            self.logger.error(f"Error extracting texts from dataset {dataset_name}: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+            return []
 
     def _create_result(self, texts, dataset_name, return_batches):
         """
