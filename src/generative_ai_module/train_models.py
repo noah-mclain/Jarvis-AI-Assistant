@@ -2352,6 +2352,15 @@ def main():
     # Ensure force_gpu is always True
     args.force_gpu = True
 
+    # Check if we're running on a CUDA device and disable fp16/bf16 if not
+    if not torch.cuda.is_available():
+        if args.fp16:
+            logger.warning("FP16 requested but no CUDA device available. Disabling FP16.")
+            args.fp16 = False
+        if args.bf16:
+            logger.warning("BF16 requested but no CUDA device available. Disabling BF16.")
+            args.bf16 = False
+
     # Print all arguments for logging
     logger.info("Training with the following arguments:")
     for arg, value in vars(args).items():

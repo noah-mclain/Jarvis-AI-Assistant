@@ -780,10 +780,10 @@ class CodeGenerator:
 
         # Prepare training arguments
         log_checkpoint("Configuring training arguments...")
-        # Check if we're on MPS (Apple Silicon) - fp16 is not compatible with MPS
-        use_fp16 = self.device.type != "mps"
+        # Check if we're on CUDA - fp16/bf16 is only compatible with CUDA, NPU, or certain XPU devices
+        use_fp16 = self.device.type == "cuda"
         if not use_fp16:
-            log_checkpoint("Disabling mixed precision training (fp16) as it's not supported on MPS devices")
+            log_checkpoint("Disabling mixed precision training (fp16/bf16) as it's only supported on CUDA, NPU, or certain XPU devices")
 
         # On MPS, use even smaller batch size and disable gradient checkpointing
         if self.device.type == "mps":
@@ -816,37 +816,48 @@ class CodeGenerator:
                 resume_from_checkpoint = latest_checkpoint
 
         # Set up training arguments with the checkpoint directory
-        training_args = TrainingArguments(
-            output_dir=checkpoint_dir,  # Use the checkpoint directory for saving during training
-            per_device_train_batch_size=batch_size,
-            per_device_eval_batch_size=batch_size,
-            num_train_epochs=epochs,
-            learning_rate=learning_rate,
-            logging_dir=os.path.join(notebooks_dir, "logs"),
-            logging_steps=10,
-            evaluation_strategy="steps",
-            eval_steps=100,
-            save_strategy="steps",
-            save_steps=100,
-            save_total_limit=5,
-            load_best_model_at_end=True,
-            metric_for_best_model="eval_loss",
-            greater_is_better=False,
-            warmup_steps=warmup_steps,
-            weight_decay=0.01,
-            fp16=use_fp16,
-            report_to="none",
-            gradient_accumulation_steps=8,
-            gradient_checkpointing=use_gradient_checkpointing,
-            local_rank=-1,
-            use_cpu=self.device.type == "cpu",
-            save_safetensors=True,
-            dataloader_pin_memory=True,  # Requires data to be on CPU
-            dataloader_num_workers=2,    # For multiprocessing
-            group_by_length=True,        # Keep existing parameter
-            remove_unused_columns=False,
-            hub_model_id=None,           # Disable hub pushing
-        )
+        # Create a dictionary of arguments first
+        training_args_dict = {
+            "output_dir": checkpoint_dir,  # Use the checkpoint directory for saving during training
+            "per_device_train_batch_size": batch_size,
+            "per_device_eval_batch_size": batch_size,
+            "num_train_epochs": epochs,
+            "learning_rate": learning_rate,
+            "logging_dir": os.path.join(notebooks_dir, "logs"),
+            "logging_steps": 10,
+            "evaluation_strategy": "steps",
+            "eval_steps": 100,
+            "save_strategy": "steps",
+            "save_steps": 100,
+            "save_total_limit": 5,
+            "load_best_model_at_end": True,
+            "metric_for_best_model": "eval_loss",
+            "greater_is_better": False,
+            "warmup_steps": warmup_steps,
+            "weight_decay": 0.01,
+            "report_to": "none",
+            "gradient_accumulation_steps": 8,
+            "gradient_checkpointing": use_gradient_checkpointing,
+            "local_rank": -1,
+            "use_cpu": self.device.type == "cpu",
+            "save_safetensors": True,
+            "dataloader_pin_memory": True,  # Requires data to be on CPU
+            "dataloader_num_workers": 2,    # For multiprocessing
+            "group_by_length": True,        # Keep existing parameter
+            "remove_unused_columns": False,
+            "hub_model_id": None,           # Disable hub pushing
+        }
+
+        # Only add fp16/bf16 if we're on a CUDA device
+        if use_fp16:
+            training_args_dict["fp16"] = True
+            # Check if bf16 is requested via environment variable
+            if os.environ.get("USE_BF16", "").lower() in ["true", "1", "yes"]:
+                training_args_dict["bf16"] = True
+                log_checkpoint("Using BF16 mixed precision training")
+
+        # Create the TrainingArguments object
+        training_args = TrainingArguments(**training_args_dict)
 
         # Initialize trainer
         log_checkpoint("Initializing Trainer...")

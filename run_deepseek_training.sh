@@ -18,6 +18,15 @@ export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:32,garbage_collection_threshol
 export TOKENIZERS_PARALLELISM=false
 export FORCE_CPU_ONLY_FOR_INITIAL_LOAD=1
 
+# Check if we're running on a CUDA device and set USE_BF16 accordingly
+if python -c "import torch; print(torch.cuda.is_available())" | grep -q "True"; then
+    echo "CUDA device detected, enabling BF16 mixed precision"
+    export USE_BF16=true
+else
+    echo "No CUDA device detected, disabling BF16 mixed precision"
+    export USE_BF16=false
+fi
+
 # Step 3: Ensure directories exist
 echo "Ensuring directories exist..."
 mkdir -p /notebooks/Jarvis_AI_Assistant/models
@@ -30,6 +39,16 @@ mkdir -p /notebooks/Jarvis_AI_Assistant/visualization
 
 # Step 4: Run the training with optimal parameters
 echo "Starting DeepSeek Coder 5.7B training..."
+
+# Check if we're running on a CUDA device and set BF16 flag accordingly
+if python -c "import torch; print(torch.cuda.is_available())" | grep -q "True"; then
+    echo "CUDA device detected, enabling BF16 mixed precision"
+    BF16_FLAG="--bf16"
+else
+    echo "No CUDA device detected, disabling BF16 mixed precision"
+    BF16_FLAG=""
+fi
+
 python -m src.generative_ai_module.train_models \
     --model_type code \
     --model_name_or_path deepseek-ai/deepseek-coder-5.7b-instruct \
@@ -44,7 +63,7 @@ python -m src.generative_ai_module.train_models \
     --optim adamw_bnb_8bit \
     --learning_rate 1.5e-5 \
     --weight_decay 0.05 \
-    --bf16 \
+    $BF16_FLAG \
     --num_workers 4 \
     --cache_dir .cache \
     --force_gpu \
