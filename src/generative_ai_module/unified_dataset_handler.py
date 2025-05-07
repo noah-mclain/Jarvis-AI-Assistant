@@ -381,7 +381,7 @@ class UnifiedDatasetHandler:
             # Process based on common dataset formats
             if "OpenAssistant" in dataset_name or "oasst" in dataset_name:
                 for item in batch:
-                    if 'message' in item and 'role' in item:
+                    if 'text' in item and 'role' in item:
                         if item['role'] == 'assistant':
                             batch_texts.append(f"User: [Previous question]\nAssistant: {item['text']}")
                         elif item['role'] == 'prompter':
@@ -1589,73 +1589,163 @@ class UnifiedDatasetHandler:
         
         return dataset_dict
 
+    def _create_batches_from_texts(self, texts, dataset_name):
+        """
+        Create batches from a list of texts using tokenizer
+        
+        Args:
+            texts: List of text strings
+            dataset_name: Name of the dataset for metadata
+            
+        Returns:
+            Dictionary with batches and metadata
+        """
+        if not texts:
+            return {"batches": [], "metadata": {"sample_count": 0, "source": dataset_name}}
+        
+        try:
+            batch_size = getattr(self, 'batch_size', 4)
+            batches = []
+            
+            # Process in smaller batches to avoid memory issues
+            for i in range(0, len(texts), batch_size):
+                batch_texts = texts[i:min(i+batch_size, len(texts))]
+                
+                try:
+                    # Tokenize text for input
+                    encodings = self.tokenizer(
+                        batch_texts,
+                        truncation=True,
+                        padding='max_length',
+                        max_length=self.max_length,
+                        return_tensors='pt'
+                    )
+                    
+                    # Get input and target tensors (for language modeling, target is input shifted)
+                    input_ids = encodings['input_ids']
+                    attention_mask = encodings['attention_mask']
+                    
+                    # For causal language modeling, target is the input shifted right
+                    # Create targets by shifting inputs
+                    target_ids = input_ids.clone()
+                    
+                    # Add batch to batches list
+                    batches.append((input_ids, target_ids))
+                    
+                except Exception as e:
+                    self.logger.warning(f"Error creating batch: {e}")
+                    continue
+            
+            return {
+                "batches": batches,
+                "metadata": {
+                    "sample_count": len(texts),
+                    "batch_count": len(batches),
+                    "source": dataset_name
+                }
+            }
+        except Exception as e:
+            self.logger.error(f"Error creating batches from texts: {e}")
+            return {"batches": [], "metadata": {"sample_count": 0, "source": dataset_name}}
+
     def process_huggingface_dataset(self, dataset, dataset_name, return_batches=True):
         """Process HuggingFace dataset into model-compatible format"""
         if not dataset:
             return {"batches": [], "metadata": {"sample_count": 0, "source": dataset_name}}
         
         self.logger.info(f"Processing HuggingFace dataset ({len(dataset)} samples)")
-        self.logger.info(f"Dataset keys: {list(dataset[0].keys())}")
         
         # Extract texts based on dataset format
         texts = []
         
-        # Handle different dataset formats based on keys
-        keys = dataset[0].keys()
-        
-        self.logger.info(f"Processing HuggingFace dataset ({len(dataset)} samples)")
-        
         # Add check for empty dataset
-        if len(dataset) > 0:
-            self.logger.info(f"Dataset keys: {list(dataset[0].keys())}")
-        else:
+        if len(dataset) == 0:
             self.logger.warning("Dataset is empty after processing!")
+            return {"batches": [], "metadata": {"sample_count": 0, "source": dataset_name}}
+            
+        # Get dataset structure to determine formatting
+        try:
+            # Get dataset keys safely - dataset might be a dict with 'train' key
+            if isinstance(dataset, dict) and 'train' in dataset:
+                # Dataset is a dict with 'train' key (common HuggingFace format)
+                if len(dataset['train']) > 0:
+                    keys = list(dataset['train'][0].keys())
+                    self.logger.info(f"Dataset keys: {keys}")
+                    
+                    # Process the dataset's train split
+                    dataset = dataset['train']
+                else:
+                    self.logger.warning(f"Dataset {dataset_name} train split is empty")
+                    return {"batches": [], "metadata": {"sample_count": 0, "source": dataset_name}}
+            else:
+                # Direct dataset object
+                if len(dataset) > 0:
+                    keys = list(dataset[0].keys())
+                    self.logger.info(f"Dataset keys: {keys}")
+                else:
+                    self.logger.warning(f"Dataset {dataset_name} is empty")
+                    return {"batches": [], "metadata": {"sample_count": 0, "source": dataset_name}}
+        except Exception as e:
+            self.logger.error(f"Error examining dataset structure: {e}")
+            return {"batches": [], "metadata": {"sample_count": 0, "source": dataset_name}}
         
         # Special handling for specific datasets
-        if dataset_name == "agie-ai/OpenAssistant-oasst1":
+        if "OpenAssistant" in dataset_name or "oasst" in dataset_name:
             for item in dataset:
-                if 'message' in item:
-                    texts.append(item['message'])
+                if 'text' in item and 'role' in item:
+                    if item['role'] == 'assistant':
+                        texts.append(f"User: [Previous question]\nAssistant: {item['text']}")
+                    elif item['role'] == 'prompter':
+                        texts.append(f"User: {item['text']}\nAssistant:")
+                # Handle different OpenAssistant format structures
+                elif 'message_id' in item and 'text' in item and 'role' in item:
+                    if item['role'] == 'assistant':
+                        texts.append(f"User: [Previous question]\nAssistant: {item['text']}")
+                    elif item['role'] == 'prompter':
+                        texts.append(f"User: {item['text']}\nAssistant:")
         
-        elif dataset_name == "teknium/GPTeacher-General-Instruct":
+        elif "GPTeacher" in dataset_name:
             for item in dataset:
                 if 'instruction' in item and 'response' in item:
                     # Combine instruction and response
                     combined_text = f"Instruction: {item['instruction']}\n\nResponse: {item['response']}"
                     texts.append(combined_text)
         
-        elif dataset_name == "google/Synthetic-Persona-Chat":
+        elif "Persona-Chat" in dataset_name or "Synthetic-Persona-Chat" in dataset_name:
             for item in dataset:
-                if 'Best Generated Conversation' in item:
-                    texts.append(item['Best Generated Conversation'])
+                if 'user 1 personas' in item and 'Best Generated Conversation' in item:
+                    # Handle Synthetic-Persona-Chat format
+                    persona = "\n".join(item['user 1 personas']) if isinstance(item['user 1 personas'], list) else item['user 1 personas']
+                    conversation = item['Best Generated Conversation']
+                    if conversation:
+                        texts.append(f"Persona: {persona}\nConversation: {conversation}")
+                elif 'personas' in item and 'utterances' in item:
+                    # Handle regular Persona-Chat format
+                    persona = "\n".join(item['personas']) if isinstance(item['personas'], list) else item['personas']
+                    if isinstance(item['utterances'], list) and len(item['utterances']) > 0:
+                        # Handle different structure variations
+                        utterance = item['utterances'][-1]  # Take last utterance pair
+                        if isinstance(utterance, list) and len(utterance) >= 2:
+                            texts.append(f"Persona: {persona}\nUser: {utterance[0]}\nAssistant: {utterance[1]}")
         
-        elif dataset_name == "euclaise/writingprompts":
+        elif "writingprompts" in dataset_name:
             for item in dataset:
                 if 'prompt' in item and 'story' in item:
-                    # Combine prompt and story
-                    combined_text = f"Prompt: {item['prompt']}\n\nStory: {item['story']}"
-                    texts.append(combined_text)
+                    texts.append(f"Prompt: {item['prompt']}\nStory: {item['story']}")
         
-        # Generic extraction for unknown datasets
         else:
-            # Try common text field names
-            text_field_candidates = ['text', 'content', 'body', 'story', 'article', 'response']
-            text_field = next((field for field in text_field_candidates if field in keys), None)
-            
-            if text_field:
-                for item in dataset:
-                    if item[text_field]:
-                        texts.append(item[text_field])
-            else:
-                # Try to combine instruction/prompt with response if available
-                instruction_field = next((field for field in ['instruction', 'prompt', 'question'] if field in keys), None)
-                response_field = next((field for field in ['response', 'answer', 'completion'] if field in keys), None)
-                
-                if instruction_field and response_field:
-                    for item in dataset:
-                        if item[instruction_field] and item[response_field]:
-                            combined_text = f"{item[instruction_field]}\n\n{item[response_field]}"
-                            texts.append(combined_text)
+            # Generic case - look for common field patterns
+            for item in dataset:
+                if 'input' in item and 'output' in item:
+                    texts.append(f"Input: {item['input']}\nOutput: {item['output']}")
+                elif 'question' in item and 'answer' in item:
+                    texts.append(f"Question: {item['question']}\nAnswer: {item['answer']}")
+                elif 'prompt' in item and 'completion' in item:
+                    texts.append(f"Prompt: {item['prompt']}\nCompletion: {item['completion']}")
+                elif 'text' in item:
+                    texts.append(item['text'])
+                elif 'content' in item:
+                    texts.append(item['content'])
         
         # Filter out empty texts
         texts = [text for text in texts if text and len(text) > 10]  # Min 10 chars
