@@ -377,7 +377,7 @@ class CodeGenerator:
             batch_size=batch_size
         )
 
-        return self.text_generator.train(batched_data, epochs=epochs)
+        return self.text_generator.train(batched_data, eπpochs=epochs)
     
     def freeze_model_layers(self, freeze_proportion=0.7):
         """

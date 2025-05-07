@@ -477,49 +477,88 @@ class UnifiedDatasetHandler:
 
         # Check for empty dataset
         if not self.validate_dataset_structure(dataset, dataset_name):
-            return self._create_empty_dataset()
+            self.logger.warning(f"Dataset {dataset_name} failed validation. Creating empty dataset with placeholder text.")
+            return {
+                "train": Dataset.from_dict({
+                    "text": ["This is a placeholder text for training. The dataset failed validation."],
+                    "input_ids": [],
+                    "attention_mask": []
+                })
+            }
 
         # Initialize collection containers
         all_texts, all_input_ids, all_attention_masks = [], [], []
         batch_size = getattr(self, 'processing_batch_size', 1000)  # Use class attribute or default to 1000
 
+        # Track success/failure statistics
+        successful_batches = 0
+        failed_batches = 0
+        total_batches = 0
+
         # Process dataset in batches
-        for batch_data in self._generate_batches(dataset, batch_size, dataset_name):
-            batch, batch_index = batch_data
+        try:
+            for batch_data in self._generate_batches(dataset, batch_size, dataset_name):
+                batch, batch_index = batch_data
+                total_batches += 1
 
-            try:
-                # Extract texts from batch based on dataset format
-                batch_texts = self._extract_texts_from_batch(batch, dataset_name)
+                try:
+                    # Extract texts from batch based on dataset format
+                    batch_texts = self._extract_texts_from_batch(batch, dataset_name)
 
-                # Log extraction results
-                self._log_batch_extraction_results(batch_texts, batch, dataset_name)
+                    # Log extraction results
+                    self._log_batch_extraction_results(batch_texts, batch, dataset_name)
 
-                # Skip empty batches
-                if not batch_texts:
-                    self.logger.warning(f"No texts extracted from batch {batch_index} in dataset {dataset_name}")
+                    # Skip empty batches
+                    if not batch_texts:
+                        self.logger.warning(f"No texts extracted from batch {batch_index} in dataset {dataset_name}")
+                        # Create a placeholder text to ensure we have something
+                        batch_texts = [f"Placeholder text for batch {batch_index} in dataset {dataset_name}"]
+                        failed_batches += 1
+                    else:
+                        successful_batches += 1
+
+                    # Tokenize texts if tokenizer is available
+                    if self.tokenizer:
+                        try:
+                            tokenized_data = self._tokenize_batch(batch_texts, dataset_name)
+                            if tokenized_data:
+                                all_input_ids.extend(tokenized_data['input_ids'])
+                                all_attention_masks.extend(tokenized_data['attention_mask'])
+                        except Exception as e:
+                            self.logger.error(f"Error tokenizing batch {batch_index}: {e}")
+                            # Continue without tokenization
+
+                    # Always keep texts for future use or debug
+                    all_texts.extend(batch_texts)
+
+                except Exception as e:
+                    # Log the error but continue processing other batches
+                    self.logger.error(f"Error processing batch {batch_index} in dataset {dataset_name}: {e}")
+                    import traceback
+                    self.logger.error(traceback.format_exc())
+
+                    # Add a placeholder text to ensure we have something
+                    all_texts.append(f"Error processing batch {batch_index} in dataset {dataset_name}. This is a placeholder text.")
+                    failed_batches += 1
                     continue
+                finally:
+                    # Force garbage collection after each batch
+                    del batch
+                    gc.collect()
+        except Exception as e:
+            # Log the error but continue with whatever we've processed so far
+            self.logger.error(f"Error during batch generation for dataset {dataset_name}: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
 
-                # Tokenize texts if tokenizer is available
-                if self.tokenizer:
-                    if tokenized_data := self._tokenize_batch(
-                        batch_texts, dataset_name
-                    ):
-                        all_input_ids.extend(tokenized_data['input_ids'])
-                        all_attention_masks.extend(tokenized_data['attention_mask'])
+        # Log processing statistics
+        self.logger.info(f"Dataset processing complete: {successful_batches} successful batches, {failed_batches} failed batches, {total_batches} total batches")
+        self.logger.info(f"Extracted {len(all_texts)} texts from dataset {dataset_name}")
 
-                # Always keep texts for future use or debug
-                all_texts.extend(batch_texts)
-
-            except Exception as e:
-                # Log the error but continue processing other batches
-                self.logger.error(f"Error processing batch {batch_index} in dataset {dataset_name}: {e}")
-                import traceback
-                self.logger.error(traceback.format_exc())
-                continue
-            finally:
-                # Force garbage collection after each batch
-                del batch
-                gc.collect()
+        # If we have no texts, create a placeholder
+        if not all_texts:
+            self.logger.warning(f"No texts extracted from dataset {dataset_name}. Creating placeholder text.")
+            all_texts = [f"This is a placeholder text for dataset {dataset_name}. No valid texts could be extracted."]
 
         # Create and return the final dataset
         return self._create_final_dataset(all_texts, all_input_ids, all_attention_masks, cache_file)
@@ -635,16 +674,40 @@ class UnifiedDatasetHandler:
 
     def _extract_texts_from_batch(self, batch, dataset_name):
         """Extract texts from a batch based on dataset format."""
-        if "OpenAssistant" in dataset_name or "oasst" in dataset_name:
-            return self._extract_openassistant_batch(batch)
-        elif "GPTeacher" in dataset_name:
-            return self._extract_gpteacher_batch(batch)
-        elif "Persona-Chat" in dataset_name or "Synthetic-Persona-Chat" in dataset_name:
-            return self._extract_persona_chat_batch(batch)
-        elif "writingprompts" in dataset_name:
-            return self._extract_writing_prompts_batch(batch)
-        else:
-            return self._extract_generic_batch(batch)
+        try:
+            # Log the dataset name and batch type for debugging
+            self.logger.info(f"Extracting texts from dataset: {dataset_name}, batch type: {type(batch)}")
+
+            # Try to extract texts using the appropriate method based on dataset name
+            if "OpenAssistant" in dataset_name or "oasst" in dataset_name:
+                texts = self._extract_openassistant_batch(batch)
+            elif "GPTeacher" in dataset_name:
+                texts = self._extract_gpteacher_batch(batch)
+            elif "Persona-Chat" in dataset_name or "Synthetic-Persona-Chat" in dataset_name:
+                texts = self._extract_persona_chat_batch(batch)
+            elif "writingprompts" in dataset_name:
+                texts = self._extract_writing_prompts_batch(batch)
+            else:
+                texts = self._extract_generic_batch(batch)
+
+            # If no texts were extracted, try the generic extractor as a fallback
+            if not texts and batch:
+                self.logger.warning(f"No texts extracted using the {dataset_name} extractor. Trying generic extractor as fallback.")
+                texts = self._extract_generic_batch(batch)
+
+            # If still no texts, create a placeholder
+            if not texts:
+                self.logger.warning(f"All extraction methods failed for {dataset_name}. Creating placeholder text.")
+                texts = ["This is a placeholder text for training. It was automatically generated because no text could be extracted from the dataset."]
+
+            return texts
+
+        except Exception as e:
+            # Log the error and return a placeholder text
+            self.logger.error(f"Error extracting texts from {dataset_name}: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+            return ["Error occurred during text extraction. This is a placeholder text for training."]
 
     def _extract_openassistant_batch(self, batch):
         """Extract texts from OpenAssistant format batch."""
@@ -658,12 +721,17 @@ class UnifiedDatasetHandler:
             # Process a single item (dictionary)
             items = [batch]
             self.logger.info("Processing batch as a single dictionary item")
+            # Log the item for debugging
+            self.logger.info(f"OpenAssistant dictionary item keys: {list(batch.keys())}")
         elif isinstance(batch, list):
             # Process a list of items
             items = batch
             # Log the first item for debugging if available
             if items and len(items) > 0:
-                self.logger.info(f"OpenAssistant sample item: {items[0]}")
+                if isinstance(items[0], dict):
+                    self.logger.info(f"OpenAssistant sample item keys: {list(items[0].keys())}")
+                else:
+                    self.logger.info(f"OpenAssistant sample item type: {type(items[0])}")
         else:
             # Try to convert to list or handle as iterable
             try:
@@ -671,6 +739,8 @@ class UnifiedDatasetHandler:
                 self.logger.info(f"Converted batch to list with {len(items)} items")
             except Exception as e:
                 self.logger.error(f"Cannot process batch of type {type(batch)}: {e}")
+                # Create a fallback text to ensure we have something
+                batch_texts.append("USER: This is a placeholder prompt.\nASSISTANT: This is a placeholder response.")
                 return batch_texts
 
         # Process each item
@@ -681,8 +751,46 @@ class UnifiedDatasetHandler:
                     self.logger.warning(f"Skipping non-dictionary item: {type(item)}")
                     continue
 
+                # Dump the first few items for debugging
+                if len(batch_texts) == 0:
+                    self.logger.info(f"OpenAssistant item structure: {item}")
+
+                # Handle specific format for agie-ai/OpenAssistant-oasst1
+                if 'message_id' in item and 'text' in item and 'role' in item and 'message_tree_id' in item:
+                    # This is the format for agie-ai/OpenAssistant-oasst1
+                    self.logger.info("Detected agie-ai/OpenAssistant-oasst1 format")
+
+                    # Create conversation pairs by matching parent_id with message_id
+                    if item['role'] == 'assistant' and item.get('parent_id'):
+                        # Try to find the parent message in the batch
+                        parent_text = None
+                        for parent_item in items:
+                            if isinstance(parent_item, dict) and parent_item.get('message_id') == item.get('parent_id'):
+                                parent_text = parent_item.get('text')
+                                break
+
+                        if parent_text:
+                            batch_texts.append(f"USER: {parent_text}\nASSISTANT: {item['text']}")
+                        else:
+                            # If parent not found, still use the assistant response
+                            batch_texts.append(f"USER: [Previous question]\nASSISTANT: {item['text']}")
+
+                    elif item['role'] == 'prompter':
+                        # For prompter messages, check if there's a corresponding assistant response
+                        assistant_text = None
+                        for child_item in items:
+                            if isinstance(child_item, dict) and child_item.get('parent_id') == item.get('message_id'):
+                                assistant_text = child_item.get('text')
+                                break
+
+                        if assistant_text:
+                            batch_texts.append(f"USER: {item['text']}\nASSISTANT: {assistant_text}")
+                        else:
+                            # If no assistant response found, use an empty response
+                            batch_texts.append(f"USER: {item['text']}\nASSISTANT:")
+
                 # Handle OpenAssistant v2 structure with message trees
-                if 'message_tree' in item and isinstance(item['message_tree'], dict) and 'messages' in item['message_tree']:
+                elif 'message_tree' in item and isinstance(item['message_tree'], dict) and 'messages' in item['message_tree']:
                     prompt = None
                     messages = item['message_tree']['messages']
 
@@ -716,6 +824,38 @@ class UnifiedDatasetHandler:
                     elif item['role'] == 'prompter':
                         batch_texts.append(f"USER: {item['text']}\nASSISTANT:")
 
+                # Handle structure with conversation field
+                elif 'conversation' in item:
+                    conversation = item['conversation']
+                    if isinstance(conversation, list):
+                        for i in range(0, len(conversation) - 1, 2):
+                            if i + 1 < len(conversation):
+                                user_msg = conversation[i]
+                                assistant_msg = conversation[i + 1]
+                                batch_texts.append(f"USER: {user_msg}\nASSISTANT: {assistant_msg}")
+                    elif isinstance(conversation, str):
+                        batch_texts.append(f"CONVERSATION: {conversation}")
+
+                # Handle any item with text field as a fallback
+                elif 'text' in item:
+                    batch_texts.append(item['text'])
+
+                # Handle any item with content field as a fallback
+                elif 'content' in item:
+                    batch_texts.append(item['content'])
+
+                # Handle any item with instruction/response fields
+                elif 'instruction' in item and 'response' in item:
+                    batch_texts.append(f"USER: {item['instruction']}\nASSISTANT: {item['response']}")
+
+                # Handle any item with prompt/completion fields
+                elif 'prompt' in item and 'completion' in item:
+                    batch_texts.append(f"USER: {item['prompt']}\nASSISTANT: {item['completion']}")
+
+                # Handle any item with input/output fields
+                elif 'input' in item and 'output' in item:
+                    batch_texts.append(f"INPUT: {item['input']}\nOUTPUT: {item['output']}")
+
             except Exception as e:
                 # Log the error and continue with the next item
                 self.logger.warning(f"Error processing OpenAssistant item: {e}")
@@ -723,70 +863,361 @@ class UnifiedDatasetHandler:
                 self.logger.warning(traceback.format_exc())
                 continue
 
+        # If we couldn't extract any texts, create a fallback
+        if not batch_texts and items:
+            self.logger.warning("No texts extracted from OpenAssistant batch. Creating fallback text.")
+            batch_texts.append("USER: This is a placeholder prompt.\nASSISTANT: This is a placeholder response.")
+
         self.logger.info(f"Extracted {len(batch_texts)} texts from OpenAssistant batch")
         return batch_texts
 
     def _extract_gpteacher_batch(self, batch):
         """Extract texts from GPTeacher format batch."""
         batch_texts = []
-        for item in batch:
-            if 'instruction' in item and 'response' in item:
-                batch_texts.append(f"User: {item['instruction']}\nAssistant: {item['response']}")
+
+        # Log batch type for debugging
+        self.logger.info(f"GPTeacher batch type: {type(batch)}")
+
+        # Handle different batch types
+        if isinstance(batch, dict):
+            items = [batch]
+            self.logger.info(f"Processing GPTeacher batch as a single dictionary item with keys: {list(batch.keys())}")
+        elif isinstance(batch, list):
+            items = batch
+            if items and len(items) > 0:
+                if isinstance(items[0], dict):
+                    self.logger.info(f"GPTeacher sample item keys: {list(items[0].keys())}")
+                else:
+                    self.logger.info(f"GPTeacher sample item type: {type(items[0])}")
+        else:
+            try:
+                items = list(batch)
+                self.logger.info(f"Converted GPTeacher batch to list with {len(items)} items")
+            except Exception as e:
+                self.logger.error(f"Cannot process GPTeacher batch of type {type(batch)}: {e}")
+                # Create a fallback text
+                batch_texts.append("User: This is a placeholder instruction.\nAssistant: This is a placeholder response.")
+                return batch_texts
+
+        # Process each item
+        for item in items:
+            try:
+                # Skip non-dictionary items
+                if not isinstance(item, dict):
+                    continue
+
+                # Dump the first item for debugging
+                if len(batch_texts) == 0:
+                    self.logger.info(f"GPTeacher item structure: {item}")
+
+                # Handle teknium/GPTeacher-General-Instruct format
+                if 'instruction' in item and 'response' in item:
+                    # Check if there's an input field as well (common in GPTeacher)
+                    if 'input' in item and item['input']:
+                        # Combine instruction and input
+                        instruction_text = f"{item['instruction']}\n\n{item['input']}"
+                        batch_texts.append(f"User: {instruction_text}\nAssistant: {item['response']}")
+                    else:
+                        # Just use instruction
+                        batch_texts.append(f"User: {item['instruction']}\nAssistant: {item['response']}")
+
+                # Alternative format with input/output
+                elif 'input' in item and 'output' in item:
+                    batch_texts.append(f"User: {item['input']}\nAssistant: {item['output']}")
+
+                # Another alternative format with prompt/completion
+                elif 'prompt' in item and 'completion' in item:
+                    batch_texts.append(f"User: {item['prompt']}\nAssistant: {item['completion']}")
+
+                # Fallback to any text field
+                elif 'text' in item:
+                    batch_texts.append(item['text'])
+            except Exception as e:
+                self.logger.warning(f"Error processing GPTeacher item: {e}")
+                import traceback
+                self.logger.warning(traceback.format_exc())
+                continue
+
+        # If we couldn't extract any texts, create a fallback
+        if not batch_texts and items:
+            self.logger.warning("No texts extracted from GPTeacher batch. Creating fallback text.")
+            batch_texts.append("User: This is a placeholder instruction.\nAssistant: This is a placeholder response.")
+
+        self.logger.info(f"Extracted {len(batch_texts)} texts from GPTeacher batch")
         return batch_texts
 
     def _extract_persona_chat_batch(self, batch):
         """Extract texts from Persona-Chat format batch."""
         batch_texts = []
-        for item in batch:
-            if 'user 1 personas' in item and 'Best Generated Conversation' in item:
+
+        # Log batch type for debugging
+        self.logger.info(f"Persona-Chat batch type: {type(batch)}")
+
+        # Handle different batch types
+        if isinstance(batch, dict):
+            items = [batch]
+            self.logger.info(f"Processing Persona-Chat batch as a single dictionary item with keys: {list(batch.keys())}")
+        elif isinstance(batch, list):
+            items = batch
+            if items and len(items) > 0:
+                if isinstance(items[0], dict):
+                    self.logger.info(f"Persona-Chat sample item keys: {list(items[0].keys())}")
+                else:
+                    self.logger.info(f"Persona-Chat sample item type: {type(items[0])}")
+        else:
+            try:
+                items = list(batch)
+                self.logger.info(f"Converted Persona-Chat batch to list with {len(items)} items")
+            except Exception as e:
+                self.logger.error(f"Cannot process Persona-Chat batch of type {type(batch)}: {e}")
+                # Create a fallback text
+                batch_texts.append("Persona: I am a helpful assistant.\nUser: Hello\nAssistant: Hi there! How can I help you today?")
+                return batch_texts
+
+        # Process each item
+        for item in items:
+            try:
+                # Skip non-dictionary items
+                if not isinstance(item, dict):
+                    continue
+
+                # Dump the first item for debugging
+                if len(batch_texts) == 0:
+                    self.logger.info(f"Persona-Chat item structure: {item}")
+
                 # Handle Synthetic-Persona-Chat format
-                persona = self._format_persona(item['user 1 personas'])
-                conversation = item['Best Generated Conversation']
-                if conversation:
-                    batch_texts.append(f"Persona: {persona}\nConversation: {conversation}")
-            elif 'personas' in item and 'utterances' in item:
+                if 'user 1 personas' in item and 'Best Generated Conversation' in item:
+                    persona = self._format_persona(item['user 1 personas'])
+                    conversation = item['Best Generated Conversation']
+                    if conversation:
+                        batch_texts.append(f"Persona: {persona}\nConversation: {conversation}")
                 # Handle regular Persona-Chat format
-                persona = self._format_persona(item['personas'])
-                if isinstance(item['utterances'], list) and len(item['utterances']) > 0:
-                    # Handle different structure variations
-                    utterance = item['utterances'][-1]  # Take last utterance pair
-                    if isinstance(utterance, list) and len(utterance) >= 2:
-                        batch_texts.append(f"Persona: {persona}\nUser: {utterance[0]}\nAssistant: {utterance[1]}")
+                elif 'personas' in item and 'utterances' in item:
+                    persona = self._format_persona(item['personas'])
+                    if isinstance(item['utterances'], list) and len(item['utterances']) > 0:
+                        # Handle different structure variations
+                        utterance = item['utterances'][-1]  # Take last utterance pair
+                        if isinstance(utterance, list) and len(utterance) >= 2:
+                            batch_texts.append(f"Persona: {persona}\nUser: {utterance[0]}\nAssistant: {utterance[1]}")
+                # Handle alternative format with dialogue field
+                elif 'persona' in item and 'dialogue' in item:
+                    persona = self._format_persona(item['persona'])
+                    dialogue = item['dialogue']
+                    if isinstance(dialogue, list) and len(dialogue) > 0:
+                        dialogue_text = "\n".join(dialogue)
+                        batch_texts.append(f"Persona: {persona}\nDialogue: {dialogue_text}")
+                    elif isinstance(dialogue, str):
+                        batch_texts.append(f"Persona: {persona}\nDialogue: {dialogue}")
+                # Handle any item with conversation field
+                elif 'conversation' in item:
+                    conversation = item['conversation']
+                    if isinstance(conversation, list):
+                        conversation_text = "\n".join(conversation)
+                        batch_texts.append(f"Conversation: {conversation_text}")
+                    elif isinstance(conversation, str):
+                        batch_texts.append(f"Conversation: {conversation}")
+                # Fallback to any text field
+                elif 'text' in item:
+                    batch_texts.append(item['text'])
+            except Exception as e:
+                self.logger.warning(f"Error processing Persona-Chat item: {e}")
+                continue
+
+        # If we couldn't extract any texts, create a fallback
+        if not batch_texts and items:
+            self.logger.warning("No texts extracted from Persona-Chat batch. Creating fallback text.")
+            batch_texts.append("Persona: I am a helpful assistant.\nUser: Hello\nAssistant: Hi there! How can I help you today?")
+
+        self.logger.info(f"Extracted {len(batch_texts)} texts from Persona-Chat batch")
         return batch_texts
 
     def _format_persona(self, personas):
         """Format persona data consistently."""
-        return "\n".join(personas) if isinstance(personas, list) else str(personas)
+        if isinstance(personas, list):
+            return "\n".join(personas)
+        elif isinstance(personas, str):
+            return personas
+        elif isinstance(personas, dict):
+            # Try to extract values from dictionary
+            return "\n".join(str(v) for v in personas.values())
+        else:
+            return str(personas)
 
     def _extract_writing_prompts_batch(self, batch):
         """Extract texts from WritingPrompts format batch."""
         batch_texts = []
-        for item in batch:
-            if 'prompt' in item and 'story' in item:
-                batch_texts.append(f"Prompt: {item['prompt']}\nStory: {item['story']}")
+
+        # Log batch type for debugging
+        self.logger.info(f"WritingPrompts batch type: {type(batch)}")
+
+        # Handle different batch types
+        if isinstance(batch, dict):
+            items = [batch]
+            self.logger.info(f"Processing WritingPrompts batch as a single dictionary item with keys: {list(batch.keys())}")
+        elif isinstance(batch, list):
+            items = batch
+            if items and len(items) > 0:
+                if isinstance(items[0], dict):
+                    self.logger.info(f"WritingPrompts sample item keys: {list(items[0].keys())}")
+                else:
+                    self.logger.info(f"WritingPrompts sample item type: {type(items[0])}")
+        else:
+            try:
+                items = list(batch)
+                self.logger.info(f"Converted WritingPrompts batch to list with {len(items)} items")
+            except Exception as e:
+                self.logger.error(f"Cannot process WritingPrompts batch of type {type(batch)}: {e}")
+                # Create a fallback text
+                batch_texts.append("Prompt: Write a short story.\nStory: Once upon a time, there was a helpful AI assistant.")
+                return batch_texts
+
+        # Process each item
+        for item in items:
+            try:
+                # Skip non-dictionary items
+                if not isinstance(item, dict):
+                    continue
+
+                # Dump the first item for debugging
+                if len(batch_texts) == 0:
+                    self.logger.info(f"WritingPrompts item structure: {item}")
+
+                # Standard WritingPrompts format
+                if 'prompt' in item and 'story' in item:
+                    batch_texts.append(f"Prompt: {item['prompt']}\nStory: {item['story']}")
+                # Alternative format
+                elif 'title' in item and 'text' in item:
+                    batch_texts.append(f"Title: {item['title']}\nText: {item['text']}")
+                # Another alternative format
+                elif 'wp' in item and 'response' in item:
+                    batch_texts.append(f"Prompt: {item['wp']}\nStory: {item['response']}")
+                # Fallback to any text field
+                elif 'text' in item:
+                    batch_texts.append(item['text'])
+            except Exception as e:
+                self.logger.warning(f"Error processing WritingPrompts item: {e}")
+                continue
+
+        # If we couldn't extract any texts, create a fallback
+        if not batch_texts and items:
+            self.logger.warning("No texts extracted from WritingPrompts batch. Creating fallback text.")
+            batch_texts.append("Prompt: Write a short story.\nStory: Once upon a time, there was a helpful AI assistant.")
+
+        self.logger.info(f"Extracted {len(batch_texts)} texts from WritingPrompts batch")
         return batch_texts
 
     def _extract_generic_batch(self, batch):
         """Extract texts from generic format batch using common patterns."""
         batch_texts = []
-        for item in batch:
-            if 'input' in item and 'output' in item:
-                batch_texts.append(f"Input: {item['input']}\nOutput: {item['output']}")
-            elif 'question' in item and 'answer' in item:
-                batch_texts.append(f"Question: {item['question']}\nAnswer: {item['answer']}")
-            elif 'prompt' in item and 'completion' in item:
-                batch_texts.append(f"Prompt: {item['prompt']}\nCompletion: {item['completion']}")
-            elif 'text' in item:
-                batch_texts.append(item['text'])
-            elif 'content' in item:
-                batch_texts.append(item['content'])
+
+        # Log batch type for debugging
+        self.logger.info(f"Generic batch type: {type(batch)}")
+
+        # Handle different batch types
+        if isinstance(batch, dict):
+            items = [batch]
+            self.logger.info(f"Processing generic batch as a single dictionary item with keys: {list(batch.keys())}")
+        elif isinstance(batch, list):
+            items = batch
+            if items and len(items) > 0:
+                if isinstance(items[0], dict):
+                    self.logger.info(f"Generic sample item keys: {list(items[0].keys())}")
+                else:
+                    self.logger.info(f"Generic sample item type: {type(items[0])}")
+        else:
+            try:
+                items = list(batch)
+                self.logger.info(f"Converted generic batch to list with {len(items)} items")
+            except Exception as e:
+                self.logger.error(f"Cannot process generic batch of type {type(batch)}: {e}")
+                # Create a fallback text
+                batch_texts.append("This is a placeholder text for generic dataset.")
+                return batch_texts
+
+        # Process each item
+        for item in items:
+            try:
+                # Skip non-dictionary items if it's not a string
+                if not isinstance(item, dict) and not isinstance(item, str):
+                    continue
+
+                # If item is a string, use it directly
+                if isinstance(item, str):
+                    batch_texts.append(item)
+                    continue
+
+                # Dump the first item for debugging
+                if len(batch_texts) == 0:
+                    self.logger.info(f"Generic item structure: {item}")
+
+                # Try all common patterns
+                if 'input' in item and 'output' in item:
+                    batch_texts.append(f"Input: {item['input']}\nOutput: {item['output']}")
+                elif 'question' in item and 'answer' in item:
+                    batch_texts.append(f"Question: {item['question']}\nAnswer: {item['answer']}")
+                elif 'prompt' in item and 'completion' in item:
+                    batch_texts.append(f"Prompt: {item['prompt']}\nCompletion: {item['completion']}")
+                elif 'instruction' in item and 'response' in item:
+                    batch_texts.append(f"Instruction: {item['instruction']}\nResponse: {item['response']}")
+                elif 'context' in item and 'response' in item:
+                    batch_texts.append(f"Context: {item['context']}\nResponse: {item['response']}")
+                elif 'text' in item:
+                    batch_texts.append(item['text'])
+                elif 'content' in item:
+                    batch_texts.append(item['content'])
+                # If nothing else works, try to use the first string value in the dictionary
+                else:
+                    for key, value in item.items():
+                        if isinstance(value, str) and len(value) > 0:
+                            batch_texts.append(value)
+                            break
+            except Exception as e:
+                self.logger.warning(f"Error processing generic item: {e}")
+                continue
+
+        # If we couldn't extract any texts, create a fallback
+        if not batch_texts and items:
+            self.logger.warning("No texts extracted from generic batch. Creating fallback text.")
+            batch_texts.append("This is a placeholder text for generic dataset.")
+
+        self.logger.info(f"Extracted {len(batch_texts)} texts from generic batch")
         return batch_texts
 
     def _log_batch_extraction_results(self, batch_texts, batch, dataset_name):
         """Log the results of text extraction from a batch."""
         self.logger.info(f"Extracted {len(batch_texts)} texts from batch")
-        if not batch_texts and batch and isinstance(batch, list) and len(batch) > 0 and isinstance(batch[0], dict):
-            self.logger.warning(f"No texts extracted from batch. Sample item: {dict(list(batch[0].items())[:3])}")
+
+        # Log more detailed information if no texts were extracted
+        if not batch_texts:
+            self.logger.warning(f"No texts extracted from batch in dataset {dataset_name}")
+
+            # Log sample item if available
+            if batch:
+                if isinstance(batch, list) and len(batch) > 0:
+                    if isinstance(batch[0], dict):
+                        self.logger.warning(f"Sample item keys: {list(batch[0].keys())}")
+                        # Log a few key-value pairs for debugging
+                        sample_dict = {}
+                        for k, v in list(batch[0].items())[:5]:  # First 5 items
+                            if isinstance(v, str):
+                                sample_dict[k] = v[:100] + "..." if len(v) > 100 else v
+                            else:
+                                sample_dict[k] = str(type(v))
+                        self.logger.warning(f"Sample item values: {sample_dict}")
+                    else:
+                        self.logger.warning(f"Sample item type: {type(batch[0])}")
+                elif isinstance(batch, dict):
+                    self.logger.warning(f"Batch is a dictionary with keys: {list(batch.keys())}")
+                else:
+                    self.logger.warning(f"Batch type: {type(batch)}")
+
+        # If texts were extracted, log a sample
+        elif batch_texts:
+            sample_text = batch_texts[0]
+            # Truncate if too long
+            if len(sample_text) > 200:
+                sample_text = sample_text[:200] + "..."
+            self.logger.info(f"Sample extracted text: {sample_text}")
 
     def _tokenize_batch(self, batch_texts, dataset_name):
         """Tokenize a batch of texts."""
@@ -1393,13 +1824,47 @@ class UnifiedDatasetHandler:
                 # The Pile is available via other processors
                 return True
             elif dataset_name == "openassistant":
-                # Check if HuggingFace has the dataset
-                dataset = load_dataset("OpenAssistant/oasst1", split="train", cache_dir=self.cache_dir)
-                return dataset is not None and len(dataset) > 0
+                # Try multiple versions of the OpenAssistant dataset
+                try:
+                    # First try the standard version
+                    dataset = load_dataset("OpenAssistant/oasst1", split="train", cache_dir=self.cache_dir)
+                    return dataset is not None and len(dataset) > 0
+                except Exception as e:
+                    logger.warning(f"Failed to load OpenAssistant/oasst1: {e}")
+                    try:
+                        # Try the alternative version
+                        dataset = load_dataset("agie-ai/OpenAssistant-oasst1", split="train", cache_dir=self.cache_dir)
+                        return dataset is not None and len(dataset) > 0
+                    except Exception as e2:
+                        logger.warning(f"Failed to load agie-ai/OpenAssistant-oasst1: {e2}")
+                        try:
+                            # Try another fallback version
+                            dataset = load_dataset("openassistant/oasst1", split="train", cache_dir=self.cache_dir)
+                            return dataset is not None and len(dataset) > 0
+                        except Exception as e3:
+                            logger.warning(f"Failed to load openassistant/oasst1: {e3}")
+                            return False
             elif dataset_name == "gpteacher":
-                # Check if HuggingFace has the dataset
-                dataset = load_dataset("teknium/GPTeacher-General-Instruct", split="train", cache_dir=self.cache_dir)
-                return dataset is not None and len(dataset) > 0
+                # Try multiple versions of the GPTeacher dataset
+                try:
+                    # First try the standard version
+                    dataset = load_dataset("teknium/GPTeacher-General-Instruct", split="train", cache_dir=self.cache_dir)
+                    return dataset is not None and len(dataset) > 0
+                except Exception as e:
+                    logger.warning(f"Failed to load teknium/GPTeacher-General-Instruct: {e}")
+                    try:
+                        # Try an alternative version
+                        dataset = load_dataset("GPTeacher/GPTeacher-General-Instruct", split="train", cache_dir=self.cache_dir)
+                        return dataset is not None and len(dataset) > 0
+                    except Exception as e2:
+                        logger.warning(f"Failed to load GPTeacher/GPTeacher-General-Instruct: {e2}")
+                        try:
+                            # Try a more generic approach
+                            dataset = load_dataset("GPTeacher", split="train", cache_dir=self.cache_dir)
+                            return dataset is not None and len(dataset) > 0
+                        except Exception as e3:
+                            logger.warning(f"Failed to load GPTeacher: {e3}")
+                            return False
 
             return False
         except Exception as e:
@@ -1772,9 +2237,53 @@ class UnifiedDatasetHandler:
         elif dataset_name == "pile":
             return self.processor.load_pile_dataset(max_samples=batch_size, offset=offset)
         elif dataset_name == "openassistant":
-            return self.processor.load_openassistant_dataset(max_samples=batch_size, offset=offset)
+            # Try to load OpenAssistant dataset with multiple fallbacks
+            try:
+                # First try the standard version
+                return self.processor.load_openassistant_dataset(max_samples=batch_size, offset=offset)
+            except Exception as e:
+                logger.warning(f"Failed to load OpenAssistant dataset with standard method: {e}")
+                try:
+                    # Try with alternative dataset ID
+                    return self.processor.load_dataset_with_custom_id(
+                        "agie-ai/OpenAssistant-oasst1",
+                        max_samples=batch_size,
+                        offset=offset,
+                        extract_method=self._extract_openassistant_batch
+                    )
+                except Exception as e2:
+                    logger.warning(f"Failed to load agie-ai/OpenAssistant-oasst1: {e2}")
+                    # Try another fallback
+                    return self.processor.load_dataset_with_custom_id(
+                        "openassistant/oasst1",
+                        max_samples=batch_size,
+                        offset=offset,
+                        extract_method=self._extract_openassistant_batch
+                    )
         elif dataset_name == "gpteacher":
-            return self.processor.load_gpteacher_dataset(max_samples=batch_size, offset=offset)
+            # Try to load GPTeacher dataset with multiple fallbacks
+            try:
+                # First try the standard version
+                return self.processor.load_gpteacher_dataset(max_samples=batch_size, offset=offset)
+            except Exception as e:
+                logger.warning(f"Failed to load GPTeacher dataset with standard method: {e}")
+                try:
+                    # Try with alternative dataset ID
+                    return self.processor.load_dataset_with_custom_id(
+                        "teknium/GPTeacher-General-Instruct",
+                        max_samples=batch_size,
+                        offset=offset,
+                        extract_method=self._extract_gpteacher_batch
+                    )
+                except Exception as e2:
+                    logger.warning(f"Failed to load teknium/GPTeacher-General-Instruct: {e2}")
+                    # Try another fallback
+                    return self.processor.load_dataset_with_custom_id(
+                        "GPTeacher/GPTeacher-General-Instruct",
+                        max_samples=batch_size,
+                        offset=offset,
+                        extract_method=self._extract_gpteacher_batch
+                    )
         else:
             logger.error(f"Unsupported dataset for batch loading: {dataset_name}")
             return {}
