@@ -95,36 +95,191 @@ if torch.cuda.is_available():
         export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:32,garbage_collection_threshold:0.9"
         export TOKENIZERS_PARALLELISM=false
         export FORCE_CPU_ONLY_FOR_INITIAL_LOAD=1
+        export OMP_NUM_THREADS=1
+        export CUDA_LAUNCH_BLOCKING=1
+        export FORCE_CPU_ONLY_FOR_TOKENIZATION=1
+        export FORCE_CPU_ONLY_FOR_DATASET_PROCESSING=1
+        export TRANSFORMERS_OFFLINE=0
+        export TOKENIZERS_FORCE_CPU=1
+        export HF_DATASETS_CPU_ONLY=1
+        export JARVIS_FORCE_CPU_TOKENIZER=1
 
-        ./run_deepseek_training.sh
-        # # Run the training with optimal parameters for DeepSeek Coder 5.7B
-        # python -m src.generative_ai_module.train_models \
-        #     --model_type code \
-        #     --model_name_or_path deepseek-ai/deepseek-coder-5.7b-instruct \
-        #     --dataset "code-search-net/code_search_net" \
-        #     --batch_size 1 \
-        #     --max_length 512 \
-        #     --gradient_accumulation_steps 64 \
-        #     --use_4bit \
-        #     --use_qlora \
-        #     --use_flash_attention_2 \
-        #     --gradient_checkpointing \
-        #     --optim adamw_bnb_8bit \
-        #     --learning_rate 1.5e-5 \
-        #     --weight_decay 0.05 \
-        #     --bf16 \
-        #     --num_workers 4 \
-        #     --cache_dir .cache \
-        #     --force_gpu \
-        #     --pad_token_id 50256 \
-        #     --dataset_subset "python" \
-        #     --skip_layer_freezing \
-        #     --fim_rate 0.6 \
-        #     --evaluation_strategy "steps" \
-        #     --eval_steps 500 \
-        #     --save_steps 1000 \
-        #     --logging_steps 50 \
-        #     --output_dir "/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-finetuned"
+        echo "===================================================="
+        echo "Clearing GPU memory again..."
+        python -c "
+import torch
+import gc
+import os
+import psutil
+
+# Kill any zombie Python processes that might be using GPU memory
+def kill_zombie_processes():
+    try:
+        current_process = os.getpid()
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            # Skip the current process
+            if proc.info['pid'] == current_process:
+                continue
+
+            # Look for Python processes that might be using GPU
+            if 'python' in proc.info['name'].lower():
+                cmdline = ' '.join(proc.info['cmdline'] or [])
+                if 'torch' in cmdline or 'tensorflow' in cmdline or 'cuda' in cmdline:
+                    print(f'Found potential GPU-using process: {proc.info}')
+                    try:
+                        # Try to terminate gracefully first
+                        proc.terminate()
+                        print(f'Terminated process {proc.info}')
+                    except Exception as e:
+                        print(f'Error terminating process: {e}')
+    except Exception as e:
+        print(f'Error in kill_zombie_processes: {e}')
+        # Continue with memory cleanup even if process killing fails
+
+# Try to kill zombie processes first
+try:
+    import psutil
+    print('Checking for zombie processes using GPU memory...')
+    kill_zombie_processes()
+except ImportError:
+    print('psutil not available, skipping zombie process check')
+
+if torch.cuda.is_available():
+    # Get initial memory usage
+    initial_mem = torch.cuda.memory_allocated() / (1024**3)
+    initial_reserved = torch.cuda.memory_reserved() / (1024**3)
+    total_mem = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+
+    print(f'Initial GPU memory: {initial_mem:.2f} GB allocated, {initial_reserved:.2f} GB reserved')
+    print(f'Total GPU memory: {total_mem:.2f} GB')
+
+    # First round of cleanup
+    torch.cuda.empty_cache()
+    gc.collect()
+
+    # Force a second round of cleanup
+    torch.cuda.empty_cache()
+    gc.collect()
+
+    # Check memory again
+    current_mem = torch.cuda.memory_allocated() / (1024**3)
+    current_reserved = torch.cuda.memory_reserved() / (1024**3)
+
+    print(f'After cleanup: {current_mem:.2f} GB allocated, {current_reserved:.2f} GB reserved')
+    print(f'Freed: {initial_mem - current_mem:.2f} GB allocated, {initial_reserved - current_reserved:.2f} GB reserved')
+    print(f'Free GPU memory: {total_mem - current_mem:.2f} GB')
+
+    # Set memory fraction to avoid OOM
+    try:
+        torch.cuda.set_per_process_memory_fraction(0.9)
+        print('Set GPU memory fraction to 90% to avoid OOM errors')
+    except:
+        print('Could not set memory fraction, continuing anyway')
+else:
+    print('No GPU available, will use CPU only')
+"
+
+        # Check GPU availability and memory
+        echo "Checking GPU availability and memory..."
+        python -c "
+import torch
+if torch.cuda.is_available():
+    device = torch.device('cuda')
+    total_mem = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+    free_mem = (torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated()) / (1024**3)
+    print(f'GPU available: {torch.cuda.get_device_name(0)}')
+    print(f'Total memory: {total_mem:.2f} GB')
+    print(f'Free memory: {free_mem:.2f} GB')
+
+    # Check if there's sufficient memory for BF16
+    if free_mem > 2.0:
+        print('Sufficient memory for BF16 mixed precision')
+    else:
+        print('Limited memory, disabling BF16 mixed precision')
+else:
+    print('No GPU available, will use CPU only')
+"
+
+        # Set BF16 capability based on available memory
+        if python -c "import torch; exit(0 if torch.cuda.is_available() and (torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated()) / (1024**3) > 2.0 else 1)"; then
+            echo "Setting BF16_CAPABLE=true"
+            BF16_FLAG="--bf16"
+        else
+            echo "Setting BF16_CAPABLE=false"
+            BF16_FLAG=""
+        fi
+
+        # Apply a more robust patch for the attention mask error
+        echo "Applying a more robust patch for the attention mask error..."
+        python fix_attention_mask_error.py
+
+        # Ensure directories exist
+        echo "Ensuring directories exist..."
+        mkdir -p /notebooks/Jarvis_AI_Assistant/models
+        mkdir -p /notebooks/Jarvis_AI_Assistant/metrics
+        mkdir -p /notebooks/Jarvis_AI_Assistant/checkpoints
+        mkdir -p /notebooks/Jarvis_AI_Assistant/logs
+        mkdir -p /notebooks/Jarvis_AI_Assistant/evaluation_metrics
+        mkdir -p /notebooks/Jarvis_AI_Assistant/preprocessed_data
+        mkdir -p /notebooks/Jarvis_AI_Assistant/visualization
+
+        # Run the training with memory-efficient settings
+        echo "Starting DeepSeek Coder training with memory optimizations..."
+        echo "Executing the following command:"
+        echo "python -m src.generative_ai_module.train_models \
+    --model_type code \
+    --model_name_or_path deepseek-ai/deepseek-coder-5.7b-instruct \
+    --dataset \"code-search-net/code_search_net\" \
+    --batch_size 1 \
+    --max_length 512 \
+    --gradient_accumulation_steps 64 \
+    --use_4bit \
+    --use_qlora \
+    --gradient_checkpointing \
+    --optim adamw_bnb_8bit \
+    --learning_rate 1.5e-5 \
+    --weight_decay 0.05 \
+    $BF16_FLAG \
+    --num_workers 1 \
+    --cache_dir .cache \
+    --force_gpu \
+    --pad_token_id 50256 \
+    --dataset_subset \"python\" \
+    --skip_layer_freezing \
+    --fim_rate 0.6 \
+    --evaluation_strategy \"steps\" \
+    --eval_steps 500 \
+    --save_steps 1000 \
+    --logging_steps 50 \
+    --output_dir \"/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-finetuned\""
+
+        # Run the training command
+        python -m src.generative_ai_module.train_models \
+            --model_type code \
+            --model_name_or_path deepseek-ai/deepseek-coder-5.7b-instruct \
+            --dataset "code-search-net/code_search_net" \
+            --batch_size 1 \
+            --max_length 512 \
+            --gradient_accumulation_steps 64 \
+            --use_4bit \
+            --use_qlora \
+            --gradient_checkpointing \
+            --optim adamw_bnb_8bit \
+            --learning_rate 1.5e-5 \
+            --weight_decay 0.05 \
+            $BF16_FLAG \
+            --num_workers 1 \
+            --cache_dir .cache \
+            --force_gpu \
+            --pad_token_id 50256 \
+            --dataset_subset "python" \
+            --skip_layer_freezing \
+            --fim_rate 0.6 \
+            --evaluation_strategy "steps" \
+            --eval_steps 500 \
+            --save_steps 1000 \
+            --logging_steps 50 \
+            --output_dir "/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-finetuned"
 
         unset FORCE_CPU_DATA_PIPELINE
         ;;
