@@ -850,12 +850,19 @@ def train_with_unsloth(args):
 
     # Load model with Unsloth
     logger.info(f"Loading model: {args.model_name}")
+    print("🦥 Loading model", args.model_name, "with minimal unsloth")
+    if args.load_in_4bit:
+        print("Loading model in 4-bit quantization")
+    elif args.load_in_8bit:
+        print("Loading model in 8-bit quantization")
+
+    # Note: FastLanguageModel.from_pretrained already sets trust_remote_code=True internally
+    # so we don't need to pass it explicitly to avoid the duplicate parameter error
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=args.model_name,
         max_seq_length=args.max_length,
         load_in_4bit=args.load_in_4bit,
-        load_in_8bit=args.load_in_8bit,
-        trust_remote_code=True
+        load_in_8bit=args.load_in_8bit
     )
 
     # Set up LoRA
