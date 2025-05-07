@@ -2479,7 +2479,7 @@ def main():
             max_samples=args.max_samples,
             subset=args.dataset_subset if hasattr(args, 'dataset_subset') else None,
             all_subsets=hasattr(args, 'all_subsets') and args.all_subsets,
-            skip_layer_freezing=hasattr(args, 'skip_layer_freezing') and args.skip_layer_freezing
+            skip_layer_freezing=args.skip_layer_freezing
         )
 
         logger.info(f"Code model training completed. Model saved to {args.output_dir}")

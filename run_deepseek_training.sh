@@ -1,7 +1,7 @@
 #!/bin/bash
-# Script to run DeepSeek Coder training with the fixed code
+# Script to run DeepSeek Coder 5.7B training with the fixed code
 
-echo "===== Running FLAN-UL2 20B Training with Fixed Code ====="
+echo "===== Running DeepSeek Coder 5.7B Training with Fixed Code ====="
 
 # Step 1: Clean GPU memory
 echo "Cleaning GPU memory..."
@@ -29,36 +29,33 @@ mkdir -p /notebooks/Jarvis_AI_Assistant/preprocessed_data
 mkdir -p /notebooks/Jarvis_AI_Assistant/visualization
 
 # Step 4: Run the training with optimal parameters
-echo "Starting FLAN-UL2 20B training..."
+echo "Starting DeepSeek Coder 5.7B training..."
 python -m src.generative_ai_module.train_models \
-    --model_type text \
-    --model_name_or_path google/flan-ul2 \
-    --dataset "euclaise/writingprompts,google/Synthetic-Persona-Chat,EleutherAI/pile,teknium/GPTeacher-General-Instruct,agie-ai/OpenAssistant-oasst1" \
+    --model_type code \
+    --model_name_or_path deepseek-ai/deepseek-coder-5.7b-instruct \
+    --dataset "code-search-net/code_search_net" \
     --batch_size 1 \
     --max_length 512 \
-    --gradient_accumulation_steps 128 \
+    --gradient_accumulation_steps 64 \
     --use_4bit \
     --use_qlora \
     --use_flash_attention_2 \
     --gradient_checkpointing \
     --optim adamw_bnb_8bit \
-    --learning_rate 1e-5 \
-    --weight_decay 0.01 \
+    --learning_rate 1.5e-5 \
+    --weight_decay 0.05 \
     --bf16 \
-    --num_workers 2 \
-    --max_samples 10000 \
+    --num_workers 4 \
     --cache_dir .cache \
     --force_gpu \
-    --pad_token_id 0 \
-    --dataset_subset "all" \
+    --pad_token_id 50256 \
+    --dataset_subset "python" \
     --skip_layer_freezing \
-    --lora_r 32 \
-    --lora_alpha 64 \
-    --lora_dropout 0.05 \
+    --fim_rate 0.6 \
     --evaluation_strategy "steps" \
     --eval_steps 500 \
     --save_steps 1000 \
     --logging_steps 50 \
-    --output_dir "/notebooks/Jarvis_AI_Assistant/models/flan-ul2-finetuned"
+    --output_dir "/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-finetuned"
 
 echo "Training complete!"

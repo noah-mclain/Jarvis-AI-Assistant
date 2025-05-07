@@ -84,48 +84,47 @@ case $MODEL_CHOICE in
     2)
         echo "Starting optimized CODE model training with DeepSeek Coder 5.7B..."
         # Clean GPU memory
-        python -c "
-        import gc
-        import torch
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            gc.collect()
-            print(f'Initial GPU memory: {torch.cuda.memory_allocated() / (1024**3):.2f} GB')
-        "
+        python -c "import gc
+import torch
+if torch.cuda.is_available():
+    torch.cuda.empty_cache()
+    gc.collect()
+    print(f'Initial GPU memory: {torch.cuda.memory_allocated() / (1024**3):.2f} GB')"
 
         # Set environment variables for optimal memory usage
         export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:32,garbage_collection_threshold:0.9"
         export TOKENIZERS_PARALLELISM=false
         export FORCE_CPU_ONLY_FOR_INITIAL_LOAD=1
 
-        # Run the training with optimal parameters for DeepSeek Coder 5.7B
-        python -m src.generative_ai_module.train_models \
-            --model_type code \
-            --model_name_or_path deepseek-ai/deepseek-coder-5.7b-instruct \
-            --dataset "code-search-net/code_search_net" \
-            --batch_size 1 \
-            --max_length 512 \
-            --gradient_accumulation_steps 64 \
-            --use_4bit \
-            --use_qlora \
-            --use_flash_attention_2 \
-            --gradient_checkpointing \
-            --optim adamw_bnb_8bit \
-            --learning_rate 1.5e-5 \
-            --weight_decay 0.05 \
-            --bf16 \
-            --num_workers 4 \
-            --cache_dir .cache \
-            --force_gpu \
-            --pad_token_id 50256 \
-            --dataset_subset "python" \
-            --skip_layer_freezing \
-            --fim_rate 0.6 \
-            --evaluation_strategy "steps" \
-            --eval_steps 500 \
-            --save_steps 1000 \
-            --logging_steps 50 \
-            --output_dir "/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-finetuned"
+        ./run_deepseek_training.sh
+        # # Run the training with optimal parameters for DeepSeek Coder 5.7B
+        # python -m src.generative_ai_module.train_models \
+        #     --model_type code \
+        #     --model_name_or_path deepseek-ai/deepseek-coder-5.7b-instruct \
+        #     --dataset "code-search-net/code_search_net" \
+        #     --batch_size 1 \
+        #     --max_length 512 \
+        #     --gradient_accumulation_steps 64 \
+        #     --use_4bit \
+        #     --use_qlora \
+        #     --use_flash_attention_2 \
+        #     --gradient_checkpointing \
+        #     --optim adamw_bnb_8bit \
+        #     --learning_rate 1.5e-5 \
+        #     --weight_decay 0.05 \
+        #     --bf16 \
+        #     --num_workers 4 \
+        #     --cache_dir .cache \
+        #     --force_gpu \
+        #     --pad_token_id 50256 \
+        #     --dataset_subset "python" \
+        #     --skip_layer_freezing \
+        #     --fim_rate 0.6 \
+        #     --evaluation_strategy "steps" \
+        #     --eval_steps 500 \
+        #     --save_steps 1000 \
+        #     --logging_steps 50 \
+        #     --output_dir "/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-finetuned"
 
         unset FORCE_CPU_DATA_PIPELINE
         ;;
