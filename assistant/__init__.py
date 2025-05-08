@@ -7,7 +7,7 @@ class Command:
     and implement the execute method.
     """
     
-    def execute(self, args: str, *_args, **_kwargs) -> bool:
+    def execute(self, args: str, *_args, **_kwargs) -> dict:
         """Execute the command with the given arguments.
         
         Args:
@@ -16,6 +16,21 @@ class Command:
             **_kwargs: Additional keyword arguments
             
         Returns:
-            bool: True if command executed successfully, False otherwise
+            dict: Response with these keys:
+                - success: Whether the command was successful
+                - message: User-friendly message about what happened
+                - error: Error message if anything went wrong
+                - action: The action that was performed
         """
         raise NotImplementedError("Command classes must implement execute()")
+    
+    def get_command_name(self) -> str:
+        """Get the name of the command."""
+        class_name = self.__class__.__name__.lower()
+        if class_name.endswith('command'):
+            return class_name[:-7]  # Remove 'command' suffix
+        return class_name
+    
+    def get_help(self) -> str:
+        """Get help information for the command."""
+        return self.__doc__ or "No help available for this command."
