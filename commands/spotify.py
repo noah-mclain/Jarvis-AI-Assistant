@@ -264,9 +264,10 @@ class SpotifyCommand(Command):
 # Create an instance
 spotify = SpotifyCommand()
 
+# Test code - commented out to prevent automatic execution on import
 # spotify.execute('pause')
 # spotify.execute('resume')
-spotify.execute('next')
+# spotify.execute('next')
 # spotify.execute('previous')
 # spotify.execute('search hydrogen')
 # spotify.execute('open')
