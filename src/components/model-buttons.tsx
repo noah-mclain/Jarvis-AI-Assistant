@@ -7,6 +7,7 @@
  * - Text Generation/Conversation: For general text conversations
  * - NLP: For natural language processing tasks
  * - Story Generation: For creative writing and storytelling
+ * - Generative Image: For creating images from text descriptions
  *
  * Each button has an appropriate icon and triggers a function to use the
  * corresponding model with a default prompt template.
@@ -17,7 +18,7 @@
 
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { Mic, Code, MessageSquare, Brain, BookText } from "lucide-react";
+import { Mic, Code, MessageSquare, Brain, BookText, Image } from "lucide-react";
 import { toast } from "@/components/ui/sonner";
 
 /**
@@ -47,6 +48,7 @@ export function ModelButtons({ onSelectModel }: ModelButtonsProps) {
     textGeneration: "Let's have a conversation about: ",
     nlp: "Analyze the sentiment, entities, and intent in this text: ",
     storyGeneration: "Write a creative story about: ",
+    generativeImage: "Generate an image of: ",
   };
 
   /**
@@ -128,6 +130,18 @@ export function ModelButtons({ onSelectModel }: ModelButtonsProps) {
       >
         <BookText className="h-4 w-4" />
         <span className="sr-only">Story Generation</span>
+      </Button>
+
+      {/* Generative Image Button */}
+      <Button
+        variant="outline"
+        size="icon"
+        className="h-10 w-10 rounded-full transition-all duration-300 hover:scale-110"
+        onClick={() => handleModelSelect("generativeImage")}
+        title="Generative Image: Create images from text descriptions"
+      >
+        <Image className="h-4 w-4" />
+        <span className="sr-only">Generative Image</span>
       </Button>
     </div>
   );

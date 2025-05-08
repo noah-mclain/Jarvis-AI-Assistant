@@ -422,5 +422,25 @@
       "content": "Speech-to-text model would process: Transcribe the following audio file (provide a path to the audio file): ",
       "timestamp": "11:42 PM"
     }
+  ],
+  "new-chat-1746742572": [
+    {
+      "id": "welcome",
+      "role": "assistant",
+      "content": "How can I help you with this new conversation?",
+      "timestamp": "01:16 AM"
+    },
+    {
+      "id": "msg-1746742574",
+      "role": "user",
+      "content": "Generate an image of: ",
+      "timestamp": "01:16 AM"
+    },
+    {
+      "id": "msg-1746742575",
+      "role": "assistant",
+      "content": "I've received your query: 'Generate an image of: '. I'm not sure how to process this with the current configuration.",
+      "timestamp": "01:16 AM"
+    }
   ]
 }

@@ -1265,3 +1265,47 @@
 2025-05-08 23:42:42,927 - jarvis_app - INFO - Data saved successfully
 2025-05-08 23:42:42,927 - jarvis_app - INFO - Processed message in chat new-chat-1746736941
 2025-05-08 23:42:48,031 - jarvis_desktop - INFO - Application window closed
+2025-05-09 01:16:09,993 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static
+2025-05-09 01:16:09,994 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data
+2025-05-09 01:16:09,994 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-09 01:16:09,994 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-09 01:16:09,997 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/models
+2025-05-09 01:16:09,997 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-09 01:16:09,998 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-09 01:16:09,998 - jarvis_app - INFO - Loaded 11 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-09 01:16:09,998 - jarvis_app - INFO - Loaded messages for 11 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-09 01:16:10,001 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant
+2025-05-09 01:16:10,001 - jarvis_desktop - INFO - Operating system: posix - darwin
+2025-05-09 01:16:10,001 - jarvis_desktop - INFO - Setting up for macOS environment
+2025-05-09 01:16:10,002 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-09 01:16:10,002 - jarvis_desktop - INFO - Server is ready
+2025-05-09 01:16:10,005 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-09 01:16:10,005 - jarvis_desktop - INFO - Using 8 worker threads (detected 12 CPU cores)
+2025-05-09 01:16:10,005 - jarvis_desktop - INFO - Using macOS-optimized server configuration
+2025-05-09 01:16:10,008 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-09 01:16:11,005 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/dist/index.html
+2025-05-09 01:16:11,006 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-09 01:16:11,006 - jarvis_desktop - INFO - Using macOS-optimized window configuration
+2025-05-09 01:16:11,006 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-09 01:16:11,006 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-09 01:16:11,589 - jarvis_desktop - INFO - Application window shown
+2025-05-09 01:16:12,303 - jarvis_app - INFO - Serving path: 
+2025-05-09 01:16:12,304 - jarvis_app - INFO - Serving index.html for root path
+2025-05-09 01:16:12,334 - jarvis_app - INFO - Serving path: assets/index.C-7iNe0A.js
+2025-05-09 01:16:12,334 - jarvis_app - INFO - Serving asset: index.C-7iNe0A.js from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-09 01:16:12,334 - jarvis_app - INFO - Serving path: assets/index.Czty9hQT.css
+2025-05-09 01:16:12,334 - jarvis_app - INFO - Serving asset: index.Czty9hQT.css from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-09 01:16:12,392 - jarvis_desktop - INFO - Application window loaded
+2025-05-09 01:16:12,392 - jarvis_desktop - INFO - Setting up macOS-optimized offline mode
+2025-05-09 01:16:12,514 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-09 01:16:12,695 - jarvis_app - INFO - Data saved successfully
+2025-05-09 01:16:12,696 - jarvis_app - INFO - Created new chat: new-chat-1746742572
+2025-05-09 01:16:13,011 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-09 01:16:14,175 - jarvis_app - INFO - Sending query to Jarvis AI: Generate an image of: ...
+2025-05-09 01:16:14,175 - jarvis_assistant - INFO - Processing query: Generate an image of: 
+2025-05-09 01:16:14,175 - jarvis_assistant - INFO - Using specified model type: generativeImage
+2025-05-09 01:16:14,175 - jarvis_assistant - WARNING - Unknown model type: generativeImage, using fallback responses
+2025-05-09 01:16:14,175 - jarvis_app - INFO - Received response from Jarvis AI: I've received your query: 'Generate an image of: '...
+2025-05-09 01:16:14,176 - jarvis_app - INFO - Data saved successfully
+2025-05-09 01:16:14,177 - jarvis_app - INFO - Processed message in chat new-chat-1746742572
+2025-05-09 01:16:19,785 - jarvis_desktop - INFO - Application window closed
