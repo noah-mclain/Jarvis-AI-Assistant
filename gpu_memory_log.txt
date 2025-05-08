@@ -1,0 +1,1 @@
+timestamp, memory_used_mb, memory_total_mb, memory_used_pct, gpu_util_pct, temp_c, power_w

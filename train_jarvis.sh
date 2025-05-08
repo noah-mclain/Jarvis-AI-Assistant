@@ -858,12 +858,18 @@ def train_with_unsloth(args):
 
     # Note: FastLanguageModel.from_pretrained already sets trust_remote_code=True internally
     # so we don't need to pass it explicitly to avoid the duplicate parameter error
+    # Don't pass max_seq_length directly to avoid TypeError with LlamaForCausalLM
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=args.model_name,
-        max_seq_length=args.max_length,
         load_in_4bit=args.load_in_4bit,
-        load_in_8bit=args.load_in_8bit
+        load_in_8bit=args.load_in_8bit,
+        # Set device_map to auto to let Unsloth handle device placement
+        device_map="auto"
     )
+
+    # Set max sequence length after model is loaded
+    model.config.max_position_embeddings = args.max_length
+    tokenizer.model_max_length = args.max_length
 
     # Set up LoRA
     logger.info("Configuring LoRA adapters")
