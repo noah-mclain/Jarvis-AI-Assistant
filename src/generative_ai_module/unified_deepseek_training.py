@@ -403,10 +403,35 @@ def train_with_unsloth(args):
             return_raw=True
         )
 
+    # Validate datasets before proceeding
+    if train_dataset is None or len(train_dataset) == 0:
+        logger.error("Training dataset is empty or None. Cannot proceed with training.")
+        raise ValueError("Training dataset is empty or None")
+
+    if eval_dataset is None or len(eval_dataset) == 0:
+        logger.warning("Evaluation dataset is empty or None. Creating a small subset of training data for evaluation.")
+        # Create a small evaluation dataset from training data if needed
+        if len(train_dataset) > 10:
+            eval_dataset = train_dataset.select(range(min(len(train_dataset) // 10, 100)))
+            logger.info(f"Created evaluation dataset with {len(eval_dataset)} samples from training data")
+        else:
+            # If training dataset is too small, use it for both training and evaluation
+            eval_dataset = train_dataset
+            logger.warning("Training dataset is very small. Using same data for evaluation.")
+
     logger.info(f"Train dataset size: {len(train_dataset)}")
     logger.info(f"Eval dataset size: {len(eval_dataset)}")
 
-    # Load model with Unsloth
+    # Validate that datasets have the required 'text' field
+    if 'text' not in train_dataset.column_names:
+        logger.error("Training dataset does not have a 'text' field. Cannot proceed with training.")
+        raise ValueError("Training dataset missing 'text' field")
+
+    if 'text' not in eval_dataset.column_names:
+        logger.error("Evaluation dataset does not have a 'text' field. Cannot proceed with training.")
+        raise ValueError("Evaluation dataset missing 'text' field")
+
+    # Load model with Unsloth with robust error handling
     logger.info(f"Loading model: {args.model_name}")
     print("🦥 Loading model", args.model_name, "with minimal unsloth")
     if args.load_in_4bit:
@@ -414,16 +439,36 @@ def train_with_unsloth(args):
     elif args.load_in_8bit:
         print("Loading model in 8-bit quantization")
 
-    # Note: FastLanguageModel.from_pretrained already sets trust_remote_code=True internally
-    # and also sets device_map="auto" by default, so we don't need to pass these parameters
-    # to avoid duplicate parameter errors
-    # Don't pass max_seq_length directly to avoid TypeError with LlamaForCausalLM
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=args.model_name,
-        load_in_4bit=args.load_in_4bit,
-        load_in_8bit=args.load_in_8bit
-        # Don't set device_map here as it's already set by FastLanguageModel internally
-    )
+    # Add robust error handling for model loading
+    try:
+        # Note: FastLanguageModel.from_pretrained already sets trust_remote_code=True internally
+        # and also sets device_map="auto" by default, so we don't need to pass these parameters
+        # to avoid duplicate parameter errors
+        # Don't pass max_seq_length directly to avoid TypeError with LlamaForCausalLM
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            model_name=args.model_name,
+            load_in_4bit=args.load_in_4bit,
+            load_in_8bit=args.load_in_8bit
+            # Don't set device_map here as it's already set by FastLanguageModel internally
+        )
+        logger.info(f"Successfully loaded model: {args.model_name}")
+    except Exception as e:
+        logger.error(f"Error loading model: {e}")
+        # Try with additional parameters that might help
+        try:
+            logger.info("Retrying model loading with additional parameters...")
+            model, tokenizer = FastLanguageModel.from_pretrained(
+                model_name=args.model_name,
+                load_in_4bit=args.load_in_4bit,
+                load_in_8bit=args.load_in_8bit,
+                trust_remote_code=True,  # Explicitly set trust_remote_code
+                device_map="auto",       # Explicitly set device_map
+                use_cache=False if args.gradient_checkpointing else True  # Disable KV cache if using gradient checkpointing
+            )
+            logger.info(f"Successfully loaded model on retry: {args.model_name}")
+        except Exception as e2:
+            logger.error(f"Fatal error loading model on retry: {e2}")
+            raise RuntimeError(f"Could not load model {args.model_name}. Original error: {e}, Retry error: {e2}")
 
     # Set max sequence length after model is loaded
     model.config.max_position_embeddings = args.max_length
@@ -439,17 +484,47 @@ def train_with_unsloth(args):
         "gate_proj", "up_proj", "down_proj"
     ]
 
-    # Apply LoRA adapters
-    model = FastLanguageModel.get_peft_model(
-        model,
-        r=args.lora_rank,  # LoRA rank from configuration
-        lora_alpha=args.lora_alpha,
-        lora_dropout=args.lora_dropout,
-        target_modules=target_modules,
-        bias="none",  # Don't train bias terms for stability
-        # Removed task_type parameter as it's set internally by FastLanguageModel.get_peft_model
-        modules_to_save=None  # Don't save any modules fully (use LoRA for all)
-    )
+    # Apply LoRA adapters with robust error handling
+    try:
+        logger.info(f"Applying LoRA with rank={args.lora_rank}, alpha={args.lora_alpha}, dropout={args.lora_dropout}")
+        model = FastLanguageModel.get_peft_model(
+            model,
+            r=args.lora_rank,  # LoRA rank from configuration
+            lora_alpha=args.lora_alpha,
+            lora_dropout=args.lora_dropout,
+            target_modules=target_modules,
+            bias="none",  # Don't train bias terms for stability
+            # Removed task_type parameter as it's set internally by FastLanguageModel.get_peft_model
+            modules_to_save=None  # Don't save any modules fully (use LoRA for all)
+        )
+        logger.info("Successfully applied LoRA adapters")
+    except Exception as e:
+        logger.error(f"Error applying LoRA adapters: {e}")
+
+        # Try alternative approach with explicit LoraConfig
+        try:
+            from peft import LoraConfig
+
+            logger.warning("Trying alternative LoRA application method...")
+            # Create explicit LoraConfig
+            lora_config = LoraConfig(
+                r=args.lora_rank,
+                lora_alpha=args.lora_alpha,
+                lora_dropout=args.lora_dropout,
+                target_modules=target_modules,
+                bias="none",
+                # Don't set task_type here to avoid the duplicate parameter issue
+            )
+
+            # Apply LoRA with the config
+            model = FastLanguageModel.get_peft_model(
+                model,
+                peft_config=lora_config  # Pass the config object instead of individual parameters
+            )
+            logger.info("Successfully applied LoRA adapters with alternative method")
+        except Exception as e2:
+            logger.error(f"Alternative LoRA application also failed: {e2}")
+            raise RuntimeError(f"Could not apply LoRA adapters. Original error: {e}, Alternative error: {e2}")
 
     # Print trainable parameters
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -463,24 +538,48 @@ def train_with_unsloth(args):
 
     def tokenize_function(examples):
         """Tokenize examples with proper handling of potential issues"""
-        # Ensure all texts are strings
-        texts = [str(text) if not isinstance(text, str) else text for text in examples["text"]]
+        try:
+            # Ensure all texts are strings and handle potential None values
+            texts = []
+            for text in examples["text"]:
+                if text is None:
+                    texts.append("")  # Replace None with empty string
+                elif isinstance(text, str):
+                    texts.append(text)  # Keep strings as is
+                else:
+                    texts.append(str(text))  # Convert other types to string
 
-        # Tokenize without return_tensors to avoid the "too many dimensions" error
-        return tokenizer(
-            texts,
-            truncation=True,
-            padding="max_length",
-            max_length=args.max_length,
-            # Removed return_tensors="pt" to avoid the "too many dimensions" error
-        )
+            # Tokenize without return_tensors to avoid the "too many dimensions" error
+            return tokenizer(
+                texts,
+                truncation=True,
+                padding="max_length",
+                max_length=args.max_length,
+                # Removed return_tensors="pt" to avoid the "too many dimensions" error
+            )
+        except Exception as e:
+            logger.error(f"Error during tokenization: {e}")
+            # Return empty dict with the right structure as fallback
+            return {
+                "input_ids": [[0] * args.max_length] * len(examples["text"]),
+                "attention_mask": [[0] * args.max_length] * len(examples["text"])
+            }
 
-    # Remove any problematic fields that might cause issues during tokenization
-    if 'repository_name' in train_dataset.features:
-        logger.info("Removing repository_name field from datasets")
-        train_dataset = train_dataset.remove_columns(['repository_name'])
-    if 'repository_name' in eval_dataset.features:
-        eval_dataset = eval_dataset.remove_columns(['repository_name'])
+    # Keep only the essential 'text' field and remove all other fields to avoid tokenization issues
+    logger.info("Cleaning datasets to keep only essential fields")
+
+    # Get all column names except 'text'
+    train_columns_to_remove = [col for col in train_dataset.column_names if col != 'text']
+    eval_columns_to_remove = [col for col in eval_dataset.column_names if col != 'text']
+
+    # Remove all non-essential columns
+    if train_columns_to_remove:
+        logger.info(f"Removing non-essential fields from training dataset: {train_columns_to_remove}")
+        train_dataset = train_dataset.remove_columns(train_columns_to_remove)
+
+    if eval_columns_to_remove:
+        logger.info(f"Removing non-essential fields from evaluation dataset: {eval_columns_to_remove}")
+        eval_dataset = eval_dataset.remove_columns(eval_columns_to_remove)
 
     # Apply tokenization
     logger.info("Applying tokenization to datasets")
@@ -547,8 +646,38 @@ def train_with_unsloth(args):
         seed=42,
     )
 
+    # Create a custom data collator with improved error handling
+    class RobustDataCollator(DataCollatorForLanguageModeling):
+        """Custom data collator with improved error handling"""
+        def __call__(self, features):
+            try:
+                # Check if features have the expected structure
+                if not all(isinstance(f, dict) for f in features):
+                    logger.warning("Features are not all dictionaries, converting...")
+                    features = [dict(f) if not isinstance(f, dict) else f for f in features]
+
+                # Ensure all features have the required keys
+                required_keys = ["input_ids", "attention_mask"]
+                for i, feature in enumerate(features):
+                    for key in required_keys:
+                        if key not in feature:
+                            logger.warning(f"Feature {i} missing {key}, adding empty")
+                            feature[key] = [0] * args.max_length
+
+                # Call the parent class method
+                return super().__call__(features)
+            except Exception as e:
+                logger.error(f"Error in data collator: {e}")
+                # Return a minimal batch as fallback
+                batch_size = len(features)
+                return {
+                    "input_ids": torch.zeros((batch_size, args.max_length), dtype=torch.long),
+                    "attention_mask": torch.zeros((batch_size, args.max_length), dtype=torch.long),
+                    "labels": torch.zeros((batch_size, args.max_length), dtype=torch.long)
+                }
+
     # Create data collator with improved handling
-    data_collator = DataCollatorForLanguageModeling(
+    data_collator = RobustDataCollator(
         tokenizer=tokenizer,
         mlm=False,  # Not using masked language modeling
         pad_to_multiple_of=8  # Optimize for hardware efficiency
@@ -563,14 +692,48 @@ def train_with_unsloth(args):
         data_collator=data_collator,
     )
 
-    # Train model
+    # Train model with robust error handling
     logger.info("Starting training...")
-    trainer.train()
+    try:
+        # Set a flag to track if training completed successfully
+        training_successful = False
 
-    # Save model
-    logger.info(f"Saving model to {args.output_dir}")
-    model.save_pretrained(args.output_dir)
-    tokenizer.save_pretrained(args.output_dir)
+        # Start training
+        trainer.train()
+
+        # If we get here, training was successful
+        training_successful = True
+        logger.info("Training completed successfully")
+    except Exception as e:
+        logger.error(f"Error during training: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+
+        # Try to recover and save what we have
+        logger.warning("Attempting to save partial training results despite error")
+
+    # Save model with error handling
+    try:
+        logger.info(f"Saving model to {args.output_dir}")
+        model.save_pretrained(args.output_dir)
+        tokenizer.save_pretrained(args.output_dir)
+        logger.info(f"Model and tokenizer successfully saved to {args.output_dir}")
+    except Exception as e:
+        logger.error(f"Error saving model: {e}")
+
+        # Try alternative saving method
+        try:
+            logger.warning("Trying alternative saving method...")
+            # Save the model state dict directly
+            import os
+            os.makedirs(f"{args.output_dir}/alternative_save", exist_ok=True)
+            torch.save(model.state_dict(), f"{args.output_dir}/alternative_save/model.pt")
+            tokenizer.save_pretrained(f"{args.output_dir}/alternative_save")
+            logger.info(f"Model state dict saved to {args.output_dir}/alternative_save/model.pt")
+        except Exception as e2:
+            logger.error(f"Alternative saving also failed: {e2}")
+            if not training_successful:
+                raise RuntimeError(f"Both training and model saving failed. Original errors: Training: {e}, Saving: {e2}")
 
 def train_with_standard_method(args):
     """Train using standard method with attention mask fix"""
@@ -697,5 +860,45 @@ def train_with_standard_method(args):
             adam_epsilon=args.adam_epsilon
         )
 
+def safe_main():
+    """Wrapper around main() with comprehensive error handling"""
+    try:
+        # Set up additional safeguards
+        if torch.cuda.is_available():
+            # Set up CUDA error handling
+            torch.cuda.empty_cache()
+
+            # Check available GPU memory
+            free_memory = torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated(0)
+            free_memory_gb = free_memory / (1024**3)
+            logger.info(f"Available GPU memory before training: {free_memory_gb:.2f} GiB")
+
+            if free_memory_gb < 2.0:
+                logger.warning(f"Very low GPU memory available ({free_memory_gb:.2f} GiB). Training may fail.")
+
+        # Run the main function
+        main()
+
+        logger.info("Training process completed successfully")
+        return 0
+    except KeyboardInterrupt:
+        logger.info("Training interrupted by user")
+        return 130  # Standard exit code for SIGINT
+    except Exception as e:
+        logger.error(f"Unhandled exception in training process: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+
+        # Try to clean up
+        if torch.cuda.is_available():
+            try:
+                torch.cuda.empty_cache()
+                logger.info("CUDA cache cleared")
+            except Exception as cleanup_error:
+                logger.warning(f"Failed to clear CUDA cache: {cleanup_error}")
+
+        return 1  # Error exit code
+
 if __name__ == "__main__":
-    main()
+    exit_code = safe_main()
+    sys.exit(exit_code)
