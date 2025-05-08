@@ -15,8 +15,20 @@ import time
 import torch
 import argparse
 import logging
+import multiprocessing
 from datetime import datetime
 from pathlib import Path
+
+# Set multiprocessing start method to 'spawn' to avoid CUDA issues
+# This must be done at the beginning of the script before any other multiprocessing code
+if __name__ == "__main__":
+    # Only set the start method in the main process
+    try:
+        multiprocessing.set_start_method('spawn', force=True)
+        print("Multiprocessing start method set to 'spawn'")
+    except RuntimeError:
+        # If it's already set, this will raise a RuntimeError
+        print("Multiprocessing start method already set to:", multiprocessing.get_start_method())
 
 # Configure logging
 logging.basicConfig(
@@ -581,13 +593,29 @@ def train_with_unsloth(args):
         logger.info(f"Removing non-essential fields from evaluation dataset: {eval_columns_to_remove}")
         eval_dataset = eval_dataset.remove_columns(eval_columns_to_remove)
 
-    # Apply tokenization
-    logger.info("Applying tokenization to datasets")
-    train_dataset = train_dataset.map(tokenize_function, batched=True)
-    eval_dataset = eval_dataset.map(tokenize_function, batched=True)
+    # Apply tokenization and remove the 'text' field to avoid nesting issues
+    logger.info("Applying tokenization to datasets and removing 'text' field")
+    train_dataset = train_dataset.map(tokenize_function, batched=True, remove_columns=['text'])
+    eval_dataset = eval_dataset.map(tokenize_function, batched=True, remove_columns=['text'])
 
-    # Set up training arguments with optimized parameters
+    # Verify that the 'text' field is removed
+    if 'text' in train_dataset.column_names:
+        logger.warning("'text' field still present in training dataset after tokenization, removing it explicitly")
+        train_dataset = train_dataset.remove_columns(['text'])
+
+    if 'text' in eval_dataset.column_names:
+        logger.warning("'text' field still present in evaluation dataset after tokenization, removing it explicitly")
+        eval_dataset = eval_dataset.remove_columns(['text'])
+
+    # Set up training arguments with optimized parameters and multiprocessing safeguards
     logger.info(f"Setting up training arguments with batch size: {args.batch_size}, gradient accumulation: {args.gradient_accumulation_steps}")
+
+    # Adjust number of workers for multiprocessing safety
+    # When using 'spawn' method with CUDA, it's safer to use fewer workers or even 0
+    safe_num_workers = 0  # Set to 0 to avoid multiprocessing issues with CUDA
+    if args.num_workers > 0:
+        logger.warning(f"Reducing dataloader workers from {args.num_workers} to {safe_num_workers} to avoid CUDA multiprocessing issues")
+
     training_args = TrainingArguments(
         output_dir=args.output_dir,
         num_train_epochs=args.epochs,
@@ -618,10 +646,10 @@ def train_with_unsloth(args):
         adam_beta2=args.adam_beta2,
         adam_epsilon=args.adam_epsilon,
 
-        # Data loading optimizations
+        # Data loading optimizations - adjusted for multiprocessing safety
         remove_unused_columns=False,
-        dataloader_num_workers=args.num_workers,
-        dataloader_pin_memory=True,
+        dataloader_num_workers=safe_num_workers,  # Use 0 workers to avoid multiprocessing issues
+        dataloader_pin_memory=False,  # Set to False to avoid potential CUDA issues
         group_by_length=True,
 
         # Additional memory and performance optimizations
@@ -644,6 +672,10 @@ def train_with_unsloth(args):
 
         # Seed for reproducibility
         seed=42,
+
+        # Additional multiprocessing safety settings
+        dataloader_prefetch_factor=2,  # Smaller prefetch factor
+        dataloader_drop_last=False,    # Don't drop last batch
     )
 
     # Create a custom data collator with improved error handling
@@ -656,6 +688,12 @@ def train_with_unsloth(args):
                     logger.warning("Features are not all dictionaries, converting...")
                     features = [dict(f) if not isinstance(f, dict) else f for f in features]
 
+                # Remove 'text' field if present - this is causing the nesting issue
+                for feature in features:
+                    if 'text' in feature:
+                        logger.warning("Removing 'text' field from feature to avoid nesting issues")
+                        del feature['text']
+
                 # Ensure all features have the required keys
                 required_keys = ["input_ids", "attention_mask"]
                 for i, feature in enumerate(features):
@@ -664,16 +702,22 @@ def train_with_unsloth(args):
                             logger.warning(f"Feature {i} missing {key}, adding empty")
                             feature[key] = [0] * args.max_length
 
+                        # Ensure input_ids and attention_mask are lists of integers, not nested lists
+                        if key in feature and isinstance(feature[key], list) and feature[key] and isinstance(feature[key][0], list):
+                            logger.warning(f"Feature {i} has nested {key}, flattening")
+                            # Take the first element if it's a nested list
+                            feature[key] = feature[key][0]
+
                 # Call the parent class method
                 return super().__call__(features)
             except Exception as e:
                 logger.error(f"Error in data collator: {e}")
-                # Return a minimal batch as fallback
+                # Create tensors on CPU to avoid CUDA issues in worker processes
                 batch_size = len(features)
                 return {
-                    "input_ids": torch.zeros((batch_size, args.max_length), dtype=torch.long),
-                    "attention_mask": torch.zeros((batch_size, args.max_length), dtype=torch.long),
-                    "labels": torch.zeros((batch_size, args.max_length), dtype=torch.long)
+                    "input_ids": torch.zeros((batch_size, args.max_length), dtype=torch.long, device="cpu"),
+                    "attention_mask": torch.zeros((batch_size, args.max_length), dtype=torch.long, device="cpu"),
+                    "labels": torch.zeros((batch_size, args.max_length), dtype=torch.long, device="cpu")
                 }
 
     # Create data collator with improved handling
