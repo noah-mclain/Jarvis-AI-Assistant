@@ -497,6 +497,16 @@ chmod +x /notebooks/src/generative_ai_module/fix_jarvis_imports.py
 ./setup/install_spacy_isolated.sh
 ./setup/fix_spacy_for_paperspace.sh
 
+# Apply attention mask fix for DeepSeek models
+echo "Applying attention mask fix for DeepSeek models..."
+chmod +x setup/fix_transformers_attention_mask.py
+python setup/fix_transformers_attention_mask.py
+if [ $? -ne 0 ]; then
+    echo "⚠️ Warning: Attention mask fix script failed, but continuing anyway..."
+else
+    echo "✅ Attention mask fix applied successfully"
+fi
+
 # Apply fixes to key files
 cd /notebooks
 python src/generative_ai_module/fix_jarvis_imports.py --force src/generative_ai_module/train_models.py

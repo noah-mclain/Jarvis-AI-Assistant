@@ -70,6 +70,51 @@ def apply_attention_mask_fix():
             if major > 4 or (major == 4 and minor >= 28):
                 logger.info(f"Applying device mismatch fix for transformers {transformers_version}")
 
+                # Fix the _prepare_4d_causal_attention_mask_for_sdpa function
+                from transformers.modeling_attn_mask_utils import _prepare_4d_causal_attention_mask_for_sdpa
+
+                # Store the original function
+                original_prepare_4d = _prepare_4d_causal_attention_mask_for_sdpa
+
+                # Define patched function
+                def patched_prepare_4d(
+                    attention_mask,
+                    input_shape,
+                    inputs_embeds,
+                    past_key_values_length,
+                    sliding_window,
+                    dtype,
+                ):
+                    """
+                    Patched version that ensures attention_mask is 2D before processing.
+                    """
+                    import torch
+
+                    # Fix attention_mask shape if needed
+                    if attention_mask is not None and attention_mask.dim() > 2:
+                        # Get the batch size and sequence length
+                        batch_size = attention_mask.size(0)
+                        seq_length = attention_mask.size(-1)
+
+                        # Reshape to 2D [batch_size, seq_length]
+                        attention_mask = attention_mask.view(batch_size, seq_length)
+                        logger.info(f"Reshaped attention mask from >2D to 2D: {attention_mask.shape}")
+
+                    # Call the original function with the fixed mask
+                    return original_prepare_4d(
+                        attention_mask,
+                        input_shape,
+                        inputs_embeds,
+                        past_key_values_length,
+                        sliding_window,
+                        dtype,
+                    )
+
+                # Apply the patch
+                import transformers.modeling_attn_mask_utils
+                transformers.modeling_attn_mask_utils._prepare_4d_causal_attention_mask_for_sdpa = patched_prepare_4d
+                logger.info("Successfully patched _prepare_4d_causal_attention_mask_for_sdpa")
+
                 # Fix the _unmask_unattended function that causes device mismatch
                 from transformers.modeling_attn_mask_utils import AttentionMaskConverter
 
@@ -81,6 +126,7 @@ def apply_attention_mask_fix():
                     attention_mask: torch.Tensor,
                     indices_k: Optional[torch.LongTensor] = None,
                     indices_q: Optional[torch.LongTensor] = None,
+                    unmasked_value: Optional[float] = None,
                 ):
                     """
                     Patched version of _unmask_unattended that keeps tensors on the same device.
