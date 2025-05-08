@@ -18,6 +18,7 @@ import logging
 import multiprocessing
 from datetime import datetime
 from pathlib import Path
+from typing import Optional, List, Dict, Any, Union, Tuple
 
 # Set multiprocessing start method to 'spawn' to avoid CUDA issues
 # This must be done at the beginning of the script before any other multiprocessing code
@@ -1001,13 +1002,55 @@ def train_with_unsloth(args):
                         inputs[k] = v.to(device)
 
                 # Forward pass with all inputs on the correct device
-                with torch.cuda.amp.autocast(enabled=True):  # Use mixed precision for better performance
-                    # Forward pass
-                    outputs = model(
-                        input_ids=inputs["input_ids"],
-                        attention_mask=inputs["attention_mask"] if "attention_mask" in inputs else None,
-                        labels=inputs["labels"]
-                    )
+                try:
+                    with torch.cuda.amp.autocast(enabled=True):  # Use mixed precision for better performance
+                        # Forward pass
+                        outputs = model(
+                            input_ids=inputs["input_ids"],
+                            attention_mask=inputs["attention_mask"] if "attention_mask" in inputs else None,
+                            labels=inputs["labels"]
+                        )
+                except Exception as forward_error:
+                    logger.error(f"Error in forward pass: {forward_error}")
+
+                    # Check if it's an attention mask issue
+                    if "too many values to unpack" in str(forward_error) and "attention_mask" in inputs:
+                        logger.info("Detected attention mask issue in compute_loss, trying to fix...")
+
+                        # Fix attention mask shape if needed
+                        if inputs["attention_mask"].dim() > 2:
+                            batch_size = inputs["attention_mask"].size(0)
+                            seq_length = inputs["attention_mask"].size(-1)
+                            inputs["attention_mask"] = inputs["attention_mask"].view(batch_size, seq_length)
+                            logger.info(f"Reshaped attention mask to {inputs['attention_mask'].shape}")
+
+                        # Try again with fixed attention mask
+                        try:
+                            outputs = model(
+                                input_ids=inputs["input_ids"],
+                                attention_mask=inputs["attention_mask"],
+                                labels=inputs["labels"]
+                            )
+                            logger.info("Forward pass succeeded with fixed attention mask")
+                        except Exception as e2:
+                            # Try without attention mask as last resort
+                            logger.error(f"Forward pass with fixed attention mask also failed: {e2}")
+                            logger.info("Trying forward pass without attention mask")
+                            outputs = model(
+                                input_ids=inputs["input_ids"],
+                                labels=inputs["labels"],
+                                use_cache=False,
+                                return_dict=True
+                            )
+                    else:
+                        # If it's not an attention mask issue, try without it
+                        logger.info("Trying forward pass without attention mask")
+                        outputs = model(
+                            input_ids=inputs["input_ids"],
+                            labels=inputs["labels"],
+                            use_cache=False,
+                            return_dict=True
+                        )
 
                 # Get the loss from the model outputs
                 if hasattr(outputs, "loss"):
@@ -1358,9 +1401,19 @@ def train_with_unsloth(args):
                 logger.info(f"Explicitly moving input_ids from {new_kwargs['input_ids'].device} to {device}")
                 new_kwargs["input_ids"] = new_kwargs["input_ids"].to(device)
 
-            if "attention_mask" in new_kwargs and new_kwargs["attention_mask"].device != device:
-                logger.info(f"Explicitly moving attention_mask from {new_kwargs['attention_mask'].device} to {device}")
-                new_kwargs["attention_mask"] = new_kwargs["attention_mask"].to(device)
+            if "attention_mask" in new_kwargs:
+                # First ensure it's on the correct device
+                if new_kwargs["attention_mask"].device != device:
+                    logger.info(f"Explicitly moving attention_mask from {new_kwargs['attention_mask'].device} to {device}")
+                    new_kwargs["attention_mask"] = new_kwargs["attention_mask"].to(device)
+
+                # Fix for attention mask shape issue - ensure it's 2D [batch_size, seq_length]
+                attention_mask = new_kwargs["attention_mask"]
+                if attention_mask.dim() > 2:
+                    logger.info(f"Reshaping attention mask from {attention_mask.shape} to 2D")
+                    batch_size = attention_mask.size(0)
+                    seq_length = attention_mask.size(-1)
+                    new_kwargs["attention_mask"] = attention_mask.view(batch_size, seq_length)
 
             if "labels" in new_kwargs and new_kwargs["labels"].device != device:
                 logger.info(f"Explicitly moving labels from {new_kwargs['labels'].device} to {device}")
@@ -1387,16 +1440,37 @@ def train_with_unsloth(args):
                     attention_mask = new_kwargs.get("attention_mask", None)
                     labels = new_kwargs.get("labels", None)
 
-                    # Call forward with explicit arguments
+                    # If we have an attention mask issue, try to fix it or create a new one
+                    if "too many values to unpack" in str(e) and input_ids is not None:
+                        logger.info("Detected attention mask shape issue, creating a new causal attention mask")
+                        batch_size, seq_length = input_ids.shape
+                        # Create a simple causal attention mask (all 1s)
+                        attention_mask = torch.ones(batch_size, seq_length, device=device)
+
+                    # Call forward with explicit arguments and minimal parameters
                     outputs = original_forward(
                         input_ids=input_ids,
                         attention_mask=attention_mask,
-                        labels=labels
+                        labels=labels,
+                        use_cache=False,  # Disable cache to avoid issues
+                        return_dict=True   # Ensure we get a proper return object
                     )
                 except Exception as e2:
                     logger.error(f"Direct forward call also failed: {e2}")
-                    # Create dummy outputs as last resort
-                    raise RuntimeError(f"Both forward methods failed: {e}, {e2}")
+
+                    # Last resort: try without attention mask
+                    try:
+                        logger.info("Trying forward call without attention mask")
+                        outputs = original_forward(
+                            input_ids=input_ids,
+                            labels=labels,
+                            use_cache=False,
+                            return_dict=True
+                        )
+                    except Exception as e3:
+                        logger.error(f"Forward call without attention mask also failed: {e3}")
+                        # Create dummy outputs as last resort
+                        raise RuntimeError(f"All forward methods failed: {e}, {e2}, {e3}")
 
             # Ensure all output tensors are on the correct device
             if isinstance(outputs, torch.Tensor) and outputs.device != device:
