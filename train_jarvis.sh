@@ -889,12 +889,17 @@ def train_with_unsloth(args):
     tokenizer.pad_token = tokenizer.eos_token
 
     def tokenize_function(examples):
+        """Tokenize examples with proper handling of potential issues"""
+        # Ensure all texts are strings
+        texts = [str(text) if not isinstance(text, str) else text for text in examples["text"]]
+
+        # Tokenize without return_tensors to avoid the "too many dimensions" error
         return tokenizer(
-            examples["text"],
+            texts,
             truncation=True,
             padding="max_length",
             max_length=args.max_length,
-            return_tensors="pt"
+            return_tensors=None
         )
 
     train_dataset = train_dataset.map(tokenize_function, batched=True)
@@ -925,8 +930,33 @@ def train_with_unsloth(args):
         gradient_checkpointing=True,
     )
 
-    # Create data collator
-    data_collator = DataCollatorForLanguageModeling(
+    # Create a custom data collator that handles potential issues
+    class SafeDataCollator(DataCollatorForLanguageModeling):
+        def __call__(self, features):
+            try:
+                # Try the standard collation
+                return super().__call__(features)
+            except ValueError as e:
+                # If there's an error, log it and try a more robust approach
+                logger.warning(f"Data collation error: {e}")
+
+                # Convert all features to the same format
+                batch = {}
+                for key in features[0].keys():
+                    if key in ["input_ids", "attention_mask", "labels"]:
+                        batch[key] = []
+                        for feature in features:
+                            # Ensure the feature is a list
+                            if isinstance(feature[key], list):
+                                batch[key].append(feature[key])
+                            else:
+                                batch[key].append([feature[key]])
+
+                # Pad the sequences
+                return self.tokenizer.pad(batch, return_tensors="pt")
+
+    # Create data collator with custom handling
+    data_collator = SafeDataCollator(
         tokenizer=tokenizer,
         mlm=False
     )
