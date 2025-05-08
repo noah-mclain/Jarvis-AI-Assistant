@@ -499,8 +499,19 @@ chmod +x /notebooks/src/generative_ai_module/fix_jarvis_imports.py
 
 # Apply attention mask fix for DeepSeek models
 echo "Applying attention mask fix for DeepSeek models..."
+
+# Make the scripts executable
 chmod +x setup/fix_transformers_attention_mask.py
+chmod +x setup/fix_attention_mask_params.py
+
+# Run the general fix script first
+echo "Applying general attention mask fixes..."
 python setup/fix_transformers_attention_mask.py
+
+# Run the parameter-specific fix script
+echo "Applying parameter-specific attention mask fixes..."
+python setup/fix_attention_mask_params.py
+
 if [ $? -ne 0 ]; then
     echo "⚠️ Warning: Attention mask fix script failed, but continuing anyway..."
 else

@@ -158,10 +158,19 @@ fi
 # Apply attention mask fix for DeepSeek models
 if [ "$MODEL_TYPE" = "code" ]; then
     echo "Applying attention mask fix for DeepSeek model..."
-    # Make the script executable
+
+    # Make the scripts executable
     chmod +x setup/fix_transformers_attention_mask.py
-    # Run the fix script
+    chmod +x setup/fix_attention_mask_params.py
+
+    # Run the general fix script first
+    echo "Applying general attention mask fixes..."
     python setup/fix_transformers_attention_mask.py
+
+    # Run the parameter-specific fix script
+    echo "Applying parameter-specific attention mask fixes..."
+    python setup/fix_attention_mask_params.py
+
     if [ $? -ne 0 ]; then
         echo "⚠️ Warning: Attention mask fix script failed, but continuing anyway..."
     else

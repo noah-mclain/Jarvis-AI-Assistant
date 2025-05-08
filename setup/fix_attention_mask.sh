@@ -7,12 +7,17 @@ echo "This script applies fixes for the 'too many values to unpack (expected 2)'
 echo "that occurs with DeepSeek and LLaMA models during training."
 echo "========================================"
 
-# Make the Python fix script executable
+# Make the Python fix scripts executable
 chmod +x setup/fix_transformers_attention_mask.py
+chmod +x setup/fix_attention_mask_params.py
 
-# Run the fix script
-echo "Applying attention mask fixes..."
+# Run the general fix script first
+echo "Applying general attention mask fixes..."
 python setup/fix_transformers_attention_mask.py
+
+# Run the parameter-specific fix script
+echo "Applying parameter-specific attention mask fixes..."
+python setup/fix_attention_mask_params.py
 
 # Check if the fix was successful
 if [ $? -ne 0 ]; then

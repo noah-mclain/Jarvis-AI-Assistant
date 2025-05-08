@@ -55,6 +55,30 @@ except ImportError:
 def apply_attention_mask_fix():
     """Apply the attention mask fix for DeepSeek models"""
     try:
+        # Use the standalone fix script if available
+        try:
+            import sys
+            import os
+
+            # Add the setup directory to sys.path
+            setup_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "setup")
+            if setup_dir not in sys.path:
+                sys.path.insert(0, setup_dir)
+
+            # Import and run the fix function
+            from fix_transformers_attention_mask import fix_transformers_attention_mask
+            success = fix_transformers_attention_mask()
+
+            if success:
+                logger.info("Successfully applied attention mask fixes using standalone script")
+                return True
+            else:
+                logger.warning("Standalone fix script failed, falling back to built-in fixes")
+        except ImportError as e:
+            logger.warning(f"Could not import standalone fix script: {e}, falling back to built-in fixes")
+        except Exception as e:
+            logger.warning(f"Error running standalone fix script: {e}, falling back to built-in fixes")
+
         # Check transformers version to apply the appropriate fix
         from transformers import __version__ as transformers_version
 
@@ -76,19 +100,24 @@ def apply_attention_mask_fix():
                 # Store the original function
                 original_prepare_4d = _prepare_4d_causal_attention_mask_for_sdpa
 
-                # Define patched function
-                def patched_prepare_4d(
-                    attention_mask,
-                    input_shape,
-                    inputs_embeds,
-                    past_key_values_length,
-                    sliding_window,
-                    dtype,
-                ):
+                # Get the signature of the original function to ensure we match it
+                import inspect
+                sig = inspect.signature(original_prepare_4d)
+                param_names = list(sig.parameters.keys())
+                logger.info(f"Original function signature: {param_names}")
+
+                # Define patched function with a flexible signature to handle different versions
+                def patched_prepare_4d(*args, **kwargs):
                     """
                     Patched version that ensures attention_mask is 2D before processing.
+                    Handles different function signatures across transformers versions.
                     """
-                    import torch
+                    # Extract attention_mask from args or kwargs
+                    attention_mask = None
+                    if len(args) > 0:
+                        attention_mask = args[0]
+                    elif 'attention_mask' in kwargs:
+                        attention_mask = kwargs['attention_mask']
 
                     # Fix attention_mask shape if needed
                     if attention_mask is not None and attention_mask.dim() > 2:
@@ -100,15 +129,34 @@ def apply_attention_mask_fix():
                         attention_mask = attention_mask.view(batch_size, seq_length)
                         logger.info(f"Reshaped attention mask from >2D to 2D: {attention_mask.shape}")
 
+                        # Update args or kwargs with the fixed mask
+                        if len(args) > 0:
+                            args_list = list(args)
+                            args_list[0] = attention_mask
+                            args = tuple(args_list)
+                        elif 'attention_mask' in kwargs:
+                            kwargs['attention_mask'] = attention_mask
+
                     # Call the original function with the fixed mask
-                    return original_prepare_4d(
-                        attention_mask,
-                        input_shape,
-                        inputs_embeds,
-                        past_key_values_length,
-                        sliding_window,
-                        dtype,
-                    )
+                    try:
+                        return original_prepare_4d(*args, **kwargs)
+                    except TypeError as e:
+                        # If we get a TypeError, it might be due to missing arguments
+                        error_msg = str(e)
+                        logger.warning(f"Error calling original function: {error_msg}")
+
+                        # Check if we're missing sliding_window or dtype
+                        if "missing required positional argument: 'sliding_window'" in error_msg and 'sliding_window' not in kwargs:
+                            kwargs['sliding_window'] = None
+                            logger.info("Added missing sliding_window=None parameter")
+
+                        if "missing required positional argument: 'dtype'" in error_msg and 'dtype' not in kwargs:
+                            import torch
+                            kwargs['dtype'] = torch.float32
+                            logger.info("Added missing dtype=torch.float32 parameter")
+
+                        # Try again with the updated kwargs
+                        return original_prepare_4d(*args, **kwargs)
 
                 # Apply the patch
                 import transformers.modeling_attn_mask_utils
@@ -121,19 +169,55 @@ def apply_attention_mask_fix():
                 # Store the original function
                 original_unmask_unattended = AttentionMaskConverter._unmask_unattended
 
+                # Get the signature of the original function to ensure we match it
+                try:
+                    sig = inspect.signature(AttentionMaskConverter._unmask_unattended)
+                    param_names = list(sig.parameters.keys())
+                    logger.info(f"Original _unmask_unattended signature: {param_names}")
+                except Exception as e:
+                    logger.warning(f"Could not get signature of _unmask_unattended: {e}")
+                    param_names = []
+
                 @staticmethod
-                def patched_unmask_unattended(
-                    attention_mask: torch.Tensor,
-                    indices_k: Optional[torch.LongTensor] = None,
-                    indices_q: Optional[torch.LongTensor] = None,
-                    unmasked_value: Optional[float] = None,
-                ):
+                def patched_unmask_unattended(*args, **kwargs):
                     """
                     Patched version of _unmask_unattended that keeps tensors on the same device.
 
                     The original function has a call to .cpu() which causes device mismatch errors.
                     This patch ensures all operations happen on the same device.
                     """
+                    import torch
+
+                    # Extract attention_mask from args or kwargs
+                    attention_mask = None
+                    if len(args) > 0:
+                        attention_mask = args[0]
+                    elif 'attention_mask' in kwargs:
+                        attention_mask = kwargs['attention_mask']
+                    elif len(param_names) > 0 and param_names[0] in kwargs:
+                        attention_mask = kwargs[param_names[0]]
+
+                    if attention_mask is None:
+                        raise ValueError("Could not find attention_mask in arguments")
+
+                    # Extract indices_k and indices_q from args or kwargs
+                    indices_k = None
+                    indices_q = None
+
+                    if len(args) > 1:
+                        indices_k = args[1]
+                    elif 'indices_k' in kwargs:
+                        indices_k = kwargs['indices_k']
+                    elif len(param_names) > 1 and param_names[1] in kwargs:
+                        indices_k = kwargs[param_names[1]]
+
+                    if len(args) > 2:
+                        indices_q = args[2]
+                    elif 'indices_q' in kwargs:
+                        indices_q = kwargs['indices_q']
+                    elif len(param_names) > 2 and param_names[2] in kwargs:
+                        indices_q = kwargs[param_names[2]]
+
                     # Get the device of the attention mask
                     device = attention_mask.device
 
