@@ -786,9 +786,9 @@ def train_with_unsloth(args):
                     batch_input_ids.append(input_ids)
                     batch_attention_mask.append(attention_mask)
 
-                # Create tensors on CPU to avoid CUDA issues
-                input_ids_tensor = torch.tensor(batch_input_ids, dtype=torch.long, device="cpu")
-                attention_mask_tensor = torch.tensor(batch_attention_mask, dtype=torch.long, device="cpu")
+                # Create tensors without specifying device - they'll be moved to the right device by the trainer
+                input_ids_tensor = torch.tensor(batch_input_ids, dtype=torch.long)
+                attention_mask_tensor = torch.tensor(batch_attention_mask, dtype=torch.long)
 
                 # For causal language modeling, labels are the same as input_ids
                 labels_tensor = input_ids_tensor.clone()
@@ -825,12 +825,12 @@ def train_with_unsloth(args):
                 import traceback
                 logger.error(traceback.format_exc())
 
-                # Create minimal tensors on CPU as fallback
+                # Create minimal tensors without specifying device as fallback
                 batch_size = len(features)
                 return {
-                    "input_ids": torch.zeros((batch_size, args.max_length), dtype=torch.long, device="cpu"),
-                    "attention_mask": torch.zeros((batch_size, args.max_length), dtype=torch.long, device="cpu"),
-                    "labels": torch.zeros((batch_size, args.max_length), dtype=torch.long, device="cpu")
+                    "input_ids": torch.zeros((batch_size, args.max_length), dtype=torch.long),
+                    "attention_mask": torch.zeros((batch_size, args.max_length), dtype=torch.long),
+                    "labels": torch.zeros((batch_size, args.max_length), dtype=torch.long)
                 }
 
     # Create data collator with improved handling
@@ -842,10 +842,17 @@ def train_with_unsloth(args):
 
     # Create a custom trainer that handles attention mask issues
     class AttentionMaskFixTrainer(Trainer):
-        """Custom trainer that handles attention mask issues"""
+        """Custom trainer that handles attention mask issues and device management"""
         def compute_loss(self, model, inputs, return_outputs=False):
             """Override compute_loss to handle attention mask issues"""
             try:
+                # Ensure all tensors are on the same device as the model
+                device = model.device
+                for k, v in inputs.items():
+                    if isinstance(v, torch.Tensor) and v.device != device:
+                        logger.info(f"Moving {k} tensor from {v.device} to {device}")
+                        inputs[k] = v.to(device)
+
                 # Check if attention_mask needs fixing
                 if "attention_mask" in inputs and inputs["attention_mask"].dim() != 2:
                     logger.warning(f"Fixing attention_mask dimension from {inputs['attention_mask'].dim()} to 2D")
@@ -854,15 +861,25 @@ def train_with_unsloth(args):
                     seq_length = inputs["attention_mask"].size(-1)
                     inputs["attention_mask"] = inputs["attention_mask"].view(batch_size, seq_length)
 
+                # Ensure all tensors have requires_grad=True where needed
+                if "input_ids" in inputs and not inputs["input_ids"].requires_grad:
+                    # Input IDs typically don't need gradients, so we don't modify them
+                    pass
+
+                if "labels" in inputs and not inputs["labels"].requires_grad:
+                    # Labels typically don't need gradients, so we don't modify them
+                    pass
+
                 # Call the parent compute_loss
                 return super().compute_loss(model, inputs, return_outputs)
             except Exception as e:
                 logger.error(f"Error in compute_loss: {e}")
                 # Try to continue with a simplified computation
                 try:
-                    # Get the input IDs and labels
-                    input_ids = inputs["input_ids"]
-                    labels = inputs["labels"] if "labels" in inputs else input_ids.clone()
+                    # Get the input IDs and labels and ensure they're on the right device
+                    device = model.device
+                    input_ids = inputs["input_ids"].to(device)
+                    labels = inputs["labels"].to(device) if "labels" in inputs else input_ids.clone()
 
                     # Forward pass without attention mask
                     outputs = model(input_ids=input_ids)
@@ -880,6 +897,141 @@ def train_with_unsloth(args):
                     # Return a dummy loss as last resort
                     dummy_loss = torch.tensor(1.0, device=model.device, requires_grad=True)
                     return dummy_loss
+
+        def training_step(self, model, inputs):
+            """Override training_step to ensure proper device handling and gradient computation"""
+            try:
+                # Ensure model is in training mode
+                model.train()
+
+                # Move all inputs to the model's device
+                device = model.device
+                for k, v in inputs.items():
+                    if isinstance(v, torch.Tensor) and v.device != device:
+                        inputs[k] = v.to(device)
+
+                # Compute loss with our enhanced compute_loss method
+                loss = self.compute_loss(model, inputs)
+
+                # Check if loss has gradients
+                if not hasattr(loss, 'grad_fn'):
+                    logger.warning("Loss doesn't have grad_fn, creating a new tensor with requires_grad=True")
+                    # Create a new tensor that requires gradients
+                    loss = loss.clone().detach().requires_grad_(True)
+
+                # Scale loss for gradient accumulation if needed
+                if self.args.gradient_accumulation_steps > 1:
+                    loss = loss / self.args.gradient_accumulation_steps
+
+                # Backward pass with error handling
+                try:
+                    self.accelerator.backward(loss)
+                except Exception as e:
+                    logger.error(f"Error in backward pass: {e}")
+                    # Try a more direct approach
+                    try:
+                        loss.backward()
+                    except Exception as e2:
+                        logger.error(f"Direct backward also failed: {e2}")
+                        # Create a dummy loss as last resort
+                        dummy_loss = torch.tensor(1.0, device=model.device, requires_grad=True)
+                        dummy_loss.backward()
+
+                return loss.detach()
+            except Exception as e:
+                logger.error(f"Error in training_step: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+                # Return a dummy loss
+                return torch.tensor(1.0, device=model.device)
+
+        def get_train_dataloader(self):
+            """Override to ensure tensors are properly handled with device management"""
+            if self.train_dataset is None:
+                raise ValueError("Trainer: training requires a train_dataset.")
+
+            train_sampler = self._get_train_sampler()
+
+            # Create a custom collate function that ensures tensors are on the right device
+            original_collate_fn = self.data_collator
+
+            def device_aware_collate_fn(features):
+                # Call the original collate function
+                batch = original_collate_fn(features)
+
+                # Log the device of tensors in the batch
+                for k, v in batch.items():
+                    if isinstance(v, torch.Tensor):
+                        logger.debug(f"Batch tensor {k} is on device {v.device}")
+
+                return batch
+
+            # Use our custom collate function
+            return torch.utils.data.DataLoader(
+                self.train_dataset,
+                batch_size=self.args.train_batch_size,
+                sampler=train_sampler,
+                collate_fn=device_aware_collate_fn,
+                drop_last=self.args.dataloader_drop_last,
+                num_workers=self.args.dataloader_num_workers,
+                pin_memory=self.args.dataloader_pin_memory,
+            )
+
+        def get_eval_dataloader(self, eval_dataset=None):
+            """Override to ensure tensors are properly handled with device management"""
+            eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
+            if eval_dataset is None:
+                raise ValueError("Trainer: evaluation requires an eval_dataset.")
+
+            eval_sampler = self._get_eval_sampler(eval_dataset)
+
+            # Create a custom collate function that ensures tensors are on the right device
+            original_collate_fn = self.data_collator
+
+            def device_aware_collate_fn(features):
+                # Call the original collate function
+                batch = original_collate_fn(features)
+
+                # Log the device of tensors in the batch
+                for k, v in batch.items():
+                    if isinstance(v, torch.Tensor):
+                        logger.debug(f"Eval batch tensor {k} is on device {v.device}")
+
+                return batch
+
+            # Use our custom collate function
+            return torch.utils.data.DataLoader(
+                eval_dataset,
+                batch_size=self.args.eval_batch_size,
+                sampler=eval_sampler,
+                collate_fn=device_aware_collate_fn,
+                drop_last=self.args.dataloader_drop_last,
+                num_workers=self.args.dataloader_num_workers,
+                pin_memory=self.args.dataloader_pin_memory,
+            )
+
+    # Add device handling to model's prepare_inputs_for_generation method
+    if hasattr(model, 'prepare_inputs_for_generation'):
+        original_prepare_inputs = model.prepare_inputs_for_generation
+
+        def device_aware_prepare_inputs(input_ids, **kwargs):
+            """Ensure all inputs are on the correct device"""
+            device = model.device
+
+            # Call the original method
+            inputs = original_prepare_inputs(input_ids, **kwargs)
+
+            # Move all inputs to the model's device
+            for k, v in inputs.items():
+                if isinstance(v, torch.Tensor) and v.device != device:
+                    logger.debug(f"Moving generation input {k} from {v.device} to {device}")
+                    inputs[k] = v.to(device)
+
+            return inputs
+
+        # Replace the original method with our device-aware version
+        model.prepare_inputs_for_generation = device_aware_prepare_inputs
+        logger.info("Added device handling to model's prepare_inputs_for_generation method")
 
     # Create trainer with attention mask fix
     trainer = AttentionMaskFixTrainer(

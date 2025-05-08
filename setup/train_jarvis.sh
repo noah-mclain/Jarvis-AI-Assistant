@@ -122,18 +122,25 @@ except ImportError:
     print('⚠️ Make sure PyTorch is installed with: pip install torch')
 "
 
-# Set environment variables for optimal memory usage
+# Set environment variables for optimal memory usage and GPU utilization
 export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:32,garbage_collection_threshold:0.8"
 export TOKENIZERS_PARALLELISM=false
-export FORCE_CPU_ONLY_FOR_INITIAL_LOAD=1
 export OMP_NUM_THREADS=1
-export CUDA_LAUNCH_BLOCKING=1
+export CUDA_LAUNCH_BLOCKING=0  # Changed to 0 for better performance
+export TRANSFORMERS_OFFLINE=0
+export CUDA_VISIBLE_DEVICES=0  # Ensure we're using the first GPU
+
+# Force certain operations on CPU to save GPU memory
+export FORCE_CPU_ONLY_FOR_INITIAL_LOAD=1
 export FORCE_CPU_ONLY_FOR_TOKENIZATION=1
 export FORCE_CPU_ONLY_FOR_DATASET_PROCESSING=1
-export TRANSFORMERS_OFFLINE=0
 export TOKENIZERS_FORCE_CPU=1
 export HF_DATASETS_CPU_ONLY=1
 export JARVIS_FORCE_CPU_TOKENIZER=1
+
+# Set PyTorch to use deterministic algorithms for reproducibility
+export CUBLAS_WORKSPACE_CONFIG=:4096:8
+export PYTHONHASHSEED=42
 
 # This is the main training script
 echo "Starting Jarvis AI Assistant training..."
@@ -148,7 +155,43 @@ fi
 # Run the appropriate training script based on model type
 case $MODEL_TYPE in
     code)
-        echo "Running code generation model training..."
+        echo "Running code generation model training with enhanced GPU handling..."
+
+        # Verify GPU availability before starting training
+        python -c "
+import torch
+import sys
+
+if not torch.cuda.is_available():
+    print('❌ ERROR: CUDA is not available. Cannot proceed with GPU training.')
+    sys.exit(1)
+else:
+    device_name = torch.cuda.get_device_name(0)
+    device_capability = torch.cuda.get_device_capability(0)
+    free_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+    print(f'✓ Using GPU: {device_name} with CUDA capability {device_capability[0]}.{device_capability[1]}')
+    print(f'✓ Available GPU memory: {free_memory:.2f} GiB')
+
+    # Verify minimum memory requirements
+    if free_memory < 10:
+        print(f'❌ ERROR: Not enough GPU memory. Need at least 10 GiB, but only {free_memory:.2f} GiB available.')
+        sys.exit(1)
+
+    # Clear CUDA cache
+    torch.cuda.empty_cache()
+    print('✓ CUDA cache cleared')
+"
+
+        # Check exit code of the GPU verification
+        if [ $? -ne 0 ]; then
+            echo "❌ GPU verification failed. Cannot proceed with training."
+            exit 1
+        fi
+
+        # Apply additional safeguards for GPU training
+        export PYTORCH_NO_CUDA_MEMORY_CACHING=1  # Disable CUDA memory caching
+
+        # Run the training with enhanced GPU handling
         python src/generative_ai_module/unified_deepseek_training.py \
             --gpu-type $GPU_TYPE \
             --vram $VRAM_SIZE \
@@ -178,92 +221,326 @@ case $MODEL_TYPE in
             --adam_beta1 0.9 \
             --adam_beta2 0.999 \
             --adam_epsilon 1e-8 \
-            --num_workers 8
+            --num_workers 0  # Set to 0 to avoid multiprocessing issues with CUDA
+
+        # Check if training was successful
+        if [ $? -ne 0 ]; then
+            echo "❌ Training failed. See logs for details."
+
+            # Try to recover and save partial results
+            echo "Attempting to save partial results..."
+            python -c "
+import os
+import torch
+from transformers import AutoTokenizer
+from datetime import datetime
+
+# Create backup directory
+backup_dir = f'/notebooks/Jarvis_AI_Assistant/models/backup_save_{int(datetime.now().timestamp())}'
+os.makedirs(backup_dir, exist_ok=True)
+
+# Try to save model state if it exists
+try:
+    if os.path.exists('/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-6.7b-finetuned'):
+        # Save tokenizer if available
+        try:
+            tokenizer = AutoTokenizer.from_pretrained('/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-6.7b-finetuned')
+            tokenizer.save_pretrained(backup_dir)
+            print(f'✓ Tokenizer saved to {backup_dir}')
+        except Exception as e:
+            print(f'❌ Failed to save tokenizer: {e}')
+
+        print(f'✓ Partial results saved to {backup_dir}')
+    else:
+        print('❌ No model directory found to save partial results')
+except Exception as e:
+    print(f'❌ Failed to save partial results: {e}')
+"
+            exit 1
+        else
+            echo "✓ Training completed successfully!"
+
+            # Verify the saved model
+            python -c "
+import os
+import sys
+
+model_dir = '/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-6.7b-finetuned'
+if not os.path.exists(model_dir):
+    print(f'❌ ERROR: Model directory {model_dir} does not exist after training.')
+    sys.exit(1)
+
+required_files = ['config.json', 'adapter_config.json']
+missing_files = [f for f in required_files if not os.path.exists(os.path.join(model_dir, f))]
+
+if missing_files:
+    print(f'❌ ERROR: Missing required files in model directory: {missing_files}')
+    sys.exit(1)
+else:
+    print(f'✓ Model saved successfully to {model_dir}')
+    print('✓ All required files are present')
+"
+            # Check if model verification was successful
+            if [ $? -ne 0 ]; then
+                echo "❌ Model verification failed. The model may not have been saved correctly."
+                exit 1
+            fi
+        fi
         ;;
     text)
-        echo "Running text generation model training..."
+        echo "Running text generation model training with enhanced GPU handling..."
+
+        # Verify GPU availability before starting training
         python -c "
-from src.generative_ai_module.text_generator import create_cnn_text_generator
 import torch
+import sys
 
-# Create and train the text generator with optimized parameters for A6000 GPU
-model = create_cnn_text_generator(
-    model_name='google/flan-ul2-20b',
-    force_gpu=True,
-    gpu_type='$GPU_TYPE',
-    vram_size=$VRAM_SIZE,
-    load_in_4bit=True,
-    use_flash_attention_2=True,
-    gradient_checkpointing=True,
-    lora_rank=32,
-    lora_alpha=64,
-    lora_dropout=0.05,
-    max_length=2048,  # Reduced from 4096 to ensure stability with FLAN-UL2
-    batch_size=3,  # Explicitly set for stability
-    gradient_accumulation_steps=8,  # Explicitly set for stability
-    num_workers=8,  # Match your 8 CPU cores
-    warmup_ratio=0.03,
-    weight_decay=0.01,
-    adam_beta1=0.9,
-    adam_beta2=0.999,
-    adam_epsilon=1e-8,
-    max_grad_norm=1.0
-)
+if not torch.cuda.is_available():
+    print('❌ ERROR: CUDA is not available. Cannot proceed with GPU training.')
+    sys.exit(1)
+else:
+    device_name = torch.cuda.get_device_name(0)
+    device_capability = torch.cuda.get_device_capability(0)
+    free_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+    print(f'✓ Using GPU: {device_name} with CUDA capability {device_capability[0]}.{device_capability[1]}')
+    print(f'✓ Available GPU memory: {free_memory:.2f} GiB')
 
-# Train the model
-model.train_from_preprocessed(
-    dataset_name='persona_chat',
-    epochs=3,
-    preprocessed_path='notebooks/Jarvis_AI_Assistant/datasets/preprocessed_persona_chat.pt'
-)
+    # Verify minimum memory requirements
+    if free_memory < 10:
+        print(f'❌ ERROR: Not enough GPU memory. Need at least 10 GiB, but only {free_memory:.2f} GiB available.')
+        sys.exit(1)
 
-# Save the model
-model.save_model('notebooks/Jarvis_AI_Assistant/models/flan-ul2-20b-finetuned/model.pt')
-print('Text generation model training completed')
+    # Clear CUDA cache
+    torch.cuda.empty_cache()
+    print('✓ CUDA cache cleared')
 "
+
+        # Check exit code of the GPU verification
+        if [ $? -ne 0 ]; then
+            echo "❌ GPU verification failed. Cannot proceed with training."
+            exit 1
+        fi
+
+        # Apply additional safeguards for GPU training
+        export PYTORCH_NO_CUDA_MEMORY_CACHING=1  # Disable CUDA memory caching
+
+        python -c "
+import sys
+import os
+import torch
+from src.generative_ai_module.text_generator import create_cnn_text_generator
+
+try:
+    print('Starting text generation model training...')
+
+    # Ensure we're using GPU
+    if not torch.cuda.is_available():
+        print('❌ ERROR: CUDA is not available. Cannot proceed with GPU training.')
+        sys.exit(1)
+
+    # Create and train the text generator with optimized parameters for GPU
+    model = create_cnn_text_generator(
+        model_name='google/flan-ul2-20b',
+        force_gpu=True,
+        gpu_type='$GPU_TYPE',
+        vram_size=$VRAM_SIZE,
+        load_in_4bit=True,
+        use_flash_attention_2=True,
+        gradient_checkpointing=True,
+        lora_rank=32,
+        lora_alpha=64,
+        lora_dropout=0.05,
+        max_length=2048,  # Reduced from 4096 to ensure stability with FLAN-UL2
+        batch_size=3,  # Explicitly set for stability
+        gradient_accumulation_steps=8,  # Explicitly set for stability
+        num_workers=0,  # Set to 0 to avoid multiprocessing issues with CUDA
+        warmup_ratio=0.03,
+        weight_decay=0.01,
+        adam_beta1=0.9,
+        adam_beta2=0.999,
+        adam_epsilon=1e-8,
+        max_grad_norm=1.0
+    )
+
+    # Verify model is on GPU
+    if not next(model.parameters()).is_cuda:
+        print('❌ WARNING: Model is not on GPU. Moving model to GPU...')
+        model = model.cuda()
+
+    # Train the model
+    print('Starting training...')
+    model.train_from_preprocessed(
+        dataset_name='persona_chat',
+        epochs=3,
+        preprocessed_path='notebooks/Jarvis_AI_Assistant/datasets/preprocessed_persona_chat.pt'
+    )
+
+    # Save the model
+    output_dir = 'notebooks/Jarvis_AI_Assistant/models/flan-ul2-20b-finetuned'
+    os.makedirs(output_dir, exist_ok=True)
+    model.save_model(f'{output_dir}/model.pt')
+
+    # Verify saved model
+    if os.path.exists(f'{output_dir}/model.pt'):
+        print(f'✓ Model successfully saved to {output_dir}/model.pt')
+    else:
+        print(f'❌ ERROR: Failed to save model to {output_dir}/model.pt')
+        sys.exit(1)
+
+    print('✓ Text generation model training completed successfully')
+
+except Exception as e:
+    print(f'❌ ERROR during text model training: {e}')
+
+    # Try to save partial results
+    try:
+        backup_dir = f'notebooks/Jarvis_AI_Assistant/models/backup_text_model_{int(torch.cuda.current_device())}'
+        os.makedirs(backup_dir, exist_ok=True)
+
+        if 'model' in locals():
+            model.save_model(f'{backup_dir}/partial_model.pt')
+            print(f'✓ Partial model saved to {backup_dir}/partial_model.pt')
+    except Exception as save_error:
+        print(f'❌ Failed to save partial results: {save_error}')
+
+    sys.exit(1)
+"
+
+        # Check if training was successful
+        if [ $? -ne 0 ]; then
+            echo "❌ Text model training failed. See logs for details."
+            exit 1
+        else
+            echo "✓ Text model training completed successfully!"
+        fi
         ;;
     cnn-text)
-        echo "Running CNN-based text generation model training..."
+        echo "Running CNN-based text generation model training with enhanced GPU handling..."
+
+        # Verify GPU availability before starting training
         python -c "
-from src.generative_ai_module.text_generator import create_cnn_text_generator
 import torch
+import sys
 
-# Create and train the CNN-enhanced text generator with optimized parameters for A6000 GPU
-model = create_cnn_text_generator(
-    model_name='google/flan-ul2-20b',
-    force_gpu=True,
-    gpu_type='$GPU_TYPE',
-    vram_size=$VRAM_SIZE,
-    cnn_layers=3,  # Use 3 CNN layers for enhanced pattern recognition
-    load_in_4bit=True,
-    use_flash_attention_2=True,
-    gradient_checkpointing=True,
-    lora_rank=32,
-    lora_alpha=64,
-    lora_dropout=0.05,
-    max_length=2048,  # Reduced from 4096 to ensure stability with FLAN-UL2
-    batch_size=2,  # Further reduced for CNN layers which use more memory
-    gradient_accumulation_steps=12,  # Increased to maintain effective batch size
-    num_workers=8,  # Match your 8 CPU cores
-    warmup_ratio=0.03,
-    weight_decay=0.01,
-    adam_beta1=0.9,
-    adam_beta2=0.999,
-    adam_epsilon=1e-8,
-    max_grad_norm=1.0
-)
+if not torch.cuda.is_available():
+    print('❌ ERROR: CUDA is not available. Cannot proceed with GPU training.')
+    sys.exit(1)
+else:
+    device_name = torch.cuda.get_device_name(0)
+    device_capability = torch.cuda.get_device_capability(0)
+    free_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+    print(f'✓ Using GPU: {device_name} with CUDA capability {device_capability[0]}.{device_capability[1]}')
+    print(f'✓ Available GPU memory: {free_memory:.2f} GiB')
 
-# Train the model
-model.train_from_preprocessed(
-    dataset_name='persona_chat',
-    epochs=3,
-    preprocessed_path='notebooks/Jarvis_AI_Assistant/datasets/preprocessed_persona_chat.pt'
-)
+    # Verify minimum memory requirements - CNN models need more memory
+    if free_memory < 15:
+        print(f'❌ ERROR: Not enough GPU memory. Need at least 15 GiB for CNN model, but only {free_memory:.2f} GiB available.')
+        sys.exit(1)
 
-# Save the model
-model.save_model('notebooks/Jarvis_AI_Assistant/models/cnn-flan-ul2-20b-finetuned/model.pt')
-print('CNN-enhanced text generation model training completed')
+    # Clear CUDA cache
+    torch.cuda.empty_cache()
+    print('✓ CUDA cache cleared')
 "
+
+        # Check exit code of the GPU verification
+        if [ $? -ne 0 ]; then
+            echo "❌ GPU verification failed. Cannot proceed with training."
+            exit 1
+        fi
+
+        # Apply additional safeguards for GPU training
+        export PYTORCH_NO_CUDA_MEMORY_CACHING=1  # Disable CUDA memory caching
+
+        python -c "
+import sys
+import os
+import torch
+from src.generative_ai_module.text_generator import create_cnn_text_generator
+
+try:
+    print('Starting CNN-based text generation model training...')
+
+    # Ensure we're using GPU
+    if not torch.cuda.is_available():
+        print('❌ ERROR: CUDA is not available. Cannot proceed with GPU training.')
+        sys.exit(1)
+
+    # Create and train the CNN-enhanced text generator with optimized parameters for GPU
+    model = create_cnn_text_generator(
+        model_name='google/flan-ul2-20b',
+        force_gpu=True,
+        gpu_type='$GPU_TYPE',
+        vram_size=$VRAM_SIZE,
+        cnn_layers=3,  # Use 3 CNN layers for enhanced pattern recognition
+        load_in_4bit=True,
+        use_flash_attention_2=True,
+        gradient_checkpointing=True,
+        lora_rank=32,
+        lora_alpha=64,
+        lora_dropout=0.05,
+        max_length=2048,  # Reduced from 4096 to ensure stability with FLAN-UL2
+        batch_size=2,  # Further reduced for CNN layers which use more memory
+        gradient_accumulation_steps=12,  # Increased to maintain effective batch size
+        num_workers=0,  # Set to 0 to avoid multiprocessing issues with CUDA
+        warmup_ratio=0.03,
+        weight_decay=0.01,
+        adam_beta1=0.9,
+        adam_beta2=0.999,
+        adam_epsilon=1e-8,
+        max_grad_norm=1.0
+    )
+
+    # Verify model is on GPU
+    if not next(model.parameters()).is_cuda:
+        print('❌ WARNING: Model is not on GPU. Moving model to GPU...')
+        model = model.cuda()
+
+    # Train the model
+    print('Starting training...')
+    model.train_from_preprocessed(
+        dataset_name='persona_chat',
+        epochs=3,
+        preprocessed_path='notebooks/Jarvis_AI_Assistant/datasets/preprocessed_persona_chat.pt'
+    )
+
+    # Save the model
+    output_dir = 'notebooks/Jarvis_AI_Assistant/models/cnn-flan-ul2-20b-finetuned'
+    os.makedirs(output_dir, exist_ok=True)
+    model.save_model(f'{output_dir}/model.pt')
+
+    # Verify saved model
+    if os.path.exists(f'{output_dir}/model.pt'):
+        print(f'✓ Model successfully saved to {output_dir}/model.pt')
+    else:
+        print(f'❌ ERROR: Failed to save model to {output_dir}/model.pt')
+        sys.exit(1)
+
+    print('✓ CNN-enhanced text generation model training completed successfully')
+
+except Exception as e:
+    print(f'❌ ERROR during CNN text model training: {e}')
+
+    # Try to save partial results
+    try:
+        backup_dir = f'notebooks/Jarvis_AI_Assistant/models/backup_cnn_model_{int(torch.cuda.current_device())}'
+        os.makedirs(backup_dir, exist_ok=True)
+
+        if 'model' in locals():
+            model.save_model(f'{backup_dir}/partial_model.pt')
+            print(f'✓ Partial model saved to {backup_dir}/partial_model.pt')
+    except Exception as save_error:
+        print(f'❌ Failed to save partial results: {save_error}')
+
+    sys.exit(1)
+"
+
+        # Check if training was successful
+        if [ $? -ne 0 ]; then
+            echo "❌ CNN text model training failed. See logs for details."
+            exit 1
+        else
+            echo "✓ CNN text model training completed successfully!"
+        fi
         ;;
     *)
         echo "Unknown model type: $MODEL_TYPE"
@@ -272,4 +549,56 @@ print('CNN-enhanced text generation model training completed')
         ;;
 esac
 
+# Perform final verification and cleanup
+echo "Performing final verification and cleanup..."
+
+# Verify that models were saved correctly
+python -c "
+import os
+import sys
+import torch
+
+# Define expected model directories based on model type
+model_dirs = {
+    'code': '/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-6.7b-finetuned',
+    'text': '/notebooks/Jarvis_AI_Assistant/models/flan-ul2-20b-finetuned',
+    'cnn-text': '/notebooks/Jarvis_AI_Assistant/models/cnn-flan-ul2-20b-finetuned'
+}
+
+# Check if the model directory exists
+model_type = '$MODEL_TYPE'
+if model_type in model_dirs:
+    model_dir = model_dirs[model_type]
+    if os.path.exists(model_dir):
+        print(f'✓ Model directory {model_dir} exists')
+
+        # Check for specific files based on model type
+        if model_type == 'code':
+            required_files = ['config.json', 'adapter_config.json']
+        else:
+            required_files = ['model.pt']
+
+        missing_files = [f for f in required_files if not os.path.exists(os.path.join(model_dir, f))]
+
+        if missing_files:
+            print(f'❌ WARNING: Missing required files in model directory: {missing_files}')
+        else:
+            print(f'✓ All required files are present in {model_dir}')
+    else:
+        print(f'❌ WARNING: Model directory {model_dir} does not exist')
+else:
+    print(f'❌ Unknown model type: {model_type}')
+
+# Clear CUDA cache
+if torch.cuda.is_available():
+    torch.cuda.empty_cache()
+    print('✓ CUDA cache cleared')
+"
+
+# Final cleanup
+echo "Cleaning up temporary files..."
+find /tmp -name "torch_*" -type d -mmin +60 -exec rm -rf {} \; 2>/dev/null || true
+find /tmp -name "transformers_*" -type d -mmin +60 -exec rm -rf {} \; 2>/dev/null || true
+
+echo "✓ Training process completed successfully!"
 echo "✓ Done"
