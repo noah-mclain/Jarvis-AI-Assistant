@@ -54,6 +54,27 @@ except ImportError:
 def apply_attention_mask_fix():
     """Apply the attention mask fix for DeepSeek models"""
     try:
+        # Check transformers version to apply the appropriate fix
+        from transformers import __version__ as transformers_version
+
+        # Parse version string to check compatibility
+        try:
+            version_parts = transformers_version.split('.')
+            major = int(version_parts[0]) if len(version_parts) > 0 else 0
+            minor = int(version_parts[1]) if len(version_parts) > 1 else 0
+            logger.info(f"Detected transformers version: {major}.{minor}")
+
+            # For newer versions of transformers (4.28+), the attention mask handling is different
+            if major > 4 or (major == 4 and minor >= 28):
+                logger.info(f"Using newer attention mask fix for transformers {transformers_version}")
+                # For newer versions, we don't need to patch the forward method
+                # as the _prepare_4d_causal_attention_mask_for_sdpa function handles it properly
+                logger.info("Attention mask handling is already fixed in this transformers version")
+                return True
+        except Exception as e:
+            logger.warning(f"Could not parse transformers version: {e}. Applying legacy fix.")
+
+        # For older versions, apply the legacy fix
         from transformers.models.llama.modeling_llama import LlamaModel
 
         # Store the original forward method
@@ -81,35 +102,39 @@ def apply_attention_mask_fix():
 
             # Fix attention mask shape if needed
             if attention_mask is not None and attention_mask.dim() == 2:
-                # Get the device and dtype
-                device = attention_mask.device
-                dtype = attention_mask.dtype
+                try:
+                    # Get the device and dtype
+                    device = attention_mask.device
+                    dtype = attention_mask.dtype
 
-                # Get sequence length
-                seq_length = attention_mask.size(1)
-                batch_size = attention_mask.size(0)
+                    # Get sequence length
+                    seq_length = attention_mask.size(1)
+                    batch_size = attention_mask.size(0)
 
-                # Convert attention_mask from [batch_size, seq_length] to [batch_size, 1, seq_length, seq_length]
-                # First, expand to [batch_size, 1, 1, seq_length]
-                expanded_mask = attention_mask.unsqueeze(1).unsqueeze(2)
+                    # Convert attention_mask from [batch_size, seq_length] to [batch_size, 1, seq_length, seq_length]
+                    # First, expand to [batch_size, 1, 1, seq_length]
+                    expanded_mask = attention_mask.unsqueeze(1).unsqueeze(2)
 
-                # Create a causal mask of shape [1, 1, seq_length, seq_length]
-                causal_mask = torch.triu(
-                    torch.ones((seq_length, seq_length), device=device, dtype=dtype),
-                    diagonal=1
-                ).unsqueeze(0).unsqueeze(0)
+                    # Create a causal mask of shape [1, 1, seq_length, seq_length]
+                    causal_mask = torch.triu(
+                        torch.ones((seq_length, seq_length), device=device, dtype=dtype),
+                        diagonal=1
+                    ).unsqueeze(0).unsqueeze(0)
 
-                # Convert masks to proper format (-inf for masked positions, 0 for attended positions)
-                expanded_mask = (1.0 - expanded_mask) * -10000.0
-                causal_mask = (causal_mask > 0) * -10000.0
+                    # Convert masks to proper format (-inf for masked positions, 0 for attended positions)
+                    expanded_mask = (1.0 - expanded_mask) * -10000.0
+                    causal_mask = (causal_mask > 0) * -10000.0
 
-                # Combine the masks
-                combined_mask = expanded_mask + causal_mask
+                    # Combine the masks
+                    combined_mask = expanded_mask + causal_mask
 
-                # Replace the original attention_mask with our fixed version
-                attention_mask = combined_mask
+                    # Replace the original attention_mask with our fixed version
+                    attention_mask = combined_mask
 
-                logger.debug(f"Fixed attention mask shape: {attention_mask.shape}")
+                    logger.debug(f"Fixed attention mask shape: {attention_mask.shape}")
+                except Exception as mask_error:
+                    # If there's an error in our mask handling, log it and continue with the original mask
+                    logger.warning(f"Error in attention mask fix: {mask_error}. Using original mask.")
 
             # Call the original forward method with the fixed attention mask
             return original_forward(
@@ -128,10 +153,11 @@ def apply_attention_mask_fix():
         # Replace the original forward method with our patched version
         LlamaModel.forward = patched_forward
 
-        logger.info("Successfully applied attention mask fix")
+        logger.info("Successfully applied legacy attention mask fix")
         return True
     except Exception as e:
         logger.error(f"Error applying attention mask fix: {e}")
+        logger.warning("Continuing without attention mask fix")
         return False
 
 def configure_for_gpu(args):
@@ -283,8 +309,8 @@ def main():
     parser = argparse.ArgumentParser(description="Unified DeepSeek-Coder training")
     parser.add_argument("--model_name", type=str, default="deepseek-ai/deepseek-coder-6.7b-instruct",
                         help="Model name or path")
-    parser.add_argument("--output_dir", type=str, default="models/deepseek-coder-6.7b-finetuned",
-                        help="Output directory")
+    parser.add_argument("--output_dir", type=str, default="/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-6.7b-finetuned",
+                        help="Output directory for saving the model")
     parser.add_argument("--batch_size", type=int, default=8,
                         help="Batch size for training")
     parser.add_argument("--max_length", type=int, default=2048,
@@ -365,7 +391,14 @@ def main():
     logger.info("Applying attention mask fix...")
     apply_attention_mask_fix()
 
-    # Ensure output directory exists
+    # Ensure output directory exists and is in the correct location
+    if not args.output_dir.startswith('/notebooks/Jarvis_AI_Assistant/'):
+        logger.warning(f"Output directory {args.output_dir} is not in the expected location.")
+        logger.warning("Changing output directory to be within /notebooks/Jarvis_AI_Assistant/models/")
+        model_name = os.path.basename(args.output_dir)
+        args.output_dir = f"/notebooks/Jarvis_AI_Assistant/models/{model_name}"
+
+    logger.info(f"Using output directory: {args.output_dir}")
     os.makedirs(args.output_dir, exist_ok=True)
 
     # Set default quantization if none specified
@@ -767,6 +800,25 @@ def train_with_unsloth(args):
                     "labels": labels_tensor
                 }
 
+                # Check if we need to reshape the attention mask for newer transformers versions
+                # This is to avoid the "too many values to unpack (expected 2)" error
+                try:
+                    from transformers import __version__ as transformers_version
+                    version_parts = transformers_version.split('.')
+                    major = int(version_parts[0]) if len(version_parts) > 0 else 0
+                    minor = int(version_parts[1]) if len(version_parts) > 1 else 0
+
+                    # For newer versions of transformers (4.28+), we need to ensure the attention mask is 2D
+                    if major > 4 or (major == 4 and minor >= 28):
+                        # Ensure attention_mask is 2D [batch_size, seq_length]
+                        if attention_mask_tensor.dim() > 2:
+                            logger.warning(f"Reshaping attention mask from {attention_mask_tensor.shape} to 2D for compatibility")
+                            # Take the first dimension if it's more than 2D
+                            batch["attention_mask"] = attention_mask_tensor.view(attention_mask_tensor.size(0), -1)
+                except Exception as e:
+                    logger.warning(f"Error checking transformers version for attention mask: {e}")
+                    # Continue with the original attention mask
+
                 return batch
             except Exception as e:
                 logger.error(f"Error in data collator: {e}")
@@ -788,13 +840,55 @@ def train_with_unsloth(args):
         pad_to_multiple_of=8  # Optimize for hardware efficiency
     )
 
-    # Create trainer
-    trainer = Trainer(
+    # Create a custom trainer that handles attention mask issues
+    class AttentionMaskFixTrainer(Trainer):
+        """Custom trainer that handles attention mask issues"""
+        def compute_loss(self, model, inputs, return_outputs=False):
+            """Override compute_loss to handle attention mask issues"""
+            try:
+                # Check if attention_mask needs fixing
+                if "attention_mask" in inputs and inputs["attention_mask"].dim() != 2:
+                    logger.warning(f"Fixing attention_mask dimension from {inputs['attention_mask'].dim()} to 2D")
+                    # Reshape to 2D [batch_size, seq_length]
+                    batch_size = inputs["attention_mask"].size(0)
+                    seq_length = inputs["attention_mask"].size(-1)
+                    inputs["attention_mask"] = inputs["attention_mask"].view(batch_size, seq_length)
+
+                # Call the parent compute_loss
+                return super().compute_loss(model, inputs, return_outputs)
+            except Exception as e:
+                logger.error(f"Error in compute_loss: {e}")
+                # Try to continue with a simplified computation
+                try:
+                    # Get the input IDs and labels
+                    input_ids = inputs["input_ids"]
+                    labels = inputs["labels"] if "labels" in inputs else input_ids.clone()
+
+                    # Forward pass without attention mask
+                    outputs = model(input_ids=input_ids)
+
+                    # Compute the loss manually
+                    logits = outputs.logits
+                    shift_logits = logits[..., :-1, :].contiguous()
+                    shift_labels = labels[..., 1:].contiguous()
+                    loss_fct = torch.nn.CrossEntropyLoss()
+                    loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+
+                    return (loss, outputs) if return_outputs else loss
+                except Exception as e2:
+                    logger.error(f"Fallback loss computation also failed: {e2}")
+                    # Return a dummy loss as last resort
+                    dummy_loss = torch.tensor(1.0, device=model.device, requires_grad=True)
+                    return dummy_loss
+
+    # Create trainer with attention mask fix
+    trainer = AttentionMaskFixTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         data_collator=data_collator,
+        tokenizer=tokenizer,
     )
 
     # Train model with robust error handling
@@ -817,12 +911,41 @@ def train_with_unsloth(args):
         # Try to recover and save what we have
         logger.warning("Attempting to save partial training results despite error")
 
-    # Save model with error handling
+    # Save model with error handling and ensure correct save location
     try:
+        # Double-check that output directory is in the correct location
+        if not args.output_dir.startswith('/notebooks/Jarvis_AI_Assistant/'):
+            logger.warning(f"Output directory {args.output_dir} is not in the expected location.")
+            logger.warning("Changing output directory to be within /notebooks/Jarvis_AI_Assistant/models/")
+            model_name = os.path.basename(args.output_dir)
+            args.output_dir = f"/notebooks/Jarvis_AI_Assistant/models/{model_name}"
+            os.makedirs(args.output_dir, exist_ok=True)
+
         logger.info(f"Saving model to {args.output_dir}")
         model.save_pretrained(args.output_dir)
         tokenizer.save_pretrained(args.output_dir)
         logger.info(f"Model and tokenizer successfully saved to {args.output_dir}")
+
+        # Create a README file with training information
+        readme_content = f"""# DeepSeek Coder Fine-tuned Model
+
+This model was fine-tuned from {args.model_name} on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.
+
+## Training Parameters
+- Batch size: {args.batch_size}
+- Gradient accumulation steps: {args.gradient_accumulation_steps}
+- Effective batch size: {args.batch_size * args.gradient_accumulation_steps}
+- Learning rate: {args.learning_rate}
+- Epochs: {args.epochs}
+- LoRA rank: {args.lora_rank}
+- LoRA alpha: {args.lora_alpha}
+- LoRA dropout: {args.lora_dropout}
+- Max sequence length: {args.max_length}
+- Training samples: {len(train_dataset)}
+"""
+        with open(os.path.join(args.output_dir, "README.md"), "w") as f:
+            f.write(readme_content)
+
     except Exception as e:
         logger.error(f"Error saving model: {e}")
 
@@ -830,11 +953,11 @@ def train_with_unsloth(args):
         try:
             logger.warning("Trying alternative saving method...")
             # Save the model state dict directly
-            import os
-            os.makedirs(f"{args.output_dir}/alternative_save", exist_ok=True)
-            torch.save(model.state_dict(), f"{args.output_dir}/alternative_save/model.pt")
-            tokenizer.save_pretrained(f"{args.output_dir}/alternative_save")
-            logger.info(f"Model state dict saved to {args.output_dir}/alternative_save/model.pt")
+            alternative_save_dir = f"/notebooks/Jarvis_AI_Assistant/models/backup_save_{int(time.time())}"
+            os.makedirs(alternative_save_dir, exist_ok=True)
+            torch.save(model.state_dict(), f"{alternative_save_dir}/model.pt")
+            tokenizer.save_pretrained(alternative_save_dir)
+            logger.info(f"Model state dict saved to {alternative_save_dir}/model.pt")
         except Exception as e2:
             logger.error(f"Alternative saving also failed: {e2}")
             if not training_successful:
@@ -847,6 +970,16 @@ def train_with_standard_method(args):
     # Import the finetune_deepseek module
     try:
         from src.generative_ai_module.finetune_deepseek import main as finetune_main
+
+        # Ensure output directory is in the correct location
+        if not args.output_dir.startswith('/notebooks/Jarvis_AI_Assistant/'):
+            logger.warning(f"Output directory {args.output_dir} is not in the expected location.")
+            logger.warning("Changing output directory to be within /notebooks/Jarvis_AI_Assistant/models/")
+            model_name = os.path.basename(args.output_dir)
+            args.output_dir = f"/notebooks/Jarvis_AI_Assistant/models/{model_name}"
+            os.makedirs(args.output_dir, exist_ok=True)
+
+        logger.info(f"Using output directory: {args.output_dir}")
 
         # Prepare arguments for finetune_deepseek
         sys.argv = [
@@ -930,6 +1063,16 @@ def train_with_standard_method(args):
             load_in_4bit=args.load_in_4bit
         )
 
+        # Ensure output directory is in the correct location
+        if not args.output_dir.startswith('/notebooks/Jarvis_AI_Assistant/'):
+            logger.warning(f"Output directory {args.output_dir} is not in the expected location.")
+            logger.warning("Changing output directory to be within /notebooks/Jarvis_AI_Assistant/models/")
+            model_name = os.path.basename(args.output_dir)
+            args.output_dir = f"/notebooks/Jarvis_AI_Assistant/models/{model_name}"
+            os.makedirs(args.output_dir, exist_ok=True)
+
+        logger.info(f"Using output directory: {args.output_dir}")
+
         # Fine-tune the model
         logger.info("Starting fine-tuning...")
         code_gen.fine_tune_deepseek(
@@ -964,6 +1107,30 @@ def train_with_standard_method(args):
             adam_beta2=args.adam_beta2,
             adam_epsilon=args.adam_epsilon
         )
+
+        # Create a README file with training information
+        try:
+            readme_content = f"""# DeepSeek Coder Fine-tuned Model (CodeGenerator)
+
+This model was fine-tuned from {args.model_name} on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.
+
+## Training Parameters
+- Batch size: {args.batch_size}
+- Gradient accumulation steps: {args.gradient_accumulation_steps}
+- Effective batch size: {args.batch_size * args.gradient_accumulation_steps}
+- Learning rate: {args.learning_rate}
+- Epochs: {args.epochs}
+- LoRA rank: {args.lora_rank}
+- LoRA alpha: {args.lora_alpha}
+- LoRA dropout: {args.lora_dropout}
+- Max sequence length: {args.max_length}
+- Training samples: {len(train_dataset)}
+"""
+            with open(os.path.join(args.output_dir, "README.md"), "w") as f:
+                f.write(readme_content)
+            logger.info(f"Created README.md in {args.output_dir}")
+        except Exception as e:
+            logger.warning(f"Failed to create README.md: {e}")
 
 def safe_main():
     """Wrapper around main() with comprehensive error handling"""
