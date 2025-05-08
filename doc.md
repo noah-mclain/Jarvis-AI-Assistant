@@ -15,7 +15,7 @@ This document provides a comprehensive list of all available commands and their 
 - [File Operations](#file-operations)
 - [Maps Search](#maps-search)
 - [Netflix](#netflix)
-- [Alarm](#alarm)
+
 
 ## YouTube Commands
 
@@ -132,16 +132,7 @@ netflix open                   # Open Netflix website
 netflix search <query>         # Search for content on Netflix
 ```
 
-## Alarm
 
-Set and manage alarms.
-
-```bash
-alarm set <time> <message>     # Set alarm for specific time
-alarm <duration> <message>     # Set alarm for duration from now
-alarm list                     # List all current alarms
-alarm cancel <message>         # Cancel alarm containing message
-```
 
 ## Notes
 
