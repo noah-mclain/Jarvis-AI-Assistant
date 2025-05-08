@@ -77,4 +77,5 @@ class GoogleSearchCommand(Command):
             return False
 
 google = GoogleSearchCommand()
-google.execute("how to make pancakes")
+# Test code - commented out to prevent automatic execution on import
+# google.execute("how to make pancakes")
