@@ -9,7 +9,7 @@
   transition-duration: 0.5s;
 }
 
-/* Hamburger menu animation */
+/* Hamburger menu animation - enhanced for ultra-smooth transitions */
 .hamburger-top,
 .hamburger-middle,
 .hamburger-bottom {
@@ -17,38 +17,54 @@
   width: 20px;
   height: 2px;
   border-radius: 9999px;
-  transition: all 0.5s ease-in-out;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); /* Match sidebar animation curve */
   transform-origin: center;
+  will-change: transform, opacity, width; /* Hint to browser for optimization */
+  backface-visibility: hidden; /* Prevent flickering */
+  transform: translateZ(0); /* Force GPU acceleration */
 }
 
 .hamburger-top {
   top: 30%;
+  transform: translateZ(0) rotate(0deg);
 }
 
 .hamburger-middle {
   top: 50%;
   width: 16px;
-  transform: translateY(-50%);
+  transform: translateY(-50%) translateZ(0);
+  opacity: 1;
 }
 
 .hamburger-bottom {
   bottom: 30%;
+  transform: translateZ(0) rotate(0deg);
 }
 
-/* X animation for when sidebar is open */
+/* X animation for when sidebar is open - ultra-smooth transition */
 .sidebar-open .hamburger-top {
-  transform: rotate(45deg);
+  transform: translateZ(0) rotate(45deg);
   top: 50%;
+  width: 20px; /* Ensure consistent width during animation */
 }
 
 .sidebar-open .hamburger-middle {
   width: 0;
   opacity: 0;
+  transform: translateY(-50%) translateZ(0);
 }
 
 .sidebar-open .hamburger-bottom {
-  transform: rotate(-45deg);
+  transform: translateZ(0) rotate(-45deg);
   bottom: 50%;
+  width: 20px; /* Ensure consistent width during animation */
+}
+
+/* Add subtle hover effect to hamburger lines */
+.sidebar-toggle:hover .hamburger-top,
+.sidebar-toggle:hover .hamburger-middle,
+.sidebar-toggle:hover .hamburger-bottom {
+  background-color: rgba(var(--primary-rgb), 0.9);
 }
 
 @layer base {
@@ -64,6 +80,7 @@
 
     --primary: 210 100% 50%;
     --primary-foreground: 210 40% 98%;
+    --primary-rgb: 0, 122, 255; /* RGB value of primary color for rgba() */
 
     --secondary: 210 40% 96%;
     --secondary-foreground: 222 47% 11%;
@@ -120,6 +137,7 @@
 
     --primary: 210 100% 60%;
     --primary-foreground: 222 47% 10%;
+    --primary-rgb: 51, 153, 255; /* RGB value of primary color for rgba() in dark mode */
 
     --secondary: 217 33% 17%;
     --secondary-foreground: 210 40% 98%;

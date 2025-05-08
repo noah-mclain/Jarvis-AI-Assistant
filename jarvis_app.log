@@ -701,3 +701,111 @@
 2025-05-08 05:10:00,871 - jarvis_app - INFO - Data saved successfully
 2025-05-08 05:10:00,871 - jarvis_app - INFO - Created new chat: new-chat-1746670200
 2025-05-08 05:10:10,040 - jarvis_desktop - INFO - Application window closed
+2025-05-08 05:39:58,526 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static
+2025-05-08 05:39:58,528 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data
+2025-05-08 05:39:58,528 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-08 05:39:58,528 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-08 05:39:58,530 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/models
+2025-05-08 05:39:58,530 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 05:39:58,530 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 05:39:58,530 - jarvis_app - INFO - Loaded 6 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-08 05:39:58,531 - jarvis_app - INFO - Loaded messages for 6 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-08 05:39:58,534 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant
+2025-05-08 05:39:58,534 - jarvis_desktop - INFO - Operating system: posix - darwin
+2025-05-08 05:39:58,534 - jarvis_desktop - INFO - Setting up for macOS environment
+2025-05-08 05:39:58,534 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 05:39:58,535 - jarvis_desktop - INFO - Server is ready
+2025-05-08 05:39:58,538 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 05:39:58,538 - jarvis_desktop - INFO - Using 8 worker threads (detected 12 CPU cores)
+2025-05-08 05:39:58,538 - jarvis_desktop - INFO - Using macOS-optimized server configuration
+2025-05-08 05:39:58,540 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 05:39:59,539 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/dist/index.html
+2025-05-08 05:39:59,539 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 05:39:59,539 - jarvis_desktop - INFO - Using macOS-optimized window configuration
+2025-05-08 05:39:59,540 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 05:39:59,540 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 05:40:00,370 - jarvis_desktop - INFO - Application window shown
+2025-05-08 05:40:01,788 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 05:40:02,011 - jarvis_app - INFO - Serving path: 
+2025-05-08 05:40:02,011 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 05:40:02,109 - jarvis_app - INFO - Serving path: assets/index.DOSRHcvy.js
+2025-05-08 05:40:02,110 - jarvis_app - INFO - Serving asset: index.DOSRHcvy.js from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-08 05:40:02,110 - jarvis_app - INFO - Serving path: assets/index.DPMCv7-K.css
+2025-05-08 05:40:02,111 - jarvis_app - INFO - Serving asset: index.DPMCv7-K.css from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-08 05:40:02,201 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 05:40:02,204 - jarvis_desktop - INFO - Setting up macOS-optimized offline mode
+2025-05-08 05:40:02,505 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 05:40:34,767 - jarvis_desktop - INFO - Application window closed
+2025-05-08 06:01:30,130 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static
+2025-05-08 06:01:30,132 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data
+2025-05-08 06:01:30,132 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-08 06:01:30,132 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-08 06:01:30,133 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/models
+2025-05-08 06:01:30,133 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 06:01:30,133 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 06:01:30,133 - jarvis_app - INFO - Loaded 6 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-08 06:01:30,133 - jarvis_app - INFO - Loaded messages for 6 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-08 06:01:30,136 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant
+2025-05-08 06:01:30,136 - jarvis_desktop - INFO - Operating system: posix - darwin
+2025-05-08 06:01:30,136 - jarvis_desktop - INFO - Setting up for macOS environment
+2025-05-08 06:01:30,136 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 06:01:30,136 - jarvis_desktop - INFO - Server is ready
+2025-05-08 06:01:30,138 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 06:01:30,138 - jarvis_desktop - INFO - Using 8 worker threads (detected 12 CPU cores)
+2025-05-08 06:01:30,138 - jarvis_desktop - INFO - Using macOS-optimized server configuration
+2025-05-08 06:01:30,141 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 06:01:31,141 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/dist/index.html
+2025-05-08 06:01:31,141 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 06:01:31,142 - jarvis_desktop - INFO - Using macOS-optimized window configuration
+2025-05-08 06:01:31,142 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 06:01:31,142 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 06:01:31,652 - jarvis_desktop - INFO - Application window shown
+2025-05-08 06:01:32,413 - jarvis_app - INFO - Serving path: 
+2025-05-08 06:01:32,413 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 06:01:32,452 - jarvis_app - INFO - Serving path: assets/index.DNK7rP1c.js
+2025-05-08 06:01:32,452 - jarvis_app - INFO - Serving asset: index.DNK7rP1c.js from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-08 06:01:32,455 - jarvis_app - INFO - Serving path: assets/index.BgmqrFEM.css
+2025-05-08 06:01:32,455 - jarvis_app - INFO - Serving asset: index.BgmqrFEM.css from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-08 06:01:32,522 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 06:01:32,522 - jarvis_desktop - INFO - Setting up macOS-optimized offline mode
+2025-05-08 06:01:32,644 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 06:01:33,146 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 06:01:52,111 - jarvis_desktop - INFO - Application window closed
+2025-05-08 06:09:47,379 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static
+2025-05-08 06:09:47,381 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data
+2025-05-08 06:09:47,381 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-08 06:09:47,381 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-08 06:09:47,382 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/models
+2025-05-08 06:09:47,382 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 06:09:47,382 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 06:09:47,382 - jarvis_app - INFO - Loaded 6 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-08 06:09:47,383 - jarvis_app - INFO - Loaded messages for 6 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-08 06:09:47,385 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant
+2025-05-08 06:09:47,385 - jarvis_desktop - INFO - Operating system: posix - darwin
+2025-05-08 06:09:47,385 - jarvis_desktop - INFO - Setting up for macOS environment
+2025-05-08 06:09:47,385 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 06:09:47,385 - jarvis_desktop - INFO - Server is ready
+2025-05-08 06:09:47,388 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 06:09:47,388 - jarvis_desktop - INFO - Using 8 worker threads (detected 12 CPU cores)
+2025-05-08 06:09:47,388 - jarvis_desktop - INFO - Using macOS-optimized server configuration
+2025-05-08 06:09:47,391 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 06:09:48,391 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/dist/index.html
+2025-05-08 06:09:48,391 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 06:09:48,391 - jarvis_desktop - INFO - Using macOS-optimized window configuration
+2025-05-08 06:09:48,391 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 06:09:48,391 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 06:09:48,968 - jarvis_desktop - INFO - Application window shown
+2025-05-08 06:09:49,555 - jarvis_app - INFO - Serving path: 
+2025-05-08 06:09:49,555 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 06:09:49,586 - jarvis_app - INFO - Serving path: assets/index.BbTUm2lX.js
+2025-05-08 06:09:49,588 - jarvis_app - INFO - Serving path: assets/index.XwCE5vzr.css
+2025-05-08 06:09:49,592 - jarvis_app - INFO - Serving asset: index.BbTUm2lX.js from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-08 06:09:49,593 - jarvis_app - INFO - Serving asset: index.XwCE5vzr.css from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-08 06:09:49,670 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 06:09:49,671 - jarvis_desktop - INFO - Setting up macOS-optimized offline mode
+2025-05-08 06:09:49,827 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 06:09:50,396 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 06:10:08,711 - jarvis_app - INFO - Data saved successfully
+2025-05-08 06:10:08,711 - jarvis_app - INFO - Deleted chat: new-chat-1746670200
+2025-05-08 06:10:10,890 - jarvis_app - INFO - Data saved successfully
+2025-05-08 06:10:10,891 - jarvis_app - INFO - Created new chat: new-chat-1746673810
