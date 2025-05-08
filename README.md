@@ -1,152 +1,215 @@
 # PC Assistant
 
-A comprehensive command-line based personal assistant for controlling your PC. This assistant can perform various tasks including system control, media playback, file operations, web searches, and more.
-
-## Features
-
-### System Control
-- **Volume Control**: Adjust system volume, mute/unmute
-- **Brightness Control**: Adjust screen brightness
-- **Power Management**: Shutdown, restart, logout, sleep, hibernate
-- **Screenshots**: Take and save screenshots
-
-### Application Management
-- **Open Applications**: Launch any installed application
-- **Close Applications**: Close running applications
-
-### Media Control
-- **Spotify**: Search and play music, control playback
-- **YouTube**: Search and play videos, control playback
-- **Netflix**: Basic Netflix controls
-
-### File Operations
-- **Search Files**: Find files and folders on your system
-- **Open Files**: Open files with their default applications
-- **Explore Directories**: Open file explorer in specific locations
-
-### Web Interaction
-- **Google Search**: Search the web directly
-- **Open Websites**: Open any website in your default browser
-- **Maps Search**: Search locations on Google Maps
-
-### Time Management
-- **Set Alarms**: Schedule alarms with custom messages
-
-## Project Structure
-
-```
-Commands/
-├── assistant.py          # Core assistant framework
-├── requirements.txt     # Dependencies
-├── assistant/           # Assistant core modules
-│   └── __init__.py
-├── commands/            # Command implementations
-│   ├── __init__.py
-│   ├── alarm.py         # Alarm commands
-│   ├── app_control.py   # Application control commands
-│   ├── file_operations.py # File management commands
-│   ├── media.py         # Media module (imports media controls)
-│   ├── netflix.py       # Netflix control commands
-│   ├── spotify.py       # Spotify control commands
-│   ├── system_control.py # System control commands
-│   ├── web_search.py    # Web search commands
-│   └── youtube.py       # YouTube control commands
-└── tests/               # Test modules
-    └── test_spotify.py
-```
+A comprehensive PC control assistant that can execute various commands like controlling system volume, brightness, taking screenshots, playing music on Spotify, searching YouTube, and more.
 
 ## Installation
 
-1. Clone this repository or download the source code
-2. Make sure you have Python 3.6+ installed
-3. Install the required dependencies:
-   ```
-   pip install -r requirements.txt
-   ```
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/pc-assistant.git
+cd pc-assistant
 
-## Usage
+# Install the package
+pip install -e .
+```
 
-Run the assistant by executing the main script:
+## Running the Assistant
+
+You can run the assistant directly from the command line:
 
 ```bash
-python assistant.py
+python run.py
 ```
 
-Once the assistant is running, you can enter commands at the prompt:
+Or using the installed console script:
 
-```
-Assistant> help
-```
-
-### Available Commands
-
-#### App Control
-
-```
-Assistant> open chrome
-Assistant> close notepad
+```bash
+pc-assistant
 ```
 
-#### Alarms
+"""
+COMMAND LIST FOR PC ASSISTANT
 
+1. YOUTUBE COMMANDS
+   - youtube play "metallica nothing else matters"    # Search and play a video
+   - youtube search "python tutorial"                 # Search for videos
+   - youtube pause                                    # Pause current video
+   - youtube resume                                   # Resume playback
+   - youtube mute                                     # Toggle mute
+   - youtube fullscreen                               # Toggle fullscreen
+   - youtube volume_up                                # Increase YouTube volume
+   - youtube volume_down                              # Decrease YouTube volume
+   - youtube captions                                 # Toggle captions
+   - youtube theater                                  # Toggle theater mode
+   - youtube forward                                  # Forward 5 seconds
+   - youtube rewind                                   # Rewind 5 seconds
+
+2. VOLUME CONTROL
+   - volume up 10                                     # Increase system volume by 10%
+   - volume down 5                                    # Decrease system volume by 5%
+   - volume set 50                                    # Set system volume to 50%
+   - volume mute                                      # Toggle mute
+   - volume unmute                                    # Unmute system volume
+
+3. BRIGHTNESS CONTROL
+   - brightness up 10                                 # Increase brightness by 10%
+   - brightness down 5                                # Decrease brightness by 5%
+   - brightness set 70                                # Set brightness to 70%
+
+4. POWER CONTROL
+   - power sleep                                      # Put computer to sleep
+   - power hibernate                                  # Hibernate computer
+   - power shutdown                                   # Shut down computer
+   - power restart                                    # Restart computer
+   - power logout                                     # Log out current user
+
+5. SCREENSHOT
+   - screenshot                                       # Take a screenshot with timestamp
+   - screenshot meeting_notes                         # Take screenshot named "meeting_notes.png"
+
+6. SPOTIFY
+   - spotify play "coldplay yellow"                   # Search and play a song
+   - spotify pause                                    # Pause playback
+   - spotify resume                                   # Resume playback
+   - spotify next                                     # Skip to next track
+   - spotify previous                                 # Go to previous track
+   - spotify search "rock playlist"                   # Search for music
+   - spotify open                                     # Open Spotify app
+
+7. WEB BROWSING
+   - google "weather in new york"                     # Search Google
+   - web "github.com"                                 # Open website in browser
+   - web "https://stackoverflow.com"                  # Open website with https
+
+8. APP CONTROL
+   - open chrome                                      # Open Chrome browser
+   - open notepad                                     # Open Notepad
+   - open spotify                                     # Open Spotify
+   - close chrome                                     # Close Chrome browser
+   - close notepad                                    # Close Notepad
+
+9. FILE OPERATIONS
+   - file search "budget 2023"                        # Search for files
+   - file open "report.docx"                          # Open a file
+   - file explore "Downloads"                         # Open file explorer at location
+
+10. MAPS
+    - maps "coffee shops near me"                     # Search maps for locations
+    - maps "directions to airport"                    # Get directions
+
+11. NETFLIX
+    - netflix open                                    # Open Netflix
+    - netflix search "stranger things"                # Search for shows
+    - netflix play                                    # Play/pause toggle
+
+12. ALARM
+    - alarm set "14:30 Meeting with client"           # Set alarm for 2:30 PM
+    - alarm 5m "Check oven"                           # Set alarm for 5 minutes from now
+    - alarm list                                      # List all alarms
+    - alarm cancel "Meeting"                          # Cancel alarm containing "Meeting"
+"""
+
+## Integrating with AI Assistants or Chat Applications
+
+The PC Assistant can be easily integrated with AI assistants or chat applications. Here's how:
+
+### Basic Integration
+
+```python
+from run import execute_command
+
+# Execute a command and get the result
+result = execute_command("volume up 10")
+
+# Check if the command was successful
+if result.get('success'):
+    print(f"Command succeeded: {result.get('message')}")
+else:
+    print(f"Command failed: {result.get('error')}")
 ```
-Assistant> alarm 14:30 Take a break
-Assistant> alarm 5m Quick reminder
-Assistant> alarms
-Assistant> cancelalarm Take a break
+
+### Structured Command Approach (Recommended)
+
+```python
+from run import structured_execute_command
+
+# Execute a command using the structured approach
+result = structured_execute_command("volume", "up 10")
+# Or with YouTube
+result = structured_execute_command("youtube", "play music")
+
+# Check if the command was successful
+if result.get('success'):
+    print(f"Command succeeded: {result.get('message')}")
+else:
+    print(f"Command failed: {result.get('error')}")
 ```
 
-#### Spotify
+### Complete Example
 
-```
-Assistant> spotify play
-Assistant> spotify pause
-Assistant> spotify next
-Assistant> spotify previous
-Assistant> spotify search Bohemian Rhapsody
-Assistant> spotify volume 50
+See `assistant_integration.py` for a complete example of how to integrate with an AI assistant.
+
+```bash
+python assistant_integration.py
 ```
 
-#### YouTube
+### Response Format
 
-```
-Assistant> youtube how to make pasta
-```
+Commands return a standardized response dictionary with these keys:
 
-## Extending the Assistant
+- `success`: Boolean indicating whether the command executed successfully
+- `message`: User-friendly message about the result
+- `error`: Error message if any
+- `action`: The action that was performed
+- `additional_data`: Any additional data returned by the command
 
-You can add new commands by creating new Python files in the `commands` directory. Each command should be a class that inherits from the `Command` base class and implements the `execute` method.
+## Available Commands
 
-Example:
+- **volume**: Control system volume
+  - `volume up [level]` - Increase volume
+  - `volume down [level]` - Decrease volume
+  - `volume mute` - Toggle mute
+- **brightness**: Control screen brightness
+  - `brightness up [level]` - Increase brightness
+  - `brightness down [level]` - Decrease brightness
+- **power**: Control system power
+  - `power shutdown` - Shut down the system
+  - `power restart` - Restart the system
+  - `power sleep` - Put system to sleep
+- **screenshot**: Take a screenshot
+  - `screenshot [filename]` - Take screenshot and save it
+- **spotify**: Control Spotify
+  - `spotify play [song]` - Play a song
+  - `spotify pause` - Pause playback
+- **youtube**: Control YouTube
+  - `youtube play [query]` - Search and play a video
+  - `youtube search [query]` - Search for videos
+- **google**: Search Google
+  - `google [query]` - Search Google
+- And many more!
+
+## Creating Custom Commands
+
+You can create your own commands by extending the `Command` base class:
 
 ```python
 from assistant import Command
 
-class MyNewCommand(Command):
-    """Description of what the command does.
+class MyCustomCommand(Command):
+    """Help text for my custom command."""
 
-    Usage: mynew <arguments>
+    def execute(self, args: str, *_args, **_kwargs) -> dict:
+        # Process the command
+        # ...
 
-    Examples:
-        mynew example1
-        mynew example2
-    """
-
-    def execute(self, args: str, *_args, **_kwargs) -> bool:
-        # Implement your command logic here
-        return True
+        # Return a standardized response
+        return {
+            'success': True,
+            'action': 'mycustom',
+            'message': 'Command executed successfully'
+        }
 ```
-
-## Architecture
-
-The assistant uses a command pattern architecture:
-
-- `assistant.py`: Main application with command registry and processing logic
-- `commands/`: Directory containing all command implementations
-  - `app_control.py`: Commands for opening and closing applications
-  - `alarm.py`: Commands for setting and managing alarms
-  - `media.py`: Commands for controlling media applications
 
 ## License
 
-MIT
+MIT License
