@@ -1,0 +1,672 @@
+2025-05-08 02:28:27,625 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 02:28:27,625 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 02:28:27,625 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 02:28:27,627 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 02:28:27,627 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 02:28:27,627 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 02:28:27,627 - jarvis_app - INFO - Initialized with 3 default chats
+2025-05-08 02:28:27,627 - jarvis_app - INFO - Initialized with default messages for 3 chats
+2025-05-08 02:28:27,629 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper
+2025-05-08 02:28:27,629 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 02:28:27,631 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 02:28:28,634 - jarvis_desktop - ERROR - Error in main application: create_window() got an unexpected keyword argument 'on_shown'
+2025-05-08 02:29:57,173 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 02:29:57,174 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 02:29:57,174 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 02:29:57,175 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 02:29:57,175 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 02:29:57,175 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 02:29:57,175 - jarvis_app - INFO - Initialized with 3 default chats
+2025-05-08 02:29:57,175 - jarvis_app - INFO - Initialized with default messages for 3 chats
+2025-05-08 02:29:57,177 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper
+2025-05-08 02:29:57,177 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 02:29:57,179 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 02:29:58,178 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 02:30:00,018 - jarvis_desktop - INFO - Application window shown
+2025-05-08 02:30:40,606 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 02:30:40,606 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 02:30:40,606 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 02:30:40,607 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 02:30:40,607 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 02:30:40,607 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 02:30:40,607 - jarvis_app - INFO - Initialized with 3 default chats
+2025-05-08 02:30:40,607 - jarvis_app - INFO - Initialized with default messages for 3 chats
+2025-05-08 02:30:40,610 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper
+2025-05-08 02:30:40,611 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 02:30:40,611 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 02:30:40,611 - jarvis_desktop - INFO - Server is ready
+2025-05-08 02:30:40,612 - jarvis_desktop - ERROR - Error setting up window event handlers: 'EventContainer' object has no attribute 'error'
+2025-05-08 02:30:40,612 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 02:30:40,613 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 02:30:41,046 - jarvis_desktop - INFO - Application window shown
+2025-05-08 02:35:47,775 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 02:35:47,775 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 02:35:47,775 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 02:35:47,776 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 02:35:47,776 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 02:35:47,776 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 02:35:47,776 - jarvis_app - INFO - Initialized with 3 default chats
+2025-05-08 02:35:47,776 - jarvis_app - INFO - Initialized with default messages for 3 chats
+2025-05-08 02:35:47,778 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper
+2025-05-08 02:35:47,778 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 02:35:47,778 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 02:35:47,778 - jarvis_desktop - INFO - Server is ready
+2025-05-08 02:35:47,779 - jarvis_desktop - ERROR - Error setting up window event handlers: 'EventContainer' object has no attribute 'error'
+2025-05-08 02:35:47,779 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 02:35:47,781 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 02:35:48,454 - jarvis_desktop - INFO - Application window shown
+2025-05-08 02:38:02,906 - jarvis_desktop - INFO - Application window closed
+2025-05-08 02:38:20,261 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 02:38:20,262 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 02:38:20,262 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 02:38:20,262 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 02:38:20,263 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 02:38:20,263 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 02:38:20,263 - jarvis_app - INFO - Initialized with 3 default chats
+2025-05-08 02:38:20,263 - jarvis_app - INFO - Initialized with default messages for 3 chats
+2025-05-08 02:38:20,264 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper
+2025-05-08 02:38:20,264 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 02:38:20,264 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 02:38:20,265 - jarvis_desktop - INFO - Server is ready
+2025-05-08 02:38:20,265 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 02:38:20,265 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 02:38:20,266 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 02:38:20,712 - jarvis_desktop - INFO - Application window shown
+2025-05-08 02:38:21,301 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 02:38:21,437 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 02:38:24,729 - jarvis_desktop - INFO - Application window closed
+2025-05-08 02:42:45,507 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 02:42:45,509 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 02:42:45,509 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 02:42:45,512 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 02:42:45,512 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 02:42:45,512 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 02:42:45,512 - jarvis_app - INFO - Initialized with 3 default chats
+2025-05-08 02:42:45,513 - jarvis_app - INFO - Initialized with default messages for 3 chats
+2025-05-08 02:42:45,514 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper
+2025-05-08 02:42:45,515 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 02:42:45,515 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 02:42:45,515 - jarvis_desktop - INFO - Server is ready
+2025-05-08 02:42:45,515 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 02:42:45,515 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 02:42:45,517 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 02:42:47,456 - jarvis_desktop - INFO - Application window shown
+2025-05-08 02:42:48,336 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 02:42:48,490 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 02:43:00,947 - jarvis_app - INFO - Data saved successfully
+2025-05-08 02:43:00,947 - jarvis_app - INFO - Deleted chat: 2
+2025-05-08 02:43:05,098 - jarvis_app - INFO - Sending query to Jarvis AI: KMS...
+2025-05-08 02:43:05,098 - jarvis_assistant - INFO - Processing query: KMS
+2025-05-08 02:43:05,098 - jarvis_app - INFO - Received response from Jarvis AI: I've received your query: 'KMS'. This is a placeho...
+2025-05-08 02:43:05,098 - jarvis_app - INFO - Data saved successfully
+2025-05-08 02:43:05,098 - jarvis_app - INFO - Processed message in chat 1
+2025-05-08 02:48:50,621 - jarvis_desktop - INFO - Application window closed
+2025-05-08 02:49:50,102 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static
+2025-05-08 02:49:50,103 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 02:49:50,103 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 02:49:50,103 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 02:49:50,103 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 02:49:50,103 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 02:49:50,104 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 02:49:50,104 - jarvis_app - INFO - Loaded 2 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 02:49:50,104 - jarvis_app - INFO - Loaded messages for 2 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 02:49:50,106 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper
+2025-05-08 02:49:50,106 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 02:49:50,106 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 02:49:50,106 - jarvis_desktop - INFO - Server is ready
+2025-05-08 02:49:50,108 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 02:49:50,611 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 02:49:50,611 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 02:49:51,184 - jarvis_desktop - INFO - Application window shown
+2025-05-08 02:49:51,982 - jarvis_app - INFO - Serving path: 
+2025-05-08 02:49:51,982 - jarvis_app - INFO - Serving index.html for path: 
+2025-05-08 02:49:52,030 - jarvis_app - INFO - Serving path: assets/index-CP5Y9BcI.js
+2025-05-08 02:49:52,030 - jarvis_app - INFO - Serving file: assets/index-CP5Y9BcI.js
+2025-05-08 02:49:52,033 - jarvis_app - INFO - Serving path: assets/index-BThvlMbs.css
+2025-05-08 02:49:52,033 - jarvis_app - INFO - Serving file: assets/index-BThvlMbs.css
+2025-05-08 02:49:52,100 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 02:49:52,255 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 02:51:00,208 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static
+2025-05-08 02:51:00,210 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 02:51:00,210 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 02:51:00,210 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 02:51:00,211 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 02:51:00,211 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 02:51:00,211 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 02:51:00,212 - jarvis_app - INFO - Loaded 2 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 02:51:00,212 - jarvis_app - INFO - Loaded messages for 2 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 02:51:00,214 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 02:51:00,218 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 02:51:01,220 - jarvis_desktop - INFO - Starting PyWebView event loop with direct HTML content
+2025-05-08 02:51:01,327 - pywebview - DEBUG - Using Cocoa
+2025-05-08 02:55:09,532 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static
+2025-05-08 02:55:09,532 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 02:55:09,532 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 02:55:09,532 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 02:55:09,533 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 02:55:09,533 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 02:55:09,533 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 02:55:09,533 - jarvis_app - INFO - Loaded 2 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 02:55:09,533 - jarvis_app - INFO - Loaded messages for 2 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 02:55:09,536 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper
+2025-05-08 02:55:09,536 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 02:55:09,537 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 02:55:09,537 - jarvis_desktop - INFO - Server is ready
+2025-05-08 02:55:09,538 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 02:55:10,541 - jarvis_desktop - INFO - Creating window with direct index.html URL
+2025-05-08 02:55:10,542 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 02:55:10,542 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 02:55:11,086 - jarvis_desktop - INFO - Application window shown
+2025-05-08 02:55:11,790 - jarvis_app - INFO - Serving index.html directly
+2025-05-08 02:55:11,835 - jarvis_app - INFO - Serving path: assets/index.BVAGHFrp.js
+2025-05-08 02:55:11,835 - jarvis_app - INFO - Serving asset: assets/index.BVAGHFrp.js
+2025-05-08 02:55:11,837 - jarvis_app - INFO - Serving path: assets/index.BThvlMbs.css
+2025-05-08 02:55:11,837 - jarvis_app - INFO - Serving asset: assets/index.BThvlMbs.css
+2025-05-08 02:55:11,854 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 02:55:11,917 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 02:55:12,543 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 02:55:36,435 - jarvis_app - INFO - Serving path: 
+2025-05-08 02:55:36,435 - jarvis_app - INFO - Serving index.html for path: 
+2025-05-08 02:55:36,456 - jarvis_app - INFO - Serving path: assets/index.BThvlMbs.css
+2025-05-08 02:55:36,457 - jarvis_app - INFO - Serving path: assets/index.BVAGHFrp.js
+2025-05-08 02:55:36,457 - jarvis_app - INFO - Serving asset: assets/index.BThvlMbs.css
+2025-05-08 02:55:36,457 - jarvis_app - INFO - Serving asset: assets/index.BVAGHFrp.js
+2025-05-08 02:55:36,461 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 02:55:36,475 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 02:57:35,084 - jarvis_desktop - INFO - Application window closed
+2025-05-08 03:01:47,071 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static
+2025-05-08 03:01:47,071 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 03:01:47,071 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 03:01:47,071 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 03:01:47,072 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 03:01:47,072 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 03:01:47,072 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 03:01:47,073 - jarvis_app - INFO - Loaded 2 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 03:01:47,073 - jarvis_app - INFO - Loaded messages for 2 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 03:01:47,075 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper
+2025-05-08 03:01:47,075 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 03:01:47,075 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 03:01:47,076 - jarvis_desktop - INFO - Server is ready
+2025-05-08 03:01:47,077 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 03:01:48,081 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/dist/index.html
+2025-05-08 03:01:48,082 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 03:01:48,083 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 03:01:48,083 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 03:01:48,894 - jarvis_desktop - INFO - Application window shown
+2025-05-08 03:01:50,108 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 03:01:50,112 - jarvis_app - INFO - Serving path: 
+2025-05-08 03:01:50,112 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 03:01:50,190 - jarvis_app - INFO - Serving path: assets/index.BVAGHFrp.js
+2025-05-08 03:01:50,191 - jarvis_app - INFO - Serving asset: index.BVAGHFrp.js from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 03:01:50,211 - jarvis_app - INFO - Serving path: assets/index.BThvlMbs.css
+2025-05-08 03:01:50,211 - jarvis_app - INFO - Serving asset: index.BThvlMbs.css from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 03:01:50,342 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 03:01:50,823 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 03:18:01,277 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static
+2025-05-08 03:18:01,277 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 03:18:01,278 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 03:18:01,278 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 03:18:01,279 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 03:18:01,279 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 03:18:01,279 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 03:18:01,279 - jarvis_app - INFO - Loaded 2 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 03:18:01,279 - jarvis_app - INFO - Loaded messages for 2 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 03:18:01,282 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper
+2025-05-08 03:18:01,282 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 03:18:01,282 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 03:18:01,282 - jarvis_desktop - INFO - Server is ready
+2025-05-08 03:18:01,284 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 03:18:02,287 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/dist/index.html
+2025-05-08 03:18:02,287 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 03:18:02,288 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 03:18:02,288 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 03:18:02,740 - jarvis_desktop - INFO - Application window shown
+2025-05-08 03:18:03,377 - jarvis_app - INFO - Serving path: 
+2025-05-08 03:18:03,377 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 03:18:03,419 - jarvis_app - INFO - Serving path: assets/index.CoUbmS0C.js
+2025-05-08 03:18:03,420 - jarvis_app - INFO - Serving asset: index.CoUbmS0C.js from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 03:18:03,421 - jarvis_app - INFO - Serving path: assets/index.8K_g9OUc.css
+2025-05-08 03:18:03,421 - jarvis_app - INFO - Serving asset: index.8K_g9OUc.css from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 03:18:03,507 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 03:18:03,695 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 03:18:04,293 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 03:22:08,600 - jarvis_desktop - INFO - Application window closed
+2025-05-08 03:25:02,712 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static
+2025-05-08 03:25:02,713 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 03:25:02,713 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 03:25:02,714 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 03:25:02,715 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 03:25:02,715 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 03:25:02,716 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 03:25:02,716 - jarvis_app - INFO - Loaded 2 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 03:25:02,717 - jarvis_app - INFO - Loaded messages for 2 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 03:25:02,726 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper
+2025-05-08 03:25:02,728 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 03:25:02,728 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 03:25:02,729 - jarvis_desktop - INFO - Server is ready
+2025-05-08 03:25:02,748 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 03:25:03,733 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/dist/index.html
+2025-05-08 03:25:03,734 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 03:25:03,736 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 03:25:03,736 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 03:25:04,709 - jarvis_desktop - INFO - Application window shown
+2025-05-08 03:25:05,638 - jarvis_app - INFO - Serving path: 
+2025-05-08 03:25:05,638 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 03:25:05,696 - jarvis_app - INFO - Serving path: assets/index.DIWpuasr.js
+2025-05-08 03:25:05,696 - jarvis_app - INFO - Serving asset: index.DIWpuasr.js from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 03:25:05,699 - jarvis_app - INFO - Serving path: assets/index.8K_g9OUc.css
+2025-05-08 03:25:05,699 - jarvis_app - INFO - Serving asset: index.8K_g9OUc.css from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 03:25:05,739 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 03:25:05,787 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 03:25:05,953 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 03:25:06,096 - jarvis_app - INFO - Data saved successfully
+2025-05-08 03:25:06,096 - jarvis_app - INFO - Created new chat: new-chat-1746663906
+2025-05-08 03:31:01,412 - jarvis_desktop - INFO - Application window closed
+2025-05-08 03:37:40,456 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static
+2025-05-08 03:37:40,457 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 03:37:40,457 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 03:37:40,457 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 03:37:40,458 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 03:37:40,458 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 03:37:40,458 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 03:37:40,458 - jarvis_app - INFO - Loaded 3 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 03:37:40,458 - jarvis_app - INFO - Loaded messages for 3 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 03:37:40,460 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper
+2025-05-08 03:37:40,460 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 03:37:40,460 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 03:37:40,461 - jarvis_desktop - INFO - Server is ready
+2025-05-08 03:37:40,462 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 03:37:41,523 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/dist/index.html
+2025-05-08 03:37:41,550 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 03:37:41,556 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 03:37:41,557 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 03:37:42,472 - jarvis_desktop - INFO - Application window shown
+2025-05-08 03:37:43,290 - jarvis_app - INFO - Serving path: 
+2025-05-08 03:37:43,291 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 03:37:43,418 - jarvis_app - INFO - Serving path: assets/index.DhL3RtmC.js
+2025-05-08 03:37:43,418 - jarvis_app - INFO - Serving path: assets/index.BTB6pXv4.css
+2025-05-08 03:37:43,418 - jarvis_app - INFO - Serving asset: index.DhL3RtmC.js from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 03:37:43,418 - jarvis_app - INFO - Serving asset: index.BTB6pXv4.css from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 03:37:43,491 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 03:37:43,561 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 03:37:43,563 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 03:37:43,706 - jarvis_app - INFO - Data saved successfully
+2025-05-08 03:37:43,706 - jarvis_app - INFO - Created new chat: new-chat-1746664663
+2025-05-08 03:50:14,617 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static
+2025-05-08 03:50:14,618 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 03:50:14,618 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 03:50:14,618 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 03:50:14,619 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 03:50:14,619 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 03:50:14,619 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 03:50:14,619 - jarvis_app - INFO - Loaded 4 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 03:50:14,620 - jarvis_app - INFO - Loaded messages for 4 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 03:50:14,622 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper
+2025-05-08 03:50:14,622 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 03:50:14,622 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 03:50:14,623 - jarvis_desktop - INFO - Server is ready
+2025-05-08 03:50:14,626 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 03:50:15,627 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/dist/index.html
+2025-05-08 03:50:15,627 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 03:50:15,627 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 03:50:15,627 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 03:50:16,261 - jarvis_desktop - INFO - Application window shown
+2025-05-08 03:50:17,104 - jarvis_app - INFO - Serving path: 
+2025-05-08 03:50:17,105 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 03:50:17,175 - jarvis_app - INFO - Serving path: assets/index.BUntpW7D.js
+2025-05-08 03:50:17,175 - jarvis_app - INFO - Serving asset: index.BUntpW7D.js from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 03:50:17,181 - jarvis_app - INFO - Serving path: assets/index.C1neavs0.css
+2025-05-08 03:50:17,181 - jarvis_app - INFO - Serving asset: index.C1neavs0.css from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 03:50:17,299 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 03:50:17,433 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 03:50:17,579 - jarvis_app - INFO - Data saved successfully
+2025-05-08 03:50:17,579 - jarvis_app - INFO - Created new chat: new-chat-1746665417
+2025-05-08 03:50:17,632 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 03:55:59,703 - jarvis_app - INFO - Data saved successfully
+2025-05-08 03:55:59,703 - jarvis_app - INFO - Deleted chat: 1
+2025-05-08 03:56:02,249 - jarvis_app - INFO - Data saved successfully
+2025-05-08 03:56:02,249 - jarvis_app - INFO - Deleted chat: 3
+2025-05-08 03:56:05,604 - jarvis_app - INFO - Data saved successfully
+2025-05-08 03:56:05,604 - jarvis_app - INFO - Deleted chat: new-chat-1746663906
+2025-05-08 03:56:09,185 - jarvis_app - INFO - Data saved successfully
+2025-05-08 03:56:09,186 - jarvis_app - INFO - Deleted chat: new-chat-1746664663
+2025-05-08 03:56:11,817 - jarvis_app - INFO - Data saved successfully
+2025-05-08 03:56:11,818 - jarvis_app - INFO - Deleted chat: new-chat-1746665417
+2025-05-08 03:58:15,647 - jarvis_desktop - INFO - Application window closed
+2025-05-08 04:01:34,425 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static
+2025-05-08 04:01:34,425 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 04:01:34,425 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 04:01:34,426 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 04:01:34,426 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 04:01:34,426 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 04:01:34,426 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 04:01:34,427 - jarvis_app - INFO - Loaded 0 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 04:01:34,427 - jarvis_app - INFO - Loaded messages for 0 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 04:01:34,429 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper
+2025-05-08 04:01:34,429 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 04:01:34,429 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 04:01:34,430 - jarvis_desktop - INFO - Server is ready
+2025-05-08 04:01:34,432 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 04:01:35,436 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/dist/index.html
+2025-05-08 04:01:35,437 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 04:01:35,437 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 04:01:35,437 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 04:01:35,931 - jarvis_desktop - INFO - Application window shown
+2025-05-08 04:01:36,470 - jarvis_app - INFO - Serving path: 
+2025-05-08 04:01:36,470 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 04:01:36,505 - jarvis_app - INFO - Serving path: assets/index.D4af6up6.js
+2025-05-08 04:01:36,505 - jarvis_app - INFO - Serving asset: index.D4af6up6.js from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 04:01:36,505 - jarvis_app - INFO - Serving path: assets/index.DJq8pBQl.css
+2025-05-08 04:01:36,505 - jarvis_app - INFO - Serving asset: index.DJq8pBQl.css from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 04:01:36,558 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 04:01:36,685 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 04:01:36,754 - jarvis_app - INFO - Data saved successfully
+2025-05-08 04:01:36,754 - jarvis_app - INFO - Created new chat: new-chat-1746666096
+2025-05-08 04:01:37,439 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 04:06:32,187 - jarvis_desktop - INFO - Application window closed
+2025-05-08 04:06:44,341 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static
+2025-05-08 04:06:44,342 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 04:06:44,342 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 04:06:44,342 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 04:06:44,342 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 04:06:44,342 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 04:06:44,342 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 04:06:44,343 - jarvis_app - INFO - Loaded 1 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 04:06:44,343 - jarvis_app - INFO - Loaded messages for 1 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 04:06:44,345 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper
+2025-05-08 04:06:44,345 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 04:06:44,345 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 04:06:44,345 - jarvis_desktop - INFO - Server is ready
+2025-05-08 04:06:44,347 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 04:06:45,352 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/dist/index.html
+2025-05-08 04:06:45,353 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 04:06:45,354 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 04:06:45,354 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 04:06:45,921 - jarvis_desktop - INFO - Application window shown
+2025-05-08 04:06:46,499 - jarvis_app - INFO - Serving path: 
+2025-05-08 04:06:46,499 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 04:06:46,531 - jarvis_app - INFO - Serving path: assets/index.qsqoZbJO.js
+2025-05-08 04:06:46,531 - jarvis_app - INFO - Serving asset: index.qsqoZbJO.js from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 04:06:46,531 - jarvis_app - INFO - Serving path: assets/index.Gk81Busp.css
+2025-05-08 04:06:46,531 - jarvis_app - INFO - Serving asset: index.Gk81Busp.css from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 04:06:46,598 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 04:06:46,696 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 04:06:46,768 - jarvis_app - INFO - Data saved successfully
+2025-05-08 04:06:46,769 - jarvis_app - INFO - Created new chat: new-chat-1746666406
+2025-05-08 04:06:47,355 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 04:06:55,427 - jarvis_app - INFO - Data saved successfully
+2025-05-08 04:06:55,427 - jarvis_app - INFO - Deleted chat: new-chat-1746666096
+2025-05-08 04:08:22,738 - jarvis_desktop - INFO - Application window closed
+2025-05-08 04:10:19,110 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static
+2025-05-08 04:10:19,111 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 04:10:19,111 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 04:10:19,111 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 04:10:19,112 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 04:10:19,112 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 04:10:19,112 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 04:10:19,112 - jarvis_app - INFO - Loaded 1 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 04:10:19,112 - jarvis_app - INFO - Loaded messages for 1 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 04:10:19,114 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper
+2025-05-08 04:10:19,114 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 04:10:19,114 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 04:10:19,115 - jarvis_desktop - INFO - Server is ready
+2025-05-08 04:10:19,117 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 04:10:20,116 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/dist/index.html
+2025-05-08 04:10:20,116 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 04:10:20,116 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 04:10:20,116 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 04:10:20,697 - jarvis_desktop - INFO - Application window shown
+2025-05-08 04:10:21,225 - jarvis_app - INFO - Serving path: 
+2025-05-08 04:10:21,225 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 04:10:21,275 - jarvis_app - INFO - Serving path: assets/index.D37V8tKp.js
+2025-05-08 04:10:21,276 - jarvis_app - INFO - Serving asset: index.D37V8tKp.js from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 04:10:21,276 - jarvis_app - INFO - Serving path: assets/index.DQykXKIO.css
+2025-05-08 04:10:21,277 - jarvis_app - INFO - Serving asset: index.DQykXKIO.css from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 04:10:21,318 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 04:10:21,421 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 04:10:21,485 - jarvis_app - INFO - Data saved successfully
+2025-05-08 04:10:21,485 - jarvis_app - INFO - Created new chat: new-chat-1746666621
+2025-05-08 04:10:22,121 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 04:11:31,024 - jarvis_desktop - INFO - Application window closed
+2025-05-08 04:18:03,943 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static
+2025-05-08 04:18:03,945 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 04:18:03,947 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 04:18:03,947 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 04:18:03,948 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 04:18:03,948 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 04:18:03,948 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 04:18:03,949 - jarvis_app - INFO - Loaded 2 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 04:18:03,949 - jarvis_app - INFO - Loaded messages for 2 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 04:18:03,951 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper
+2025-05-08 04:18:03,951 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 04:18:03,952 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 04:18:03,952 - jarvis_desktop - INFO - Server is ready
+2025-05-08 04:18:03,954 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 04:18:04,956 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/dist/index.html
+2025-05-08 04:18:04,957 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 04:18:04,957 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 04:18:04,957 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 04:18:05,817 - jarvis_desktop - INFO - Application window shown
+2025-05-08 04:18:06,475 - jarvis_app - INFO - Serving path: 
+2025-05-08 04:18:06,476 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 04:18:06,513 - jarvis_app - INFO - Serving path: assets/index.DZXi3did.js
+2025-05-08 04:18:06,513 - jarvis_app - INFO - Serving asset: index.DZXi3did.js from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 04:18:06,515 - jarvis_app - INFO - Serving path: assets/index.DQykXKIO.css
+2025-05-08 04:18:06,515 - jarvis_app - INFO - Serving asset: index.DQykXKIO.css from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 04:18:06,582 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 04:18:06,729 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 04:18:06,849 - jarvis_app - INFO - Data saved successfully
+2025-05-08 04:18:06,850 - jarvis_app - INFO - Created new chat: new-chat-1746667086
+2025-05-08 04:18:06,958 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 04:18:12,141 - jarvis_app - INFO - Data saved successfully
+2025-05-08 04:18:12,142 - jarvis_app - INFO - Deleted chat: new-chat-1746666406
+2025-05-08 04:18:14,463 - jarvis_app - INFO - Data saved successfully
+2025-05-08 04:18:14,463 - jarvis_app - INFO - Deleted chat: new-chat-1746666621
+2025-05-08 04:20:05,589 - jarvis_desktop - INFO - Application window closed
+2025-05-08 04:21:51,993 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static
+2025-05-08 04:21:51,994 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 04:21:51,994 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 04:21:51,994 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 04:21:51,996 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 04:21:51,996 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 04:21:51,996 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 04:21:51,996 - jarvis_app - INFO - Loaded 1 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 04:21:51,996 - jarvis_app - INFO - Loaded messages for 1 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 04:21:51,998 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper
+2025-05-08 04:21:51,998 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 04:21:51,998 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 04:21:51,999 - jarvis_desktop - INFO - Server is ready
+2025-05-08 04:21:52,000 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 04:21:53,002 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/dist/index.html
+2025-05-08 04:21:53,002 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 04:21:53,005 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 04:21:53,005 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 04:21:53,504 - jarvis_desktop - INFO - Application window shown
+2025-05-08 04:21:54,099 - jarvis_app - INFO - Serving path: 
+2025-05-08 04:21:54,099 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 04:21:54,147 - jarvis_app - INFO - Serving path: assets/index.DTJu8Gp8.js
+2025-05-08 04:21:54,148 - jarvis_app - INFO - Serving asset: index.DTJu8Gp8.js from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 04:21:54,148 - jarvis_app - INFO - Serving path: assets/index.DQykXKIO.css
+2025-05-08 04:21:54,148 - jarvis_app - INFO - Serving asset: index.DQykXKIO.css from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 04:21:54,194 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 04:21:54,331 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 04:21:55,009 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 04:22:22,115 - jarvis_app - INFO - Sending query to Jarvis AI: hellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjv...
+2025-05-08 04:22:22,116 - jarvis_assistant - INFO - Processing query: hellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjds
+2025-05-08 04:22:22,117 - jarvis_app - INFO - Received response from Jarvis AI: Hello! I'm Jarvis, your AI assistant. How can I he...
+2025-05-08 04:22:22,122 - jarvis_app - INFO - Data saved successfully
+2025-05-08 04:22:22,122 - jarvis_app - INFO - Processed message in chat new-chat-1746667086
+2025-05-08 04:23:47,233 - jarvis_desktop - INFO - Application window closed
+2025-05-08 04:25:36,491 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static
+2025-05-08 04:25:36,492 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 04:25:36,492 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 04:25:36,493 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 04:25:36,495 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 04:25:36,495 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 04:25:36,495 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 04:25:36,495 - jarvis_app - INFO - Loaded 1 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 04:25:36,496 - jarvis_app - INFO - Loaded messages for 1 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 04:25:36,498 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper
+2025-05-08 04:25:36,498 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 04:25:36,498 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 04:25:36,499 - jarvis_desktop - INFO - Server is ready
+2025-05-08 04:25:36,501 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 04:25:37,501 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/dist/index.html
+2025-05-08 04:25:37,502 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 04:25:37,503 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 04:25:37,503 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 04:25:37,977 - jarvis_desktop - INFO - Application window shown
+2025-05-08 04:25:38,481 - jarvis_app - INFO - Serving path: 
+2025-05-08 04:25:38,481 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 04:25:38,533 - jarvis_app - INFO - Serving path: assets/index.C84zyXh6.js
+2025-05-08 04:25:38,534 - jarvis_app - INFO - Serving asset: index.C84zyXh6.js from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 04:25:38,534 - jarvis_app - INFO - Serving path: assets/index.DQykXKIO.css
+2025-05-08 04:25:38,534 - jarvis_app - INFO - Serving asset: index.DQykXKIO.css from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 04:25:38,630 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 04:25:38,804 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 04:25:38,881 - jarvis_app - INFO - Data saved successfully
+2025-05-08 04:25:38,882 - jarvis_app - INFO - Created new chat: new-chat-1746667538
+2025-05-08 04:25:39,508 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 04:25:46,692 - jarvis_app - INFO - Sending query to Jarvis AI: hellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjv...
+2025-05-08 04:25:46,693 - jarvis_assistant - INFO - Processing query: hellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjds
+2025-05-08 04:25:46,694 - jarvis_app - INFO - Received response from Jarvis AI: Hello! I'm Jarvis, your AI assistant. How can I he...
+2025-05-08 04:25:46,697 - jarvis_app - INFO - Data saved successfully
+2025-05-08 04:25:46,698 - jarvis_app - INFO - Processed message in chat new-chat-1746667538
+2025-05-08 04:28:14,934 - jarvis_app - INFO - Data saved successfully
+2025-05-08 04:28:14,951 - jarvis_app - INFO - Created new chat: new-chat-1746667694
+2025-05-08 04:28:23,671 - jarvis_desktop - INFO - Application window closed
+2025-05-08 04:30:15,383 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static
+2025-05-08 04:30:15,383 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 04:30:15,383 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 04:30:15,383 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 04:30:15,384 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 04:30:15,384 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 04:30:15,384 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 04:30:15,385 - jarvis_app - INFO - Loaded 3 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 04:30:15,385 - jarvis_app - INFO - Loaded messages for 3 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 04:30:15,387 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper
+2025-05-08 04:30:15,387 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 04:30:15,387 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 04:30:15,387 - jarvis_desktop - INFO - Server is ready
+2025-05-08 04:30:15,389 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 04:30:16,401 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/dist/index.html
+2025-05-08 04:30:16,401 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 04:30:16,401 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 04:30:16,401 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 04:30:16,987 - jarvis_desktop - INFO - Application window shown
+2025-05-08 04:30:17,509 - jarvis_app - INFO - Serving path: 
+2025-05-08 04:30:17,510 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 04:30:17,544 - jarvis_app - INFO - Serving path: assets/index.CeuwMN7p.js
+2025-05-08 04:30:17,544 - jarvis_app - INFO - Serving asset: index.CeuwMN7p.js from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 04:30:17,547 - jarvis_app - INFO - Serving path: assets/index.B9zV0YnH.css
+2025-05-08 04:30:17,547 - jarvis_app - INFO - Serving asset: index.B9zV0YnH.css from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 04:30:17,596 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 04:30:17,720 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 04:30:18,406 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 04:30:30,953 - jarvis_app - INFO - Sending query to Jarvis AI: hellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjv...
+2025-05-08 04:30:30,953 - jarvis_assistant - INFO - Processing query: hellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjds
+2025-05-08 04:30:30,954 - jarvis_app - INFO - Received response from Jarvis AI: Hello! I'm Jarvis, your AI assistant. How can I he...
+2025-05-08 04:30:30,954 - jarvis_app - INFO - Data saved successfully
+2025-05-08 04:30:30,954 - jarvis_app - INFO - Processed message in chat new-chat-1746667694
+2025-05-08 04:33:45,822 - jarvis_desktop - INFO - Application window closed
+2025-05-08 04:36:26,468 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static
+2025-05-08 04:36:26,469 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 04:36:26,469 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 04:36:26,469 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 04:36:26,470 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 04:36:26,470 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 04:36:26,470 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 04:36:26,470 - jarvis_app - INFO - Loaded 3 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 04:36:26,470 - jarvis_app - INFO - Loaded messages for 3 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 04:36:26,472 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper
+2025-05-08 04:36:26,473 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 04:36:26,473 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 04:36:26,474 - jarvis_desktop - INFO - Server is ready
+2025-05-08 04:36:26,475 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 04:36:27,476 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/dist/index.html
+2025-05-08 04:36:27,477 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 04:36:27,477 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 04:36:27,477 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 04:36:28,118 - jarvis_desktop - INFO - Application window shown
+2025-05-08 04:36:28,896 - jarvis_app - INFO - Serving path: 
+2025-05-08 04:36:28,896 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 04:36:28,950 - jarvis_app - INFO - Serving path: assets/index.CeuwMN7p.js
+2025-05-08 04:36:28,950 - jarvis_app - INFO - Serving asset: index.CeuwMN7p.js from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 04:36:28,952 - jarvis_app - INFO - Serving path: assets/index.B9zV0YnH.css
+2025-05-08 04:36:28,952 - jarvis_app - INFO - Serving asset: index.B9zV0YnH.css from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 04:36:29,024 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 04:36:29,117 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 04:36:29,265 - jarvis_app - INFO - Data saved successfully
+2025-05-08 04:36:29,266 - jarvis_app - INFO - Created new chat: new-chat-1746668189
+2025-05-08 04:36:29,477 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 04:38:05,193 - jarvis_app - INFO - Sending query to Jarvis AI: hellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjv...
+2025-05-08 04:38:05,193 - jarvis_assistant - INFO - Processing query: hellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjds
+2025-05-08 04:38:05,194 - jarvis_app - INFO - Received response from Jarvis AI: Hello! I'm Jarvis, your AI assistant. How can I he...
+2025-05-08 04:38:05,195 - jarvis_app - INFO - Data saved successfully
+2025-05-08 04:38:05,195 - jarvis_app - INFO - Processed message in chat new-chat-1746668189
+2025-05-08 04:40:25,709 - jarvis_desktop - INFO - Application window closed
+2025-05-08 04:44:50,105 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static
+2025-05-08 04:44:50,106 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 04:44:50,106 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 04:44:50,106 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 04:44:50,106 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 04:44:50,107 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 04:44:50,107 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 04:44:50,107 - jarvis_app - INFO - Loaded 4 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 04:44:50,107 - jarvis_app - INFO - Loaded messages for 4 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 04:44:50,109 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper
+2025-05-08 04:44:50,109 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 04:44:50,109 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 04:44:50,109 - jarvis_desktop - INFO - Server is ready
+2025-05-08 04:44:50,111 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 04:44:51,111 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/dist/index.html
+2025-05-08 04:44:51,111 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 04:44:51,111 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 04:44:51,111 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 04:44:51,574 - jarvis_desktop - INFO - Application window shown
+2025-05-08 04:44:52,170 - jarvis_app - INFO - Serving path: 
+2025-05-08 04:44:52,171 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 04:44:52,194 - jarvis_app - INFO - Serving path: assets/index.o6zavcP5.js
+2025-05-08 04:44:52,195 - jarvis_app - INFO - Serving path: assets/index.CNmBW0Ib.css
+2025-05-08 04:44:52,195 - jarvis_app - INFO - Serving asset: index.o6zavcP5.js from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 04:44:52,195 - jarvis_app - INFO - Serving asset: index.CNmBW0Ib.css from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 04:44:52,252 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 04:44:52,401 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 04:44:52,698 - jarvis_app - INFO - Data saved successfully
+2025-05-08 04:44:52,698 - jarvis_app - INFO - Created new chat: new-chat-1746668692
+2025-05-08 04:44:53,116 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 04:45:07,606 - jarvis_desktop - INFO - Application window closed
+2025-05-08 04:52:57,494 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static
+2025-05-08 04:52:57,495 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data
+2025-05-08 04:52:57,495 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 04:52:57,495 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 04:52:57,496 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/models
+2025-05-08 04:52:57,496 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 04:52:57,496 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 04:52:57,496 - jarvis_app - INFO - Loaded 5 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/chats.json
+2025-05-08 04:52:57,497 - jarvis_app - INFO - Loaded messages for 5 chats from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/data/messages.json
+2025-05-08 04:52:57,498 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper
+2025-05-08 04:52:57,498 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 04:52:57,498 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 04:52:57,499 - jarvis_desktop - INFO - Server is ready
+2025-05-08 04:52:57,501 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 04:52:58,504 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/dist/index.html
+2025-05-08 04:52:58,504 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 04:52:58,504 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 04:52:58,504 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 04:52:59,008 - jarvis_desktop - INFO - Application window shown
+2025-05-08 04:52:59,606 - jarvis_app - INFO - Serving path: 
+2025-05-08 04:52:59,606 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 04:52:59,639 - jarvis_app - INFO - Serving path: assets/index.DNuYKS_F.js
+2025-05-08 04:52:59,639 - jarvis_app - INFO - Serving asset: index.DNuYKS_F.js from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 04:52:59,640 - jarvis_app - INFO - Serving path: assets/index.DTYS6UWQ.css
+2025-05-08 04:52:59,640 - jarvis_app - INFO - Serving asset: index.DTYS6UWQ.css from /Users/nadamohamed/Documents/GitHub/fluid-jarvis-whisper/server/static/assets
+2025-05-08 04:52:59,703 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 04:52:59,820 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 04:53:00,508 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 04:53:12,486 - jarvis_app - INFO - Sending query to Jarvis AI: kfdjhsgkjfhdkjghksfd...
+2025-05-08 04:53:12,486 - jarvis_assistant - INFO - Processing query: kfdjhsgkjfhdkjghksfd
+2025-05-08 04:53:12,486 - jarvis_app - INFO - Received response from Jarvis AI: I've received your query: 'kfdjhsgkjfhdkjghksfd'. ...
+2025-05-08 04:53:12,487 - jarvis_app - INFO - Data saved successfully
+2025-05-08 04:53:12,487 - jarvis_app - INFO - Processed message in chat new-chat-1746668692
+2025-05-08 04:58:00,168 - jarvis_desktop - INFO - Application window closed
