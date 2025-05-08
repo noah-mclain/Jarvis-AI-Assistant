@@ -80,4 +80,5 @@ class MapsSearchCommand(Command):
 
 # Create instances of the commands
 maps = MapsSearchCommand()
-maps.execute("coffee shops near me")
+# Test code - commented out to prevent automatic execution on import
+# maps.execute("coffee shops near me")
