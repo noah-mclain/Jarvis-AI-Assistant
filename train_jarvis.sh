@@ -879,9 +879,9 @@ def train_with_unsloth(args):
         target_modules=[
             "q_proj", "k_proj", "v_proj", "o_proj",
             "gate_proj", "up_proj", "down_proj"
-        ],
-        # Note: use_gradient_checkpointing is set in TrainingArguments, not here
-        random_state=42,
+        ]
+        # Note: gradient_checkpointing is set in TrainingArguments
+        # Note: random_state is not a valid parameter for LoraConfig
     )
 
     # Tokenize dataset
