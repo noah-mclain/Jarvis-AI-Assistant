@@ -447,7 +447,7 @@ def train_with_unsloth(args):
         lora_dropout=args.lora_dropout,
         target_modules=target_modules,
         bias="none",  # Don't train bias terms for stability
-        task_type="CAUSAL_LM",  # Causal language modeling task
+        # Removed task_type parameter as it's set internally by FastLanguageModel.get_peft_model
         modules_to_save=None  # Don't save any modules fully (use LoRA for all)
     )
 
