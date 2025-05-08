@@ -7,6 +7,7 @@ This module provides handlers for different AI model functionalities:
 - Text Generation/Conversation: For general text conversations
 - NLP: For natural language processing tasks
 - Story Generation: For creative writing and storytelling
+- Image Generation: For creating images from text descriptions
 
 Each handler loads the appropriate model and provides a process_query method
 that takes a query string and returns a response string.
@@ -297,11 +298,74 @@ class StoryGenerationHandler(ModelHandler):
         return f"Story generation model would create a story about: {query}\n\nOnce upon a time, in a land far away, there was a kingdom of wonder and magic. The people lived in harmony with nature, and the kingdom prospered under the wise rule of its benevolent monarch..."
 
 
+class ImageGenerationHandler(ModelHandler):
+    """Handler for image generation functionality"""
+
+    def load_model(self) -> bool:
+        """Load the image generation model"""
+        try:
+            logger.info("Loading image generation model (Stable Diffusion)...")
+
+            # TODO: Implement actual model loading
+            # This should import and initialize the Stable Diffusion model
+            # Example:
+            # from diffusers import StableDiffusionPipeline
+            # import torch
+            #
+            # model_id = "runwayml/stable-diffusion-v1-5"  # or "stabilityai/stable-diffusion-2-1"
+            # self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            #
+            # # Load the pipeline
+            # self.pipeline = StableDiffusionPipeline.from_pretrained(model_id)
+            # self.pipeline = self.pipeline.to(self.device)
+            #
+            # # If using lower precision for memory efficiency
+            # if self.device == "cuda":
+            #     self.pipeline.enable_attention_slicing()
+            #     # Optional: self.pipeline.enable_xformers_memory_efficient_attention()
+
+            # For now, just simulate successful loading
+            self.is_initialized = True
+            logger.info("Image generation model loaded successfully")
+            return True
+        except Exception as e:
+            logger.error(f"Error loading image generation model: {e}")
+            return False
+
+    def process_query(self, query: str) -> str:
+        """Process an image generation query"""
+        if not self.is_initialized and not self.load_model():
+            return "Image generation model could not be loaded. Please check the logs for details."
+
+        # TODO: Implement actual image generation
+        # This should use the Stable Diffusion model to generate an image based on the query
+        # Example:
+        # import os
+        # from datetime import datetime
+        #
+        # # Generate a unique filename
+        # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'generated_images')
+        # os.makedirs(output_dir, exist_ok=True)
+        # image_path = os.path.join(output_dir, f"generated_image_{timestamp}.png")
+        #
+        # # Generate the image
+        # with torch.no_grad():
+        #     image = self.pipeline(query, guidance_scale=7.5).images[0]
+        #     image.save(image_path)
+        #
+        # return f"Image generated successfully and saved to: {image_path}"
+
+        # For now, just return a placeholder response
+        return f"Image generation model would create an image of: {query}\n\nImage would be generated using Stable Diffusion and saved to the data/generated_images directory."
+
+
 # Dictionary mapping model types to their handlers
 MODEL_HANDLERS: Dict[str, ModelHandler] = {
     "speechToText": SpeechToTextHandler(),
     "codeGeneration": CodeGenerationHandler(),
     "textGeneration": TextGenerationHandler(),
     "nlp": NLPHandler(),
-    "storyGeneration": StoryGenerationHandler()
+    "storyGeneration": StoryGenerationHandler(),
+    "generativeImage": ImageGenerationHandler()
 }
