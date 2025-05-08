@@ -149,13 +149,9 @@ class YoutubeCommand(Command):
 # Create an instance
 youtube = YoutubeCommand()
 
-# Search for videos
+# Test code - commented out to prevent automatic execution on import
 # youtube.execute("open")
-
-# # Play a video
-youtube.execute("play bertrand russell")
-
-# # Control playback
-# youtube.execute("pause")  # Pause current videok
-# youtube.execute("mute") # Resume playback
-# youtube.execute("fullscreen") # Toggle fullscreen
+# youtube.execute("play bertrand russell")
+# youtube.execute("pause")
+# youtube.execute("mute")
+# youtube.execute("fullscreen")
