@@ -670,3 +670,34 @@
 2025-05-08 04:53:12,487 - jarvis_app - INFO - Data saved successfully
 2025-05-08 04:53:12,487 - jarvis_app - INFO - Processed message in chat new-chat-1746668692
 2025-05-08 04:58:00,168 - jarvis_desktop - INFO - Application window closed
+2025-05-08 05:09:56,368 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static
+2025-05-08 05:09:56,370 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data
+2025-05-08 05:09:56,370 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-08 05:09:56,370 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-08 05:09:56,371 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/models
+2025-05-08 05:09:56,371 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 05:09:56,371 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 05:09:56,371 - jarvis_app - INFO - Loaded 5 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-08 05:09:56,372 - jarvis_app - INFO - Loaded messages for 5 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-08 05:09:56,374 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant
+2025-05-08 05:09:56,374 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 05:09:56,374 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 05:09:56,375 - jarvis_desktop - INFO - Server is ready
+2025-05-08 05:09:56,377 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 05:09:57,380 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/dist/index.html
+2025-05-08 05:09:57,380 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 05:09:57,380 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 05:09:57,380 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 05:09:59,385 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 05:09:59,625 - jarvis_desktop - INFO - Application window shown
+2025-05-08 05:10:00,528 - jarvis_app - INFO - Serving path: 
+2025-05-08 05:10:00,528 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 05:10:00,571 - jarvis_app - INFO - Serving path: assets/index.DOSRHcvy.js
+2025-05-08 05:10:00,571 - jarvis_app - INFO - Serving asset: index.DOSRHcvy.js from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-08 05:10:00,572 - jarvis_app - INFO - Serving path: assets/index.DPMCv7-K.css
+2025-05-08 05:10:00,573 - jarvis_app - INFO - Serving asset: index.DPMCv7-K.css from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-08 05:10:00,663 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 05:10:00,780 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 05:10:00,871 - jarvis_app - INFO - Data saved successfully
+2025-05-08 05:10:00,871 - jarvis_app - INFO - Created new chat: new-chat-1746670200
+2025-05-08 05:10:10,040 - jarvis_desktop - INFO - Application window closed

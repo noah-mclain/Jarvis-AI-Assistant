@@ -98,5 +98,13 @@
       "content": "I've received your query: 'kfdjhsgkjfhdkjghksfd'. This is a placeholder response. Replace this with your actual Jarvis AI implementation.",
       "timestamp": "04:53 AM"
     }
+  ],
+  "new-chat-1746670200": [
+    {
+      "id": "welcome",
+      "role": "assistant",
+      "content": "How can I help you with this new conversation?",
+      "timestamp": "05:10 AM"
+    }
   ]
 }
