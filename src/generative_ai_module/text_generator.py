@@ -511,7 +511,8 @@ class CNNTextGenerator(TextGenerator):
                 batch_size=None,  # Will be set based on GPU type
                 gradient_accumulation_steps=None,  # Will be set based on GPU type
                 max_length=4096,  # Increased for A6000 GPU
-                bf16=True):  # Use bfloat16 precision for A6000 GPUs
+                bf16=True,  # Use bfloat16 precision for A6000 GPUs
+                num_workers=None):  # Number of workers for data loading
         super().__init__(force_gpu)
         """
         Initialize the CNN-enhanced text generator optimized for A6000 GPUs
@@ -536,6 +537,7 @@ class CNNTextGenerator(TextGenerator):
             gradient_accumulation_steps: Steps to accumulate gradients (if None, will be set based on GPU type)
             max_length: Maximum sequence length for training (4096 for A6000)
             bf16: Whether to use bfloat16 precision (True for A6000 with Ampere or newer architecture)
+            num_workers: Number of workers for data loading (if None, will be set based on GPU type)
         """
         # Store parameters
         self.cnn_layers = cnn_layers
@@ -555,6 +557,7 @@ class CNNTextGenerator(TextGenerator):
         self.bf16 = bf16
         self.load_in_4bit = load_in_4bit
         self.load_in_8bit = load_in_8bit
+        self.num_workers = num_workers
 
         # Configure based on GPU type and VRAM
         self._configure_for_gpu()
@@ -567,7 +570,7 @@ class CNNTextGenerator(TextGenerator):
         print(f"Configuring for GPU type {self.gpu_type} with {self.vram_size} GiB VRAM")
 
         # Set batch size and gradient accumulation steps based on GPU type if not specified
-        if self.batch_size is None or self.gradient_accumulation_steps is None:
+        if self.batch_size is None or self.gradient_accumulation_steps is None or self.num_workers is None:
             if self.gpu_type == "A6000" and self.vram_size >= 48:
                 # A6000 with 48+ GiB VRAM - maximize parameters while staying within constraints
                 print("Using optimized settings for A6000 with 48+ GiB VRAM")
@@ -577,7 +580,7 @@ class CNNTextGenerator(TextGenerator):
                 self.lora_rank = 32     # Increase LoRA rank for better quality
                 self.lora_alpha = 64    # Increase LoRA alpha for better adaptation
                 self.lora_dropout = 0.05  # Optimal dropout for stability
-                self.num_workers = 8    # Match your 8 CPU cores
+                self.num_workers = self.num_workers if self.num_workers is not None else 8  # Match your 8 CPU cores
                 self.warmup_ratio = 0.03  # Optimal warmup for large models
                 self.weight_decay = 0.01  # Prevent overfitting
                 self.adam_beta1 = 0.9   # Standard beta1 for AdamW
@@ -596,7 +599,7 @@ class CNNTextGenerator(TextGenerator):
                 self.lora_rank = 24
                 self.lora_alpha = 48
                 self.lora_dropout = 0.05
-                self.num_workers = 6
+                self.num_workers = self.num_workers if self.num_workers is not None else 6
                 self.warmup_ratio = 0.03
                 self.weight_decay = 0.01
                 self.adam_beta1 = 0.9
@@ -613,7 +616,7 @@ class CNNTextGenerator(TextGenerator):
                 self.lora_rank = 16
                 self.lora_alpha = 32
                 self.lora_dropout = 0.05
-                self.num_workers = 4
+                self.num_workers = self.num_workers if self.num_workers is not None else 4
                 self.warmup_ratio = 0.03
                 self.weight_decay = 0.01
                 self.adam_beta1 = 0.9
@@ -630,7 +633,7 @@ class CNNTextGenerator(TextGenerator):
                 self.lora_rank = 8
                 self.lora_alpha = 16
                 self.lora_dropout = 0.05
-                self.num_workers = 2
+                self.num_workers = self.num_workers if self.num_workers is not None else 2
                 self.warmup_ratio = 0.03
                 self.weight_decay = 0.01
                 self.adam_beta1 = 0.9
@@ -1186,7 +1189,7 @@ def create_cnn_text_generator(model_name="google/flan-ul2-20b", force_gpu=True, 
                              quantization_config=None, use_flash_attention_2=True,
                              gradient_checkpointing=True, lora_rank=32, lora_alpha=64,
                              lora_dropout=0.05, batch_size=None, gradient_accumulation_steps=None,
-                             max_length=4096):
+                             max_length=4096, num_workers=None):
     """
     Helper function to create a CNN-enhanced text generator optimized for A6000 GPUs
 
@@ -1207,6 +1210,7 @@ def create_cnn_text_generator(model_name="google/flan-ul2-20b", force_gpu=True, 
         batch_size: Batch size for training (if None, will be set based on GPU)
         gradient_accumulation_steps: Steps to accumulate gradients (if None, will be set based on GPU)
         max_length: Maximum sequence length for training
+        num_workers: Number of workers for data loading (if None, will be set based on GPU)
 
     Returns:
         Initialized CNNTextGenerator optimized for the specified GPU
@@ -1251,5 +1255,6 @@ def create_cnn_text_generator(model_name="google/flan-ul2-20b", force_gpu=True, 
         batch_size=batch_size,
         gradient_accumulation_steps=gradient_accumulation_steps,
         max_length=max_length,
-        bf16=use_bf16
+        bf16=use_bf16,
+        num_workers=num_workers
     )

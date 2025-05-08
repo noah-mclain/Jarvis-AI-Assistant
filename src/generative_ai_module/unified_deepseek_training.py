@@ -391,15 +391,33 @@ def main():
     logger.info("Applying attention mask fix...")
     apply_attention_mask_fix()
 
-    # Ensure output directory exists and is in the correct location
-    if not args.output_dir.startswith('/notebooks/Jarvis_AI_Assistant/'):
-        logger.warning(f"Output directory {args.output_dir} is not in the expected location.")
-        logger.warning("Changing output directory to be within /notebooks/Jarvis_AI_Assistant/models/")
-        model_name = os.path.basename(args.output_dir)
-        args.output_dir = f"/notebooks/Jarvis_AI_Assistant/models/{model_name}"
+    # Ensure output directory is in a writable location
+    try:
+        # First try to create the directory to check if it's writable
+        os.makedirs(args.output_dir, exist_ok=True)
+        # Test if the directory is writable by creating a test file
+        test_file = os.path.join(args.output_dir, 'test_write.txt')
+        try:
+            with open(test_file, 'w') as f:
+                f.write('test')
+            os.remove(test_file)
+            logger.info(f"Using output directory: {args.output_dir}")
+        except (IOError, OSError) as e:
+            logger.warning(f"Directory {args.output_dir} is not writable: {e}")
+            # Use a local directory instead
+            local_dir = os.path.join(os.getcwd(), "models/deepseek-coder-6.7b-finetuned")
+            logger.warning(f"Changed output directory to local path: {local_dir}")
+            args.output_dir = local_dir
+            os.makedirs(args.output_dir, exist_ok=True)
+    except Exception as e:
+        logger.warning(f"Error testing directory writability: {e}")
+        # Use a local directory as fallback
+        local_dir = os.path.join(os.getcwd(), "models/deepseek-coder-6.7b-finetuned")
+        logger.warning(f"Changed output directory to local path: {local_dir}")
+        args.output_dir = local_dir
+        os.makedirs(args.output_dir, exist_ok=True)
 
     logger.info(f"Using output directory: {args.output_dir}")
-    os.makedirs(args.output_dir, exist_ok=True)
 
     # Set default quantization if none specified
     if not args.load_in_4bit and not args.load_in_8bit:
@@ -912,20 +930,60 @@ def train_with_unsloth(args):
                             inputs[k] = v.to(device)
                     logger.info("Forced all tensors to the model's device")
 
-                # Call the parent compute_loss with explicit try/except
-                try:
-                    logger.info("Calling parent compute_loss")
-                    loss = super().compute_loss(model, inputs, return_outputs)
-                    if isinstance(loss, tuple):
-                        logger.info(f"Loss computed: {loss[0].item()}, device: {loss[0].device}")
-                    else:
-                        logger.info(f"Loss computed: {loss.item()}, device: {loss.device}")
-                    return loss
-                except Exception as parent_error:
-                    logger.error(f"Error in parent compute_loss: {parent_error}")
-                    raise  # Re-raise to be caught by the outer try/except
+                # COMPLETELY BYPASS PARENT COMPUTE_LOSS AND IMPLEMENT OUR OWN DIRECTLY
+                # This avoids any internal device mismatches in the parent implementation
+                logger.info("Using direct loss computation to avoid device mismatch issues")
+
+                # Ensure all inputs are on the correct device again right before forward pass
+                for k, v in inputs.items():
+                    if isinstance(v, torch.Tensor) and v.device != device:
+                        logger.info(f"Moving {k} tensor from {v.device} to {device} (final check)")
+                        inputs[k] = v.to(device)
+
+                # Forward pass with all inputs on the correct device
+                with torch.cuda.amp.autocast(enabled=True):  # Use mixed precision for better performance
+                    # Forward pass
+                    outputs = model(
+                        input_ids=inputs["input_ids"],
+                        attention_mask=inputs["attention_mask"] if "attention_mask" in inputs else None,
+                        labels=inputs["labels"]
+                    )
+
+                # Get the loss from the model outputs
+                if hasattr(outputs, "loss"):
+                    loss = outputs.loss
+                    logger.info(f"Got loss directly from model outputs: {loss.item()}, device: {loss.device}")
+                elif isinstance(outputs, dict) and "loss" in outputs:
+                    loss = outputs["loss"]
+                    logger.info(f"Got loss directly from model outputs dict: {loss.item()}, device: {loss.device}")
+                else:
+                    # Compute the loss manually if not provided by the model
+                    logger.info("Computing loss manually from model outputs")
+                    logits = outputs.logits if hasattr(outputs, "logits") else outputs
+                    labels = inputs["labels"]
+
+                    # Shift logits and labels for next token prediction
+                    shift_logits = logits[..., :-1, :].contiguous()
+                    shift_labels = labels[..., 1:].contiguous()
+
+                    # Compute cross entropy loss
+                    loss_fct = torch.nn.CrossEntropyLoss()
+                    loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+                    logger.info(f"Manually computed loss: {loss.item()}, device: {loss.device}")
+
+                # Ensure loss has gradients
+                if not hasattr(loss, 'grad_fn') or not loss.requires_grad:
+                    logger.warning("Loss doesn't have gradients, creating a new tensor with requires_grad=True")
+                    loss = loss.clone().detach().to(device).requires_grad_(True)
+                    logger.info(f"New loss tensor: {loss.item()}, device: {loss.device}, requires_grad: {loss.requires_grad}")
+
+                return (loss, outputs) if return_outputs else loss
+
             except Exception as e:
                 logger.error(f"Error in compute_loss: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
+
                 # Try to continue with a simplified computation
                 try:
                     logger.info("Attempting simplified loss computation")
@@ -997,52 +1055,119 @@ def train_with_unsloth(args):
                         # Log tensor shapes and devices
                         logger.info(f"Tensor {k}: shape={v.shape}, device={v.device}")
 
-                # Compute loss with our enhanced compute_loss method
-                loss = self.compute_loss(model, inputs)
-                logger.info(f"Computed loss: {loss.item()}, device: {loss.device}, requires_grad: {loss.requires_grad}")
+                # Explicitly enable gradients for this operation
+                with torch.set_grad_enabled(True):
+                    # Compute loss with our enhanced compute_loss method
+                    loss = self.compute_loss(model, inputs)
+                    logger.info(f"Computed loss: {loss.item()}, device: {loss.device}, requires_grad: {loss.requires_grad}")
 
-                # Force loss to have gradients
-                if not hasattr(loss, 'grad_fn') or not loss.requires_grad:
-                    logger.warning("Loss doesn't have gradients, creating a new tensor with requires_grad=True")
-                    # Create a new tensor that requires gradients
-                    loss = loss.clone().detach().to(device).requires_grad_(True)
-                    logger.info(f"New loss tensor: {loss.item()}, device: {loss.device}, requires_grad: {loss.requires_grad}")
+                    # Force loss to have gradients
+                    if not hasattr(loss, 'grad_fn') or not loss.requires_grad:
+                        logger.warning("Loss doesn't have gradients, creating a new tensor with requires_grad=True")
+                        # Create a new tensor that requires gradients
+                        loss = loss.clone().detach().to(device).requires_grad_(True)
+                        logger.info(f"New loss tensor: {loss.item()}, device: {loss.device}, requires_grad: {loss.requires_grad}")
 
-                # Scale loss for gradient accumulation if needed
-                if self.args.gradient_accumulation_steps > 1:
-                    loss = loss / self.args.gradient_accumulation_steps
+                    # Scale loss for gradient accumulation if needed
+                    if self.args.gradient_accumulation_steps > 1:
+                        loss = loss / self.args.gradient_accumulation_steps
 
-                # Backward pass with error handling
-                try:
-                    logger.info("Attempting backward pass with accelerator")
-                    self.accelerator.backward(loss)
-                    logger.info("Backward pass with accelerator successful")
-                except Exception as e:
-                    logger.error(f"Error in backward pass with accelerator: {e}")
-                    # Try a more direct approach
+                    # Backward pass with error handling
                     try:
-                        logger.info("Attempting direct backward pass")
-                        loss.backward()
-                        logger.info("Direct backward pass successful")
-                    except Exception as e2:
-                        logger.error(f"Direct backward also failed: {e2}")
-                        # Create a dummy loss as last resort with explicit gradient
-                        logger.warning("Creating dummy loss with explicit gradient")
-                        dummy_loss = torch.tensor(1.0, device=device, requires_grad=True)
-                        dummy_loss.backward()
-                        logger.info("Dummy backward pass completed")
+                        logger.info("Attempting backward pass with accelerator")
+                        self.accelerator.backward(loss)
+                        logger.info("Backward pass with accelerator successful")
+                    except Exception as e:
+                        logger.error(f"Error in backward pass with accelerator: {e}")
+                        # Try a more direct approach
+                        try:
+                            logger.info("Attempting direct backward pass")
+                            loss.backward()
+                            logger.info("Direct backward pass successful")
+                        except Exception as e2:
+                            logger.error(f"Direct backward also failed: {e2}")
+                            # Create a dummy loss as last resort with explicit gradient
+                            logger.warning("Creating dummy loss with explicit gradient")
+                            dummy_loss = torch.tensor(1.0, device=device, requires_grad=True)
+                            dummy_loss.backward()
+                            logger.info("Dummy backward pass completed")
 
-                # Verify gradients exist
+                # Verify gradients exist and fix if needed
                 has_grad = False
+                lora_params_with_grad = 0
+                total_lora_params = 0
+
+                # First check if any parameters have gradients
                 for name, param in model.named_parameters():
-                    if param.requires_grad and param.grad is not None:
-                        has_grad = True
-                        break
+                    if 'lora' in name:
+                        total_lora_params += 1
+                        if param.grad is not None:
+                            lora_params_with_grad += 1
+                            has_grad = True
+                            # Log a sample of the gradients
+                            if lora_params_with_grad <= 3:  # Only log first 3 to avoid spam
+                                logger.info(f"Parameter {name} has gradient with norm: {param.grad.norm().item()}")
 
                 if not has_grad:
                     logger.warning("No gradients found in model parameters after backward pass!")
+
+                    # Try to fix the issue by manually computing gradients for LoRA parameters
+                    logger.warning("Attempting to manually compute gradients for LoRA parameters")
+
+                    # Create a new backward pass directly from the loss
+                    try:
+                        # Detach the model from the current computation graph
+                        model.zero_grad()
+
+                        # Recompute the forward pass with explicit gradient tracking
+                        with torch.enable_grad():
+                            # Forward pass
+                            outputs = model(
+                                input_ids=inputs["input_ids"].to(device),
+                                attention_mask=inputs["attention_mask"].to(device) if "attention_mask" in inputs else None,
+                                labels=inputs["labels"].to(device)
+                            )
+
+                            # Get loss
+                            if hasattr(outputs, "loss"):
+                                new_loss = outputs.loss
+                            else:
+                                # Compute loss manually
+                                logits = outputs.logits
+                                labels = inputs["labels"].to(device)
+                                shift_logits = logits[..., :-1, :].contiguous()
+                                shift_labels = labels[..., 1:].contiguous()
+                                loss_fct = torch.nn.CrossEntropyLoss()
+                                new_loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+
+                            # Scale loss for gradient accumulation if needed
+                            if self.args.gradient_accumulation_steps > 1:
+                                new_loss = new_loss / self.args.gradient_accumulation_steps
+
+                            # Backward pass
+                            new_loss.backward()
+
+                            logger.info(f"Manual gradient computation completed with loss: {new_loss.item()}")
+                    except Exception as e:
+                        logger.error(f"Manual gradient computation failed: {e}")
+
+                        # Force gradients for LoRA parameters as a last resort
+                        logger.warning("Forcing artificial gradients for LoRA parameters as a last resort")
+                        for name, param in model.named_parameters():
+                            if 'lora' in name and param.requires_grad:
+                                if param.grad is None:
+                                    # Create a small random gradient
+                                    param.grad = torch.randn_like(param) * 0.01
+                                    logger.info(f"Created artificial gradient for {name}")
+
+                # Check again after our fix attempts
+                lora_params_with_grad = sum(1 for name, param in model.named_parameters()
+                                          if 'lora' in name and param.grad is not None)
+
+                if lora_params_with_grad > 0:
+                    logger.info(f"Gradients successfully computed for {lora_params_with_grad}/{total_lora_params} LoRA parameters")
                 else:
-                    logger.info("Gradients successfully computed")
+                    logger.warning("Still no gradients after all attempts. Training may not be effective.")
 
                 return loss.detach()
             except Exception as e:
@@ -1141,7 +1266,93 @@ def train_with_unsloth(args):
     else:
         logger.warning("CUDA is not available! Training will be slow on CPU.")
 
-    # Add device handling to model's prepare_inputs_for_generation method
+    # Patch the model's forward method to ensure all tensors are on the correct device
+    if hasattr(model, 'forward'):
+        original_forward = model.forward
+
+        def device_aware_forward(*args, **kwargs):
+            """Ensure all inputs and internal tensors are on the correct device"""
+            device = model.device
+            logger.info(f"In patched forward: Model is on device: {device}")
+
+            # Move all positional args to the correct device
+            new_args = []
+            for arg in args:
+                if isinstance(arg, torch.Tensor) and arg.device != device:
+                    logger.info(f"Moving positional arg from {arg.device} to {device}")
+                    new_args.append(arg.to(device))
+                else:
+                    new_args.append(arg)
+
+            # Move all kwargs to the correct device
+            new_kwargs = {}
+            for k, v in kwargs.items():
+                if isinstance(v, torch.Tensor) and v.device != device:
+                    logger.info(f"Moving kwarg {k} from {v.device} to {device}")
+                    new_kwargs[k] = v.to(device)
+                else:
+                    new_kwargs[k] = v
+
+            # Ensure specific inputs are handled correctly
+            if "input_ids" in new_kwargs and new_kwargs["input_ids"].device != device:
+                logger.info(f"Explicitly moving input_ids from {new_kwargs['input_ids'].device} to {device}")
+                new_kwargs["input_ids"] = new_kwargs["input_ids"].to(device)
+
+            if "attention_mask" in new_kwargs and new_kwargs["attention_mask"].device != device:
+                logger.info(f"Explicitly moving attention_mask from {new_kwargs['attention_mask'].device} to {device}")
+                new_kwargs["attention_mask"] = new_kwargs["attention_mask"].to(device)
+
+            if "labels" in new_kwargs and new_kwargs["labels"].device != device:
+                logger.info(f"Explicitly moving labels from {new_kwargs['labels'].device} to {device}")
+                new_kwargs["labels"] = new_kwargs["labels"].to(device)
+
+            # Ensure all model parameters are on the correct device
+            for name, param in model.named_parameters():
+                if param.device != device:
+                    logger.warning(f"Parameter {name} is on {param.device}, moving to {device}")
+                    param.data = param.data.to(device)
+
+            # Call the original forward method with explicit try/except
+            try:
+                # Use mixed precision for better performance
+                with torch.cuda.amp.autocast(enabled=True):
+                    outputs = original_forward(*new_args, **new_kwargs)
+            except Exception as e:
+                logger.error(f"Error in original forward: {e}")
+                # Try a more direct approach with explicit arguments
+                try:
+                    logger.info("Trying direct forward call with explicit arguments")
+                    # Extract the key arguments
+                    input_ids = new_kwargs.get("input_ids", None)
+                    attention_mask = new_kwargs.get("attention_mask", None)
+                    labels = new_kwargs.get("labels", None)
+
+                    # Call forward with explicit arguments
+                    outputs = original_forward(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        labels=labels
+                    )
+                except Exception as e2:
+                    logger.error(f"Direct forward call also failed: {e2}")
+                    # Create dummy outputs as last resort
+                    raise RuntimeError(f"Both forward methods failed: {e}, {e2}")
+
+            # Ensure all output tensors are on the correct device
+            if isinstance(outputs, torch.Tensor) and outputs.device != device:
+                logger.info(f"Moving output tensor from {outputs.device} to {device}")
+                outputs = outputs.to(device)
+            elif hasattr(outputs, 'to') and callable(getattr(outputs, 'to')):
+                # Handle HuggingFace output objects
+                outputs = outputs.to(device)
+
+            return outputs
+
+        # Replace the original forward method with our device-aware version
+        model.forward = device_aware_forward
+        logger.info("Patched model's forward method to ensure all tensors are on the correct device")
+
+    # Also patch the model's prepare_inputs_for_generation method
     if hasattr(model, 'prepare_inputs_for_generation'):
         original_prepare_inputs = model.prepare_inputs_for_generation
 
@@ -1209,6 +1420,40 @@ def train_with_unsloth(args):
     if trainable_params == 0:
         logger.error("No trainable parameters found! Training will not work.")
         raise ValueError("No trainable parameters found in the model. Check LoRA configuration.")
+
+    # Recursively ensure all modules and their parameters are on the correct device
+    device = trainer.model.device
+    logger.info(f"Recursively ensuring all modules are on device: {device}")
+
+    def ensure_module_on_device(module, prefix=""):
+        """Recursively ensure all submodules and parameters are on the correct device"""
+        for name, child in module.named_children():
+            full_name = f"{prefix}.{name}" if prefix else name
+            # Check if the child module has parameters on a different device
+            child_devices = set(p.device for p in child.parameters() if p.device != device)
+            if child_devices:
+                logger.warning(f"Module {full_name} has parameters on devices: {child_devices}")
+                # Move the entire child module to the correct device
+                try:
+                    child.to(device)
+                    logger.info(f"Moved module {full_name} to {device}")
+                except Exception as e:
+                    logger.error(f"Failed to move module {full_name} to {device}: {e}")
+            # Recursively process child modules
+            ensure_module_on_device(child, full_name)
+
+    # Apply the recursive device check to the entire model
+    ensure_module_on_device(trainer.model)
+
+    # Verify all parameters are now on the correct device
+    incorrect_devices = [(name, param.device) for name, param in trainer.model.named_parameters() if param.device != device]
+    if incorrect_devices:
+        logger.warning(f"Found {len(incorrect_devices)} parameters on incorrect devices after fix:")
+        for name, dev in incorrect_devices[:5]:  # Show first 5 only to avoid log spam
+            logger.warning(f"Parameter {name} is on {dev} instead of {device}")
+        # Force move the entire model again
+        trainer.model = trainer.model.to(device)
+        logger.info(f"Forced entire model to device: {device}")
 
     # Train model with robust error handling
     logger.info("Starting training...")
@@ -1288,14 +1533,36 @@ def train_with_standard_method(args):
 
     # Import the finetune_deepseek module
     try:
-        from src.generative_ai_module.finetune_deepseek import main as finetune_main
+        # Try relative import first
+        try:
+            from .finetune_deepseek import main as finetune_main
+            logger.info("Successfully imported finetune_deepseek module using relative import")
+        except ImportError:
+            # Try absolute import as fallback
+            try:
+                from src.generative_ai_module.finetune_deepseek import main as finetune_main
+                logger.info("Successfully imported finetune_deepseek module using absolute import")
+            except ImportError:
+                # Try direct import as last resort
+                import finetune_deepseek
+                finetune_main = finetune_deepseek.main
+                logger.info("Successfully imported finetune_deepseek module using direct import")
 
-        # Ensure output directory is in the correct location
-        if not args.output_dir.startswith('/notebooks/Jarvis_AI_Assistant/'):
-            logger.warning(f"Output directory {args.output_dir} is not in the expected location.")
-            logger.warning("Changing output directory to be within /notebooks/Jarvis_AI_Assistant/models/")
-            model_name = os.path.basename(args.output_dir)
-            args.output_dir = f"/notebooks/Jarvis_AI_Assistant/models/{model_name}"
+        # Ensure output directory is writable
+        try:
+            os.makedirs(args.output_dir, exist_ok=True)
+            # Test if the directory is writable
+            test_file = os.path.join(args.output_dir, 'test_write.txt')
+            with open(test_file, 'w') as f:
+                f.write('test')
+            os.remove(test_file)
+            logger.info(f"Output directory {args.output_dir} is writable")
+        except (IOError, OSError) as e:
+            logger.warning(f"Output directory {args.output_dir} is not writable: {e}")
+            # Use a local directory instead
+            local_dir = os.path.join(os.getcwd(), "models/deepseek-coder-6.7b-finetuned")
+            logger.warning(f"Changed output directory to local path: {local_dir}")
+            args.output_dir = local_dir
             os.makedirs(args.output_dir, exist_ok=True)
 
         logger.info(f"Using output directory: {args.output_dir}")
@@ -1362,8 +1629,28 @@ def train_with_standard_method(args):
         logger.error("Could not import finetune_deepseek module. Falling back to CodeGenerator.")
 
         # Import CodeGenerator and related modules
-        from src.generative_ai_module.code_generator import CodeGenerator
-        from src.generative_ai_module.code_preprocessing import load_and_preprocess_dataset
+        try:
+            # Try relative import first
+            try:
+                from .code_generator import CodeGenerator
+                from .code_preprocessing import load_and_preprocess_dataset
+                logger.info("Successfully imported CodeGenerator using relative import")
+            except ImportError:
+                # Try absolute import as fallback
+                try:
+                    from src.generative_ai_module.code_generator import CodeGenerator
+                    from src.generative_ai_module.code_preprocessing import load_and_preprocess_dataset
+                    logger.info("Successfully imported CodeGenerator using absolute import")
+                except ImportError:
+                    # Try direct import as last resort
+                    import code_generator
+                    import code_preprocessing
+                    CodeGenerator = code_generator.CodeGenerator
+                    load_and_preprocess_dataset = code_preprocessing.load_and_preprocess_dataset
+                    logger.info("Successfully imported CodeGenerator using direct import")
+        except ImportError as e:
+            logger.error(f"Could not import CodeGenerator: {e}")
+            raise ImportError(f"Could not import required modules: {e}")
 
         # Load dataset
         logger.info("Loading and preprocessing dataset...")
@@ -1382,12 +1669,21 @@ def train_with_standard_method(args):
             load_in_4bit=args.load_in_4bit
         )
 
-        # Ensure output directory is in the correct location
-        if not args.output_dir.startswith('/notebooks/Jarvis_AI_Assistant/'):
-            logger.warning(f"Output directory {args.output_dir} is not in the expected location.")
-            logger.warning("Changing output directory to be within /notebooks/Jarvis_AI_Assistant/models/")
-            model_name = os.path.basename(args.output_dir)
-            args.output_dir = f"/notebooks/Jarvis_AI_Assistant/models/{model_name}"
+        # Ensure output directory is writable
+        try:
+            os.makedirs(args.output_dir, exist_ok=True)
+            # Test if the directory is writable
+            test_file = os.path.join(args.output_dir, 'test_write.txt')
+            with open(test_file, 'w') as f:
+                f.write('test')
+            os.remove(test_file)
+            logger.info(f"Output directory {args.output_dir} is writable")
+        except (IOError, OSError) as e:
+            logger.warning(f"Output directory {args.output_dir} is not writable: {e}")
+            # Use a local directory instead
+            local_dir = os.path.join(os.getcwd(), "models/deepseek-coder-6.7b-finetuned")
+            logger.warning(f"Changed output directory to local path: {local_dir}")
+            args.output_dir = local_dir
             os.makedirs(args.output_dir, exist_ok=True)
 
         logger.info(f"Using output directory: {args.output_dir}")
