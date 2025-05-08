@@ -857,14 +857,12 @@ def train_with_unsloth(args):
         print("Loading model in 8-bit quantization")
 
     # Note: FastLanguageModel.from_pretrained already sets trust_remote_code=True internally
-    # so we don't need to pass it explicitly to avoid the duplicate parameter error
+    # and also sets device_map="auto" by default, so we don't need to pass these explicitly
     # Don't pass max_seq_length directly to avoid TypeError with LlamaForCausalLM
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=args.model_name,
         load_in_4bit=args.load_in_4bit,
-        load_in_8bit=args.load_in_8bit,
-        # Set device_map to auto to let Unsloth handle device placement
-        device_map="auto"
+        load_in_8bit=args.load_in_8bit
     )
 
     # Set max sequence length after model is loaded
