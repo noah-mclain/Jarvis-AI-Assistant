@@ -1,0 +1,65 @@
+PC ASSISTANT COMMAND EXAMPLES
+
+=== YouTube Commands ===
+youtube open                     # Open YouTube homepage
+youtube search programming       # Search for "programming" videos
+youtube play despacito           # Play the top result for "despacito"
+youtube pause                    # Pause current video playback
+youtube fullscreen               # Toggle fullscreen mode
+
+=== System Volume Control ===
+volume up 10                     # Increase system volume by 10%
+volume down 5                    # Decrease system volume by 5%
+volume set 50                    # Set system volume to 50%
+volume mute                      # Mute system audio
+volume unmute                    # Unmute system audio
+
+=== Brightness Control ===
+brightness up 10                 # Increase screen brightness by 10%
+brightness down 5                # Decrease screen brightness by 5%
+brightness set 75                # Set screen brightness to 75%
+
+=== Power Control ===
+power sleep                      # Put system to sleep
+power hibernate                  # Hibernate system
+power shutdown                   # Shutdown the system
+power restart                    # Restart the system
+
+=== Screenshot ===
+screenshot                       # Take a screenshot with timestamp name
+screenshot meeting               # Take screenshot named "meeting.png"
+
+=== Spotify Commands ===
+spotify open                     # Open Spotify application
+spotify search jazz              # Search for jazz music on Spotify
+spotify play Taylor Swift        # Search and play music by Taylor Swift
+spotify pause                    # Pause Spotify playback
+spotify resume                   # Resume Spotify playback
+spotify next                     # Skip to next track
+spotify previous                 # Go to previous track
+
+=== Web Browsing ===
+google weather in tokyo          # Search Google for "weather in tokyo"
+web github.com                   # Open GitHub website
+web https://stackoverflow.com    # Open Stack Overflow website
+
+=== App Control ===
+open chrome                      # Open Chrome browser
+open notepad                     # Open Notepad
+open spotify                     # Open Spotify
+close chrome                     # Close Chrome browser
+close notepad                    # Close Notepad
+
+=== File Operations ===
+searchfile budget.xlsx           # Search for budget.xlsx file
+openfile C:\path\to\document.txt # Open document.txt with default app
+explore                          # Open file explorer in current directory
+explore Documents                # Open file explorer in Documents folder
+
+=== Maps ===
+maps coffee shops near me        # Search for coffee shops on Google Maps
+maps New York to Boston          # Get directions from New York to Boston
+
+=== Netflix ===
+netflix open                     # Open Netflix website
+netflix search Stranger Things   # Search for Stranger Things
