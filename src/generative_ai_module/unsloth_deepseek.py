@@ -37,7 +37,7 @@ except ImportError as e:
     class StubModule:
         def __getattr__(self, _):
             return lambda *args, **kwargs: None
-    
+
     torch = StubModule()
     torch.cuda = StubModule()
     torch.cuda.is_available = lambda: False
@@ -74,7 +74,7 @@ except ImportError as e:
         @staticmethod
         def from_pretrained(*args, **kwargs):
             raise RuntimeError("Unsloth not available")
-        
+
         @staticmethod
         def get_peft_model(*args, **kwargs):
             raise RuntimeError("Unsloth not available")
@@ -88,10 +88,10 @@ except ImportError:
     class Dataset:
         def __init__(self, data=None):
             self.data = data or {}
-        
+
         def __getitem__(self, idx):
             return self.data.get(idx, {})
-        
+
         def __len__(self):
             return len(self.data)
 
@@ -116,7 +116,7 @@ try:
     try:
         import trl
         from trl import SFTTrainer
-        
+
         # Check if SFTConfig exists in this version of TRL
         try:
             from trl import SFTConfig
@@ -125,11 +125,11 @@ try:
         except ImportError:
             TRL_HAS_SFT_CONFIG = False
             logger.info(f"Using TRL version {getattr(trl, '__version__', 'unknown')} without SFTConfig")
-            
+
         from peft import LoraConfig
     except ImportError as e:
         logger.warning(f"TRL/PEFT not available: {e}")
-        
+
         # Create stub LoraConfig for imports
         class LoraConfig:
             def __init__(self, *args, **kwargs):
@@ -137,7 +137,7 @@ try:
 except ImportError as e:
     logger.warning(f"Transformers not available: {e}")
     TRANSFORMERS_AVAILABLE = False
-    
+
     # Create stub AutoTokenizer for imports
     class AutoTokenizer:
         @staticmethod
@@ -147,7 +147,7 @@ except ImportError as e:
 # Import storage optimization utilities with fallback stubs
 try:
     from .storage_optimization import (
-        create_checkpoint_strategy, manage_checkpoints, 
+        create_checkpoint_strategy, manage_checkpoints,
         setup_streaming_dataset, compress_dataset, optimize_storage_for_model,
         setup_google_drive, setup_s3_storage, upload_to_gdrive, upload_to_s3
     )
@@ -178,7 +178,7 @@ def get_unsloth_model(
 ) -> tuple:
     """
     Load a DeepSeek-Coder model with Unsloth optimization.
-    
+
     Args:
         model_name: The model name or path to load
         model_dir: Directory containing fine-tuned weights (None for base model)
@@ -190,7 +190,7 @@ def get_unsloth_model(
         target_modules: Which modules to apply LoRA to
         alpha: LoRA alpha parameter
         dropout: Dropout rate for LoRA
-        
+
     Returns:
         Tuple of (model, tokenizer)
     """
@@ -199,18 +199,17 @@ def get_unsloth_model(
         logger.warning("CUDA not available. This will be extremely slow.")
     else:
         logger.info(f"Using GPU: {torch.cuda.get_device_name(0)}")
-    
+
     try:
         # Load model and tokenizer with Unsloth optimization
         model, tokenizer = FastLanguageModel.from_pretrained(
             model_name=model_name,
             max_seq_length=max_seq_length,
             load_in_4bit=load_in_4bit,
-            load_in_8bit=load_in_8bit,
-            # Set device_map to auto to let Unsloth handle device placement
-            device_map="auto"
+            load_in_8bit=load_in_8bit
+            # Don't set device_map here as it's already set by FastLanguageModel internally
         )
-        
+
         # Apply LoRA if using PEFT
         if use_peft:
             lora_config = LoraConfig(
@@ -220,29 +219,29 @@ def get_unsloth_model(
                 lora_dropout=dropout,
                 task_type="CAUSAL_LM",
             )
-            
+
             # Apply LoRA config
             model = FastLanguageModel.get_peft_model(
-                model, 
+                model,
                 lora_config,
                 # For inference, we can disable gradient checkpointing to save memory
                 inference_mode=(model_dir is not None)
             )
-        
+
         # Load fine-tuned weights if provided
         if model_dir and os.path.exists(model_dir):
             model.load_adapter(model_dir, adapter_name="default")
             logger.info(f"Loaded fine-tuned weights from {model_dir}")
-        
+
         return model, tokenizer
-    
+
     except Exception as e:
         logger.error(f"Error loading model with Unsloth: {e}")
         logger.warning("Falling back to standard transformers loading")
-        
+
         try:
             from transformers import AutoTokenizer, AutoModelForCausalLM
-            
+
             # Load with standard transformers
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             model = AutoModelForCausalLM.from_pretrained(
@@ -251,7 +250,7 @@ def get_unsloth_model(
                 load_in_4bit=load_in_4bit,
                 load_in_8bit=load_in_8bit
             )
-            
+
             # Load LoRA weights if provided
             if model_dir and os.path.exists(model_dir) and use_peft:
                 try:
@@ -260,9 +259,9 @@ def get_unsloth_model(
                     logger.info(f"Loaded fine-tuned weights from {model_dir}")
                 except Exception as peft_error:
                     logger.error(f"Error loading LoRA weights: {peft_error}")
-            
+
             return model, tokenizer
-        
+
         except Exception as fallback_error:
             logger.error(f"Fallback loading also failed: {fallback_error}")
             raise RuntimeError("Failed to load model in any way. Please check your installation.")
@@ -292,7 +291,7 @@ def finetune_with_unsloth(
 ):
     """
     Fine-tune a DeepSeek-Coder model with Unsloth optimization.
-    
+
     Args:
         train_dataset: Training dataset
         eval_dataset: Evaluation dataset
@@ -314,16 +313,16 @@ def finetune_with_unsloth(
         save_total_limit: Maximum number of checkpoints to save
         use_storage_optimization: Whether to use storage optimization strategies
         storage_config: Configuration for storage optimization
-        
+
     Returns:
         Dictionary with training metrics
     """
     start_time = time.time()
-    
+
     # Set default target modules for DeepSeek-Coder if not specified
     if target_modules is None:
         target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
-    
+
     # Set up storage optimization if requested
     if use_storage_optimization:
         if storage_config is None:
@@ -334,7 +333,7 @@ def finetune_with_unsloth(
                 "storage_type": "gdrive",
                 "remote_path": "DeepSeek_Models"
             }
-        
+
         # Create checkpoint strategy
         checkpoint_strategy = create_checkpoint_strategy(
             total_steps=max_steps,
@@ -342,7 +341,7 @@ def finetune_with_unsloth(
             save_interval=save_steps,
             max_checkpoints=storage_config.get("max_checkpoints", 2)
         )
-        
+
         # Setup external storage if enabled
         remote_storage_func = None
         if storage_config.get("use_external_storage", False):
@@ -366,7 +365,7 @@ def finetune_with_unsloth(
     else:
         checkpoint_strategy = None
         remote_storage_func = None
-    
+
     # Load model and tokenizer with Unsloth optimization
     model, tokenizer = get_unsloth_model(
         model_name=model_name,
@@ -377,7 +376,7 @@ def finetune_with_unsloth(
         r=r,
         target_modules=target_modules
     )
-    
+
     # Create training arguments
     training_args = TrainingArguments(
         output_dir=output_dir,
@@ -401,18 +400,18 @@ def finetune_with_unsloth(
         remove_unused_columns=True,
         run_name="deepseek_unsloth"
     )
-    
+
     # Custom evaluation callback for storage-optimized checkpointing
     if use_storage_optimization:
         from transformers.trainer_callback import TrainerCallback
-        
+
         class StorageOptimizedCallback(TrainerCallback):
             def __init__(self, checkpoint_strategy, output_dir, remote_storage_func):
                 self.checkpoint_strategy = checkpoint_strategy
                 self.output_dir = output_dir
                 self.remote_storage_func = remote_storage_func
                 self.best_metric = float('inf')
-                
+
             def on_step_end(self, args, state, control, **kwargs):
                 # Check if we should save based on strategy
                 if self.checkpoint_strategy:
@@ -429,7 +428,7 @@ def finetune_with_unsloth(
                         # If we have a custom path, we need to handle that in on_save
                         if checkpoint_path and checkpoint_path != self.output_dir:
                             state.best_model_checkpoint = checkpoint_path
-            
+
             def on_evaluate(self, args, state, control, metrics=None, **kwargs):
                 # Save if improvement detected and using "improvement" strategy
                 if metrics and self.checkpoint_strategy and 'eval_loss' in metrics:
@@ -446,7 +445,7 @@ def finetune_with_unsloth(
                         control.should_save = True
                         if checkpoint_path and checkpoint_path != self.output_dir:
                             state.best_model_checkpoint = checkpoint_path
-    
+
     # Create SFT trainer
     # We need to set tokenizer_name explicitly here for DeepSeek
     if TRL_HAS_SFT_CONFIG:
@@ -475,7 +474,7 @@ def finetune_with_unsloth(
             dataset_text_field="text",  # Use 'text' field for training
             max_seq_length=max_seq_length,
         )
-    
+
     # Add storage optimization callback if needed
     if use_storage_optimization:
         trainer.add_callback(StorageOptimizedCallback(
@@ -483,15 +482,15 @@ def finetune_with_unsloth(
             output_dir=output_dir,
             remote_storage_func=remote_storage_func
         ))
-    
+
     # Train the model
     print("Starting training...")
     trainer.train()
-    
+
     # Save the fine-tuned model (only LoRA adapters, much smaller than full model)
     model.save_pretrained(output_dir)
     print(f"Model adapters saved to {output_dir}")
-    
+
     # Store the base model name for future loading
     config_path = os.path.join(output_dir, "base_model_info.json")
     with open(config_path, 'w') as f:
@@ -501,7 +500,7 @@ def finetune_with_unsloth(
             "quantization": "4bit" if load_in_4bit else "8bit" if load_in_8bit else "none",
             "lora_rank": r,
         }, f, indent=2)
-    
+
     # Upload final model to external storage if configured
     if use_storage_optimization and remote_storage_func:
         try:
@@ -509,7 +508,7 @@ def finetune_with_unsloth(
             print(f"Uploaded final model to remote storage: {remote_path}")
         except Exception as e:
             print(f"Failed to upload final model to remote storage: {e}")
-    
+
     # Create metrics dictionary
     metrics = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -521,12 +520,12 @@ def finetune_with_unsloth(
         "gradient_accumulation_steps": gradient_accumulation_steps,
         "lora_rank": r,
     }
-    
+
     # Save metrics
     metrics_path = os.path.join(output_dir, "training_metrics.json")
     with open(metrics_path, 'w') as f:
         json.dump(metrics, f, indent=2)
-    
+
     return metrics
 
 def evaluate_model(
@@ -541,7 +540,7 @@ def evaluate_model(
 ) -> dict[str, float]:
     """
     Evaluate a fine-tuned model on test data.
-    
+
     Args:
         model_dir: Directory containing fine-tuned model (if model not provided)
         test_dataset: Test dataset (can be dict or Dataset object)
@@ -551,7 +550,7 @@ def evaluate_model(
         load_in_8bit: Whether to load the model in 8-bit quantization
         model: Pre-loaded model (optional)
         tokenizer: Pre-loaded tokenizer (optional)
-        
+
     Returns:
         Dictionary with evaluation metrics
     """
@@ -563,9 +562,9 @@ def evaluate_model(
             "error": error_msg,
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
         }
-    
+
     start_time = time.time()
-    
+
     # If no test dataset was provided, return empty metrics
     if test_dataset is None:
         logger.warning("No test dataset provided for evaluation")
@@ -573,25 +572,25 @@ def evaluate_model(
             "error": "No test dataset provided",
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
         }
-    
+
     # Load the model and tokenizer if not provided
     if model is None or tokenizer is None:
         if model_dir is None:
             logger.error("Either model or model_dir must be provided")
             return {"error": "Either model or model_dir must be provided"}
-            
+
         try:
             # Try to get base model name from config
             base_model_name = "deepseek-ai/deepseek-coder-6.7b-base"  # Default
             config_file = None
-            
+
             # Look for adapter config file
             for filename in ["adapter_config.json", "config.json", "base_model_info.json"]:
                 path = os.path.join(model_dir, filename)
                 if os.path.exists(path):
                     config_file = path
                     break
-                    
+
             if config_file:
                 try:
                     with open(config_file, 'r') as f:
@@ -602,9 +601,9 @@ def evaluate_model(
                             base_model_name = config["base_model"]
                 except Exception as e:
                     logger.warning(f"Error loading config file {config_file}: {e}")
-            
+
             logger.info(f"Using base model: {base_model_name}")
-            
+
             # Load the fine-tuned model
             if UNSLOTH_AVAILABLE:
                 try:
@@ -618,7 +617,7 @@ def evaluate_model(
                 except Exception as e:
                     logger.warning(f"Failed to load with Unsloth: {e}, falling back to transformers")
                     from transformers import AutoModelForCausalLM, AutoTokenizer
-                    
+
                     tokenizer = AutoTokenizer.from_pretrained(model_dir)
                     model = AutoModelForCausalLM.from_pretrained(
                         model_dir,
@@ -628,7 +627,7 @@ def evaluate_model(
             else:
                 # Standard transformers loading
                 from transformers import AutoModelForCausalLM, AutoTokenizer
-                
+
                 tokenizer = AutoTokenizer.from_pretrained(model_dir)
                 model = AutoModelForCausalLM.from_pretrained(
                     model_dir,
@@ -641,18 +640,18 @@ def evaluate_model(
                 "error": f"Failed to load model: {str(e)}",
                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
             }
-    
+
     # Ensure model is in evaluation mode
     model.eval()
-    
+
     # Get device
     device = model.device if hasattr(model, 'device') else next(model.parameters()).device
     logger.info(f"Evaluating on device: {device}")
-    
+
     # Initialize metrics
     total_loss = 0.0
     num_samples = 0
-    
+
     # Convert test_dataset to Dataset if it's a dictionary
     if isinstance(test_dataset, dict):
         if "input_ids" in test_dataset:
@@ -668,13 +667,13 @@ def evaluate_model(
         else:
             logger.error("Test dataset must contain 'input_ids' or 'text'")
             return {"error": "Invalid test dataset format"}
-    
+
     try:
         # Process dataset in batches
         progress_bar = tqdm(range(0, len(test_dataset), batch_size), desc="Evaluating")
         for i in progress_bar:
             batch = test_dataset[i:min(i+batch_size, len(test_dataset))]
-            
+
             # Get text data from batch
             if "text" in batch:
                 batch_texts = batch["text"]
@@ -683,49 +682,49 @@ def evaluate_model(
             else:
                 logger.error("Batch must contain 'text' or 'input_ids'")
                 continue
-            
+
             # Skip empty batches
             if not batch_texts or len(batch_texts) == 0:
                 continue
-                
+
             # Handle single string case
             if isinstance(batch_texts, str):
                 batch_texts = [batch_texts]
-                
+
             try:
                 # Tokenize inputs
                 inputs = tokenizer(
-                    batch_texts, 
-                    return_tensors="pt", 
-                    padding=True, 
+                    batch_texts,
+                    return_tensors="pt",
+                    padding=True,
                     truncation=True,
                     max_length=max_seq_length
                 ).to(device)
-                
+
                 # Calculate loss
                 with torch.no_grad():
                     outputs = model(**inputs, labels=inputs["input_ids"])
                     loss = outputs.loss
-                
+
                 # Update metrics
                 batch_loss = loss.item() * len(batch_texts)
                 total_loss += batch_loss
                 num_samples += len(batch_texts)
-                
+
                 # Update progress bar
                 progress_bar.set_postfix({"avg_loss": total_loss / max(1, num_samples)})
-                
+
             except Exception as batch_error:
                 logger.warning(f"Error processing batch: {batch_error}")
                 continue
-    
+
     except Exception as e:
         logger.error(f"Error during evaluation: {e}")
         return {
             "error": f"Evaluation failed: {str(e)}",
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
         }
-    
+
     # Calculate final metrics
     if num_samples == 0:
         logger.warning("No samples were successfully evaluated")
@@ -733,17 +732,17 @@ def evaluate_model(
             "error": "No samples successfully evaluated",
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
         }
-    
+
     avg_loss = total_loss / num_samples
-    
+
     try:
         perplexity = torch.exp(torch.tensor(avg_loss)).item()
     except OverflowError:
         # Handle overflow for very large loss values
         perplexity = float('inf')
-    
+
     evaluation_time = time.time() - start_time
-    
+
     metrics = {
         "loss": avg_loss,
         "perplexity": perplexity,
@@ -751,7 +750,7 @@ def evaluate_model(
         "evaluation_time_seconds": round(evaluation_time, 2),
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
     }
-    
+
     # Save metrics if model_dir is provided
     if model_dir:
         try:
@@ -761,42 +760,42 @@ def evaluate_model(
             logger.info(f"Saved evaluation metrics to {metrics_path}")
         except Exception as e:
             logger.warning(f"Failed to save metrics to file: {e}")
-    
+
     return metrics
 
 def create_text_dataset_from_tokenized(
-    dataset: dict, 
+    dataset: dict,
     tokenizer: any
 ) -> Dataset:
     """
     Convert a tokenized dataset to text format for Unsloth.
-    
+
     Args:
         dataset: Tokenized dataset
         tokenizer: The tokenizer for the model
-        
+
     Returns:
         Text-based dataset
     """
     # Decode tokens to texts
     texts = [tokenizer.decode(ids) for ids in dataset["input_ids"]]
-    
+
     # Create a new dataset with texts
     return Dataset.from_dict({"text": texts})
 
 def preprocess_for_unsloth(
-    examples: dict, 
-    tokenizer: any, 
+    examples: dict,
+    tokenizer: any,
     max_seq_length: int = 2048
 ) -> dict:
     """
     Preprocess dataset examples for Unsloth training.
-    
+
     Args:
         examples: Dataset examples
         tokenizer: The tokenizer for the model
         max_seq_length: Maximum sequence length for the model
-        
+
     Returns:
         Processed examples
     """
@@ -860,13 +859,13 @@ def finetune_with_optimal_storage(
 ):
     """
     Fine-tune a DeepSeek model with optimal storage usage, ideal for environments with limited storage.
-    
+
     This function implements:
     1. Model quantization (4-bit or 8-bit)
     2. External cloud storage integration (Google Drive or S3)
     3. Efficient checkpointing strategies
     4. LoRA for parameter-efficient fine-tuning
-    
+
     Args:
         train_dataset: Training dataset
         eval_dataset: Evaluation dataset
@@ -887,13 +886,13 @@ def finetune_with_optimal_storage(
         aws_access_key_id: AWS access key ID (for S3 storage)
         aws_secret_access_key: AWS secret access key (for S3 storage)
         s3_bucket: S3 bucket name (for S3 storage)
-        
+
     Returns:
         Dictionary with training metrics
     """
     # Configure storage optimization
     use_external_storage = storage_type in ["gdrive", "s3"]
-    
+
     # Setup storage configuration
     storage_config = {
         "checkpoint_strategy": checkpoint_strategy,
@@ -902,7 +901,7 @@ def finetune_with_optimal_storage(
         "storage_type": storage_type,
         "remote_path": remote_path
     }
-    
+
     # Add AWS credentials if using S3
     if storage_type == "s3":
         storage_config.update({
@@ -910,17 +909,17 @@ def finetune_with_optimal_storage(
             "aws_secret_access_key": aws_secret_access_key,
             "s3_bucket": s3_bucket
         })
-    
+
     # Determine quantization settings
     load_in_4bit = quantize_bits == 4
     load_in_8bit = quantize_bits == 8
-    
+
     print(f"Fine-tuning with optimal storage settings:")
     print(f"- Using {quantize_bits}-bit quantization")
     print(f"- LoRA rank: {r}")
     print(f"- External storage: {storage_type if use_external_storage else 'disabled'}")
     print(f"- Checkpoint strategy: {checkpoint_strategy} (max {max_checkpoints})")
-    
+
     # Run the fine-tuning with storage optimization
     metrics = finetune_with_unsloth(
         train_dataset=train_dataset,
@@ -941,7 +940,7 @@ def finetune_with_optimal_storage(
         use_storage_optimization=True,
         storage_config=storage_config
     )
-    
+
     # Ensure the metrics include storage optimization info
     metrics.update({
         "storage_optimization": {
@@ -952,30 +951,30 @@ def finetune_with_optimal_storage(
             "external_storage_used": use_external_storage
         }
     })
-    
+
     # Save updated metrics
     metrics_path = os.path.join(output_dir, "training_metrics.json")
     with open(metrics_path, 'w') as f:
         json.dump(metrics, f, indent=2)
-    
+
     return metrics
 
 if __name__ == "__main__":
     # Simple test with mini dataset
     from finetune_deepseek import create_mini_dataset
-    
+
     # Create minimal test dataset
     train_dataset, eval_dataset = create_mini_dataset(sequence_length=512)
-    
+
     # We need to convert tokenized dataset to text format for Unsloth
     tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/deepseek-coder-6.7b-base", trust_remote_code=True)
     train_text_dataset = create_text_dataset_from_tokenized(train_dataset, tokenizer)
     eval_text_dataset = create_text_dataset_from_tokenized(eval_dataset, tokenizer)
-    
+
     # Fine-tune with Unsloth
     finetune_with_unsloth(
         train_text_dataset,
         eval_text_dataset,
         output_dir="models/deepseek_unsloth_test",
         max_steps=10,  # Short test run
-    ) 
+    )
