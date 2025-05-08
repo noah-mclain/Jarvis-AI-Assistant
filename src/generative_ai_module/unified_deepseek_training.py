@@ -786,12 +786,20 @@ def train_with_unsloth(args):
                     batch_input_ids.append(input_ids)
                     batch_attention_mask.append(attention_mask)
 
-                # Create tensors without specifying device - they'll be moved to the right device by the trainer
-                input_ids_tensor = torch.tensor(batch_input_ids, dtype=torch.long)
-                attention_mask_tensor = torch.tensor(batch_attention_mask, dtype=torch.long)
+                # Create tensors directly on CUDA if available
+                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                logger.info(f"Creating tensors on device: {device}")
+
+                input_ids_tensor = torch.tensor(batch_input_ids, dtype=torch.long, device=device)
+                attention_mask_tensor = torch.tensor(batch_attention_mask, dtype=torch.long, device=device)
 
                 # For causal language modeling, labels are the same as input_ids
                 labels_tensor = input_ids_tensor.clone()
+
+                # Explicitly log tensor devices
+                logger.info(f"Input IDs tensor device: {input_ids_tensor.device}")
+                logger.info(f"Attention mask tensor device: {attention_mask_tensor.device}")
+                logger.info(f"Labels tensor device: {labels_tensor.device}")
 
                 # Create the batch
                 batch = {
@@ -825,12 +833,25 @@ def train_with_unsloth(args):
                 import traceback
                 logger.error(traceback.format_exc())
 
-                # Create minimal tensors without specifying device as fallback
+                # Create minimal tensors directly on CUDA if available as fallback
                 batch_size = len(features)
+                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                logger.info(f"Creating fallback tensors on device: {device}")
+
+                # Create tensors with requires_grad=True for the loss computation
+                input_ids = torch.zeros((batch_size, args.max_length), dtype=torch.long, device=device)
+                attention_mask = torch.zeros((batch_size, args.max_length), dtype=torch.long, device=device)
+                labels = torch.zeros((batch_size, args.max_length), dtype=torch.long, device=device)
+
+                # Log tensor devices
+                logger.info(f"Fallback input IDs tensor device: {input_ids.device}")
+                logger.info(f"Fallback attention mask tensor device: {attention_mask.device}")
+                logger.info(f"Fallback labels tensor device: {labels.device}")
+
                 return {
-                    "input_ids": torch.zeros((batch_size, args.max_length), dtype=torch.long),
-                    "attention_mask": torch.zeros((batch_size, args.max_length), dtype=torch.long),
-                    "labels": torch.zeros((batch_size, args.max_length), dtype=torch.long)
+                    "input_ids": input_ids,
+                    "attention_mask": attention_mask,
+                    "labels": labels
                 }
 
     # Create data collator with improved handling
@@ -844,14 +865,33 @@ def train_with_unsloth(args):
     class AttentionMaskFixTrainer(Trainer):
         """Custom trainer that handles attention mask issues and device management"""
         def compute_loss(self, model, inputs, return_outputs=False):
-            """Override compute_loss to handle attention mask issues"""
+            """Override compute_loss to handle attention mask issues and ensure proper device usage"""
             try:
-                # Ensure all tensors are on the same device as the model
+                # Get the model's device
                 device = model.device
+                logger.info(f"In compute_loss: Model is on device: {device}")
+
+                # Verify CUDA is available and being used
+                if not torch.cuda.is_available():
+                    logger.warning("CUDA is not available! Training will be slow on CPU.")
+                elif str(device) != "cuda:0" and str(device) != "cuda":
+                    logger.warning(f"Model is not on CUDA device! Current device: {device}")
+                    # Try to move the model to CUDA
+                    try:
+                        model = model.to("cuda")
+                        device = model.device
+                        logger.info(f"Moved model to device: {device}")
+                    except Exception as e:
+                        logger.error(f"Failed to move model to CUDA: {e}")
+
+                # Force all inputs to be on the model's device
                 for k, v in inputs.items():
-                    if isinstance(v, torch.Tensor) and v.device != device:
-                        logger.info(f"Moving {k} tensor from {v.device} to {device}")
-                        inputs[k] = v.to(device)
+                    if isinstance(v, torch.Tensor):
+                        if v.device != device:
+                            logger.info(f"Moving {k} tensor from {v.device} to {device}")
+                            inputs[k] = v.to(device)
+                        # Log tensor shapes and devices
+                        logger.info(f"Input tensor {k}: shape={v.shape}, device={v.device}")
 
                 # Check if attention_mask needs fixing
                 if "attention_mask" in inputs and inputs["attention_mask"].dim() != 2:
@@ -859,29 +899,47 @@ def train_with_unsloth(args):
                     # Reshape to 2D [batch_size, seq_length]
                     batch_size = inputs["attention_mask"].size(0)
                     seq_length = inputs["attention_mask"].size(-1)
-                    inputs["attention_mask"] = inputs["attention_mask"].view(batch_size, seq_length)
+                    inputs["attention_mask"] = inputs["attention_mask"].view(batch_size, seq_length).to(device)
+                    logger.info(f"Fixed attention_mask shape: {inputs['attention_mask'].shape}, device: {inputs['attention_mask'].device}")
 
-                # Ensure all tensors have requires_grad=True where needed
-                if "input_ids" in inputs and not inputs["input_ids"].requires_grad:
-                    # Input IDs typically don't need gradients, so we don't modify them
-                    pass
+                # Verify all tensors are on the same device
+                devices = set(v.device for k, v in inputs.items() if isinstance(v, torch.Tensor))
+                if len(devices) > 1:
+                    logger.error(f"Tensors are on different devices: {devices}")
+                    # Force all to the model's device
+                    for k, v in inputs.items():
+                        if isinstance(v, torch.Tensor) and v.device != device:
+                            inputs[k] = v.to(device)
+                    logger.info("Forced all tensors to the model's device")
 
-                if "labels" in inputs and not inputs["labels"].requires_grad:
-                    # Labels typically don't need gradients, so we don't modify them
-                    pass
-
-                # Call the parent compute_loss
-                return super().compute_loss(model, inputs, return_outputs)
+                # Call the parent compute_loss with explicit try/except
+                try:
+                    logger.info("Calling parent compute_loss")
+                    loss = super().compute_loss(model, inputs, return_outputs)
+                    if isinstance(loss, tuple):
+                        logger.info(f"Loss computed: {loss[0].item()}, device: {loss[0].device}")
+                    else:
+                        logger.info(f"Loss computed: {loss.item()}, device: {loss.device}")
+                    return loss
+                except Exception as parent_error:
+                    logger.error(f"Error in parent compute_loss: {parent_error}")
+                    raise  # Re-raise to be caught by the outer try/except
             except Exception as e:
                 logger.error(f"Error in compute_loss: {e}")
                 # Try to continue with a simplified computation
                 try:
+                    logger.info("Attempting simplified loss computation")
                     # Get the input IDs and labels and ensure they're on the right device
                     device = model.device
                     input_ids = inputs["input_ids"].to(device)
                     labels = inputs["labels"].to(device) if "labels" in inputs else input_ids.clone()
 
+                    # Log tensor information
+                    logger.info(f"Simplified computation - input_ids: shape={input_ids.shape}, device={input_ids.device}")
+                    logger.info(f"Simplified computation - labels: shape={labels.shape}, device={labels.device}")
+
                     # Forward pass without attention mask
+                    logger.info("Performing forward pass without attention mask")
                     outputs = model(input_ids=input_ids)
 
                     # Compute the loss manually
@@ -891,11 +949,20 @@ def train_with_unsloth(args):
                     loss_fct = torch.nn.CrossEntropyLoss()
                     loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
+                    # Ensure loss has gradients
+                    if not loss.requires_grad:
+                        logger.warning("Loss doesn't have gradients, creating a new tensor with requires_grad=True")
+                        loss = loss.clone().detach().to(device).requires_grad_(True)
+
+                    logger.info(f"Simplified loss computed: {loss.item()}, device: {loss.device}, requires_grad: {loss.requires_grad}")
+
                     return (loss, outputs) if return_outputs else loss
                 except Exception as e2:
                     logger.error(f"Fallback loss computation also failed: {e2}")
                     # Return a dummy loss as last resort
-                    dummy_loss = torch.tensor(1.0, device=model.device, requires_grad=True)
+                    logger.warning("Creating dummy loss with explicit gradient")
+                    dummy_loss = torch.tensor(1.0, device=device, requires_grad=True)
+                    logger.info(f"Dummy loss created: {dummy_loss.item()}, device: {dummy_loss.device}, requires_grad: {dummy_loss.requires_grad}")
                     return dummy_loss
 
         def training_step(self, model, inputs):
@@ -904,20 +971,42 @@ def train_with_unsloth(args):
                 # Ensure model is in training mode
                 model.train()
 
-                # Move all inputs to the model's device
+                # Get the model's device
                 device = model.device
+                logger.info(f"Model is on device: {device}")
+
+                # Verify CUDA is available and being used
+                if not torch.cuda.is_available():
+                    logger.warning("CUDA is not available! Training will be slow on CPU.")
+                elif str(device) != "cuda:0" and str(device) != "cuda":
+                    logger.warning(f"Model is not on CUDA device! Current device: {device}")
+                    # Try to move the model to CUDA
+                    try:
+                        model = model.to("cuda")
+                        device = model.device
+                        logger.info(f"Moved model to device: {device}")
+                    except Exception as e:
+                        logger.error(f"Failed to move model to CUDA: {e}")
+
+                # Force all inputs to be on the model's device
                 for k, v in inputs.items():
-                    if isinstance(v, torch.Tensor) and v.device != device:
-                        inputs[k] = v.to(device)
+                    if isinstance(v, torch.Tensor):
+                        if v.device != device:
+                            logger.info(f"Moving {k} tensor from {v.device} to {device}")
+                            inputs[k] = v.to(device)
+                        # Log tensor shapes and devices
+                        logger.info(f"Tensor {k}: shape={v.shape}, device={v.device}")
 
                 # Compute loss with our enhanced compute_loss method
                 loss = self.compute_loss(model, inputs)
+                logger.info(f"Computed loss: {loss.item()}, device: {loss.device}, requires_grad: {loss.requires_grad}")
 
-                # Check if loss has gradients
-                if not hasattr(loss, 'grad_fn'):
-                    logger.warning("Loss doesn't have grad_fn, creating a new tensor with requires_grad=True")
+                # Force loss to have gradients
+                if not hasattr(loss, 'grad_fn') or not loss.requires_grad:
+                    logger.warning("Loss doesn't have gradients, creating a new tensor with requires_grad=True")
                     # Create a new tensor that requires gradients
-                    loss = loss.clone().detach().requires_grad_(True)
+                    loss = loss.clone().detach().to(device).requires_grad_(True)
+                    logger.info(f"New loss tensor: {loss.item()}, device: {loss.device}, requires_grad: {loss.requires_grad}")
 
                 # Scale loss for gradient accumulation if needed
                 if self.args.gradient_accumulation_steps > 1:
@@ -925,17 +1014,35 @@ def train_with_unsloth(args):
 
                 # Backward pass with error handling
                 try:
+                    logger.info("Attempting backward pass with accelerator")
                     self.accelerator.backward(loss)
+                    logger.info("Backward pass with accelerator successful")
                 except Exception as e:
-                    logger.error(f"Error in backward pass: {e}")
+                    logger.error(f"Error in backward pass with accelerator: {e}")
                     # Try a more direct approach
                     try:
+                        logger.info("Attempting direct backward pass")
                         loss.backward()
+                        logger.info("Direct backward pass successful")
                     except Exception as e2:
                         logger.error(f"Direct backward also failed: {e2}")
-                        # Create a dummy loss as last resort
-                        dummy_loss = torch.tensor(1.0, device=model.device, requires_grad=True)
+                        # Create a dummy loss as last resort with explicit gradient
+                        logger.warning("Creating dummy loss with explicit gradient")
+                        dummy_loss = torch.tensor(1.0, device=device, requires_grad=True)
                         dummy_loss.backward()
+                        logger.info("Dummy backward pass completed")
+
+                # Verify gradients exist
+                has_grad = False
+                for name, param in model.named_parameters():
+                    if param.requires_grad and param.grad is not None:
+                        has_grad = True
+                        break
+
+                if not has_grad:
+                    logger.warning("No gradients found in model parameters after backward pass!")
+                else:
+                    logger.info("Gradients successfully computed")
 
                 return loss.detach()
             except Exception as e:
@@ -952,6 +1059,10 @@ def train_with_unsloth(args):
 
             train_sampler = self._get_train_sampler()
 
+            # Get the model's device
+            device = self.model.device
+            logger.info(f"In get_train_dataloader: Model is on device: {device}")
+
             # Create a custom collate function that ensures tensors are on the right device
             original_collate_fn = self.data_collator
 
@@ -959,22 +1070,26 @@ def train_with_unsloth(args):
                 # Call the original collate function
                 batch = original_collate_fn(features)
 
-                # Log the device of tensors in the batch
+                # Force all tensors to be on the model's device
                 for k, v in batch.items():
                     if isinstance(v, torch.Tensor):
-                        logger.debug(f"Batch tensor {k} is on device {v.device}")
+                        if v.device != device:
+                            logger.info(f"Moving batch tensor {k} from {v.device} to {device}")
+                            batch[k] = v.to(device)
+                        logger.info(f"Batch tensor {k}: shape={v.shape}, device={v.device}")
 
                 return batch
 
-            # Use our custom collate function
+            # Use our custom collate function with reduced workers
+            logger.info("Creating train DataLoader with device-aware collate function")
             return torch.utils.data.DataLoader(
                 self.train_dataset,
                 batch_size=self.args.train_batch_size,
                 sampler=train_sampler,
                 collate_fn=device_aware_collate_fn,
                 drop_last=self.args.dataloader_drop_last,
-                num_workers=self.args.dataloader_num_workers,
-                pin_memory=self.args.dataloader_pin_memory,
+                num_workers=0,  # Force 0 workers to avoid multiprocessing issues
+                pin_memory=False,  # Disable pin_memory as we're explicitly moving tensors to device
             )
 
         def get_eval_dataloader(self, eval_dataset=None):
@@ -985,6 +1100,10 @@ def train_with_unsloth(args):
 
             eval_sampler = self._get_eval_sampler(eval_dataset)
 
+            # Get the model's device
+            device = self.model.device
+            logger.info(f"In get_eval_dataloader: Model is on device: {device}")
+
             # Create a custom collate function that ensures tensors are on the right device
             original_collate_fn = self.data_collator
 
@@ -992,23 +1111,35 @@ def train_with_unsloth(args):
                 # Call the original collate function
                 batch = original_collate_fn(features)
 
-                # Log the device of tensors in the batch
+                # Force all tensors to be on the model's device
                 for k, v in batch.items():
                     if isinstance(v, torch.Tensor):
-                        logger.debug(f"Eval batch tensor {k} is on device {v.device}")
+                        if v.device != device:
+                            logger.info(f"Moving eval batch tensor {k} from {v.device} to {device}")
+                            batch[k] = v.to(device)
+                        logger.info(f"Eval batch tensor {k}: shape={v.shape}, device={v.device}")
 
                 return batch
 
-            # Use our custom collate function
+            # Use our custom collate function with reduced workers
+            logger.info("Creating eval DataLoader with device-aware collate function")
             return torch.utils.data.DataLoader(
                 eval_dataset,
                 batch_size=self.args.eval_batch_size,
                 sampler=eval_sampler,
                 collate_fn=device_aware_collate_fn,
                 drop_last=self.args.dataloader_drop_last,
-                num_workers=self.args.dataloader_num_workers,
-                pin_memory=self.args.dataloader_pin_memory,
+                num_workers=0,  # Force 0 workers to avoid multiprocessing issues
+                pin_memory=False,  # Disable pin_memory as we're explicitly moving tensors to device
             )
+
+    # Ensure model is on CUDA if available
+    if torch.cuda.is_available():
+        logger.info(f"Moving model to CUDA. Current device: {model.device}")
+        model = model.to("cuda")
+        logger.info(f"Model moved to device: {model.device}")
+    else:
+        logger.warning("CUDA is not available! Training will be slow on CPU.")
 
     # Add device handling to model's prepare_inputs_for_generation method
     if hasattr(model, 'prepare_inputs_for_generation'):
@@ -1018,13 +1149,24 @@ def train_with_unsloth(args):
             """Ensure all inputs are on the correct device"""
             device = model.device
 
+            # Ensure input_ids is on the correct device
+            if input_ids.device != device:
+                logger.info(f"Moving input_ids from {input_ids.device} to {device}")
+                input_ids = input_ids.to(device)
+
+            # Move all kwargs tensors to the correct device
+            for k, v in kwargs.items():
+                if isinstance(v, torch.Tensor) and v.device != device:
+                    logger.info(f"Moving kwarg {k} from {v.device} to {device}")
+                    kwargs[k] = v.to(device)
+
             # Call the original method
             inputs = original_prepare_inputs(input_ids, **kwargs)
 
-            # Move all inputs to the model's device
+            # Move all outputs to the model's device
             for k, v in inputs.items():
                 if isinstance(v, torch.Tensor) and v.device != device:
-                    logger.debug(f"Moving generation input {k} from {v.device} to {device}")
+                    logger.info(f"Moving generation output {k} from {v.device} to {device}")
                     inputs[k] = v.to(device)
 
             return inputs
@@ -1042,6 +1184,31 @@ def train_with_unsloth(args):
         data_collator=data_collator,
         tokenizer=tokenizer,
     )
+
+    # Verify trainer model is on CUDA
+    logger.info(f"Trainer model device: {trainer.model.device}")
+    if torch.cuda.is_available() and str(trainer.model.device) != "cuda:0" and str(trainer.model.device) != "cuda":
+        logger.warning(f"Trainer model is not on CUDA! Moving to CUDA...")
+        trainer.model = trainer.model.to("cuda")
+        logger.info(f"Trainer model moved to device: {trainer.model.device}")
+
+    # Ensure model parameters have requires_grad=True where needed
+    trainable_params = 0
+    all_params = 0
+    for name, param in trainer.model.named_parameters():
+        all_params += param.numel()
+        if 'lora' in name:  # LoRA parameters should be trainable
+            if not param.requires_grad:
+                logger.warning(f"LoRA parameter {name} doesn't have requires_grad=True. Fixing...")
+                param.requires_grad = True
+            trainable_params += param.numel()
+
+    logger.info(f"Verified model parameters: {trainable_params} trainable out of {all_params} total parameters")
+
+    # Double-check that we have trainable parameters
+    if trainable_params == 0:
+        logger.error("No trainable parameters found! Training will not work.")
+        raise ValueError("No trainable parameters found in the model. Check LoRA configuration.")
 
     # Train model with robust error handling
     logger.info("Starting training...")
