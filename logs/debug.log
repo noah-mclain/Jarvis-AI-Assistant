@@ -1,9 +1,0 @@
-qt.highdpi: Initializing high-DPI scaling
-qt.highdpi: Initialization done, high-DPI scaling is active
-qt.qpa.plugin: init_platform called with pluginNamesWithArguments "darwin" platformPluginPath "/Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/.env/lib/python3.11/site-packages/PySide6/Qt/plugins/platforms" platformThemeName ""
-qt.core.plugin.factoryloader: checking directory path "/Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/.env/lib/python3.11/site-packages/PySide6/Qt/plugins/platforms" ...
-qt.core.plugin.factoryloader: checking directory path "/Users/nadamohamed/.pyenv/versions/3.11.5/bin/platforms" ...
-qt.qpa.plugin: Attempting to load Qt platform plugin "darwin" with arguments QList()
-qt.qpa.plugin: Could not find the Qt platform plugin "darwin" in "/Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/.env/lib/python3.11/site-packages/PySide6/Qt/plugins/platforms"
-This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
-

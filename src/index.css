@@ -1,0 +1,396 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles for sidebar hover effect */
+.hover-trigger:hover ~ .hover-target,
+.hover-target:hover {
+  transform: scale(1.05);
+  transition-duration: 0.5s;
+}
+
+/* Hamburger menu animation */
+.hamburger-top,
+.hamburger-middle,
+.hamburger-bottom {
+  position: absolute;
+  width: 20px;
+  height: 2px;
+  border-radius: 9999px;
+  transition: all 0.5s ease-in-out;
+  transform-origin: center;
+}
+
+.hamburger-top {
+  top: 30%;
+}
+
+.hamburger-middle {
+  top: 50%;
+  width: 16px;
+  transform: translateY(-50%);
+}
+
+.hamburger-bottom {
+  bottom: 30%;
+}
+
+/* X animation for when sidebar is open */
+.sidebar-open .hamburger-top {
+  transform: rotate(45deg);
+  top: 50%;
+}
+
+.sidebar-open .hamburger-middle {
+  width: 0;
+  opacity: 0;
+}
+
+.sidebar-open .hamburger-bottom {
+  transform: rotate(-45deg);
+  bottom: 50%;
+}
+
+@layer base {
+  :root {
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 210 100% 50%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 222 84% 48%;
+
+    --radius: 0.75rem;
+
+    /* Font size variables */
+    --font-size-xs: 0.875rem; /* 14px */
+    --font-size-sm: 1rem; /* 16px */
+    --font-size-base: 1.125rem; /* 18px */
+    --font-size-lg: 1.25rem; /* 20px */
+    --font-size-xl: 1.5rem; /* 24px */
+    --font-size-2xl: 1.75rem; /* 28px */
+    --font-size-3xl: 2rem; /* 32px */
+
+    /* Line height variables to maintain aspect ratios */
+    --line-height-tight: 1.2;
+    --line-height-normal: 1.5;
+    --line-height-relaxed: 1.75;
+
+    /* Make sidebar theme continuous with main window */
+    --sidebar-background: var(--background);
+    --sidebar-foreground: var(--foreground);
+    --sidebar-primary: var(--primary);
+    --sidebar-primary-foreground: var(--primary-foreground);
+    --sidebar-accent: var(--accent);
+    --sidebar-accent-foreground: var(--accent-foreground);
+    --sidebar-border: var(--border);
+    --sidebar-ring: var(--ring);
+  }
+
+  .dark {
+    --background: 222 47% 10%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 10%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 10%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 100% 60%;
+    --primary-foreground: 222 47% 10%;
+
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 212 100% 60%;
+
+    /* Make sidebar theme continuous with main window in dark mode */
+    --sidebar-background: var(--background);
+    --sidebar-foreground: var(--foreground);
+    --sidebar-primary: var(--primary);
+    --sidebar-primary-foreground: var(--primary-foreground);
+    --sidebar-accent: var(--accent);
+    --sidebar-accent-foreground: var(--accent-foreground);
+    --sidebar-border: var(--border);
+    --sidebar-ring: var(--ring);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    font-size: var(--font-size-base);
+    line-height: var(--line-height-normal);
+    transition: font-size 0.2s ease;
+  }
+
+  /* Apply font sizes to all text elements */
+  .font-size-updated h1,
+  .font-size-updated h2,
+  .font-size-updated h3,
+  .font-size-updated h4,
+  .font-size-updated h5,
+  .font-size-updated h6,
+  .font-size-updated p,
+  .font-size-updated span,
+  .font-size-updated div,
+  .font-size-updated button,
+  .font-size-updated input,
+  .font-size-updated textarea,
+  .font-size-updated label,
+  .font-size-updated a {
+    transition: font-size 0.2s ease, line-height 0.2s ease;
+  }
+
+  /* Specific font size overrides for different elements */
+  .font-size-updated h1 {
+    font-size: var(--font-size-3xl);
+  }
+  .font-size-updated h2 {
+    font-size: var(--font-size-2xl);
+  }
+  .font-size-updated h3 {
+    font-size: var(--font-size-xl);
+  }
+  .font-size-updated h4 {
+    font-size: var(--font-size-lg);
+  }
+  .font-size-updated h5,
+  .font-size-updated h6 {
+    font-size: var(--font-size-base);
+  }
+
+  /* Ensure all text elements use the appropriate line height */
+  .font-size-updated * {
+    line-height: var(--line-height-normal);
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply backdrop-blur-md bg-white/10 dark:bg-black/30 border border-white/20 dark:border-white/10;
+  }
+
+  .gradient-text {
+    @apply bg-gradient-to-r from-primary to-blue-500 dark:from-primary dark:to-blue-400 bg-clip-text text-transparent;
+  }
+}
+
+/* Custom scrollbar styles that match the theme */
+* {
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--primary) / 0.3) transparent;
+}
+
+/* Chrome, Edge, and Safari */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 9999px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--primary) / 0.3);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--primary) / 0.5);
+}
+
+/* Enhanced scrollbar styles for themed elements */
+.scrollbar-themed {
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--primary) / 0.4) transparent;
+}
+
+.scrollbar-themed::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scrollbar-themed::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 9999px;
+}
+
+.scrollbar-themed::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--primary) / 0.4);
+  border-radius: 9999px;
+  border: 1px solid transparent;
+}
+
+.scrollbar-themed::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--primary) / 0.6);
+}
+
+/* Light mode specific scrollbar styles */
+:root:not(.dark) .scrollbar-themed {
+  scrollbar-color: hsl(var(--primary) / 0.5) transparent;
+}
+
+:root:not(.dark) .scrollbar-themed::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--primary) / 0.5);
+}
+
+:root:not(.dark) .scrollbar-themed::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--primary) / 0.7);
+}
+
+/* Dark mode specific scrollbar styles */
+.dark .scrollbar-themed {
+  scrollbar-color: hsl(var(--primary) / 0.4) transparent;
+}
+
+.dark .scrollbar-themed::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--primary) / 0.4);
+}
+
+.dark .scrollbar-themed::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--primary) / 0.6);
+}
+
+/* Specific styles for textarea scrollbars */
+textarea {
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--primary) / 0.4) transparent;
+  overflow-y: auto !important;
+}
+
+textarea::-webkit-scrollbar {
+  width: 8px;
+}
+
+textarea::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 9999px;
+}
+
+textarea::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--primary) / 0.4);
+  border-radius: 9999px;
+  border: 1px solid transparent;
+}
+
+textarea::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--primary) / 0.6);
+}
+
+/* Light mode textarea scrollbars */
+:root:not(.dark) textarea {
+  scrollbar-color: hsl(var(--primary) / 0.5) transparent;
+}
+
+:root:not(.dark) textarea::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--primary) / 0.5);
+}
+
+:root:not(.dark) textarea::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--primary) / 0.7);
+}
+
+/* Dark mode textarea scrollbars */
+.dark textarea {
+  scrollbar-color: hsl(var(--primary) / 0.4) transparent;
+}
+
+.dark textarea::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--primary) / 0.4);
+}
+
+.dark textarea::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--primary) / 0.6);
+}
+
+/* Chat component specific font size styles */
+.font-size-updated .chat-message-content {
+  font-size: var(--font-size-base);
+}
+
+.font-size-updated .chat-message-sender {
+  font-size: var(--font-size-lg);
+}
+
+.font-size-updated .chat-message-timestamp {
+  font-size: var(--font-size-xs);
+}
+
+.font-size-updated .chat-sidebar-title {
+  font-size: var(--font-size-xl);
+}
+
+.font-size-updated .chat-sidebar-item {
+  font-size: var(--font-size-sm);
+}
+
+.font-size-updated .chat-sidebar-date {
+  font-size: var(--font-size-xs);
+}
+
+.font-size-updated .chat-input {
+  font-size: var(--font-size-base);
+}
+
+/* Ensure all buttons have appropriate font size */
+.font-size-updated button {
+  font-size: var(--font-size-sm);
+}
+
+/* Settings panel font sizes */
+.font-size-updated .sheet-title {
+  font-size: var(--font-size-xl);
+}
+
+.font-size-updated .sheet-description {
+  font-size: var(--font-size-sm);
+}
+
+.font-size-updated .settings-section-title {
+  font-size: var(--font-size-lg);
+}

@@ -1,3 +1,0 @@
-([('unified_launcher',
-   '/Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/dist/unified_launcher',
-   'EXECUTABLE')],)
