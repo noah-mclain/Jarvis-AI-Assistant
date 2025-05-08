@@ -390,8 +390,24 @@ def main():
 def train_with_unsloth(args):
     """Train using Unsloth optimization"""
     from unsloth import FastLanguageModel
-    from transformers import TrainingArguments, Trainer, DataCollatorForLanguageModeling
+    from transformers import TrainingArguments, Trainer, DataCollatorForLanguageModeling, __version__ as transformers_version
     from datasets import load_dataset
+
+    # Check transformers version for compatibility
+    logger.info(f"Using transformers version: {transformers_version}")
+
+    # Parse version string to check compatibility
+    try:
+        version_parts = transformers_version.split('.')
+        major = int(version_parts[0]) if len(version_parts) > 0 else 0
+        minor = int(version_parts[1]) if len(version_parts) > 1 else 0
+        logger.info(f"Parsed transformers version: {major}.{minor}")
+
+        # Adjust parameters based on transformers version
+        if major < 4 or (major == 4 and minor < 20):
+            logger.warning(f"Using older transformers version ({transformers_version}). Some parameters may not be supported.")
+    except Exception as e:
+        logger.warning(f"Could not parse transformers version: {e}. Assuming compatibility.")
 
     logger.info("Loading and preprocessing dataset...")
 
@@ -673,14 +689,19 @@ def train_with_unsloth(args):
         # Seed for reproducibility
         seed=42,
 
-        # Additional multiprocessing safety settings
-        dataloader_prefetch_factor=2,  # Smaller prefetch factor
-        dataloader_drop_last=False,    # Don't drop last batch
+        # Additional safety settings
+        dataloader_drop_last=False    # Don't drop last batch
     )
 
-    # Create a custom data collator with improved error handling
-    class RobustDataCollator(DataCollatorForLanguageModeling):
-        """Custom data collator with improved error handling"""
+    # Create a completely custom data collator that doesn't rely on the parent class
+    class SimpleDataCollator:
+        """Simple custom data collator that handles all processing directly"""
+        def __init__(self, tokenizer, mlm=False, pad_to_multiple_of=None):
+            self.tokenizer = tokenizer
+            self.mlm = mlm
+            self.pad_to_multiple_of = pad_to_multiple_of
+            logger.info("Using SimpleDataCollator with direct tensor creation")
+
         def __call__(self, features):
             try:
                 # Check if features have the expected structure
@@ -694,25 +715,65 @@ def train_with_unsloth(args):
                         logger.warning("Removing 'text' field from feature to avoid nesting issues")
                         del feature['text']
 
-                # Ensure all features have the required keys
-                required_keys = ["input_ids", "attention_mask"]
+                # Extract input_ids and attention_mask, handling potential issues
+                batch_input_ids = []
+                batch_attention_mask = []
+
                 for i, feature in enumerate(features):
-                    for key in required_keys:
-                        if key not in feature:
-                            logger.warning(f"Feature {i} missing {key}, adding empty")
-                            feature[key] = [0] * args.max_length
+                    # Handle input_ids
+                    if 'input_ids' not in feature:
+                        logger.warning(f"Feature {i} missing input_ids, adding empty")
+                        input_ids = [0] * args.max_length
+                    else:
+                        input_ids = feature['input_ids']
+                        # Handle nested lists
+                        if isinstance(input_ids, list) and input_ids and isinstance(input_ids[0], list):
+                            input_ids = input_ids[0]
+                        # Ensure correct length
+                        if len(input_ids) < args.max_length:
+                            input_ids = input_ids + [self.tokenizer.pad_token_id] * (args.max_length - len(input_ids))
+                        elif len(input_ids) > args.max_length:
+                            input_ids = input_ids[:args.max_length]
 
-                        # Ensure input_ids and attention_mask are lists of integers, not nested lists
-                        if key in feature and isinstance(feature[key], list) and feature[key] and isinstance(feature[key][0], list):
-                            logger.warning(f"Feature {i} has nested {key}, flattening")
-                            # Take the first element if it's a nested list
-                            feature[key] = feature[key][0]
+                    # Handle attention_mask
+                    if 'attention_mask' not in feature:
+                        logger.warning(f"Feature {i} missing attention_mask, adding empty")
+                        attention_mask = [0] * args.max_length
+                    else:
+                        attention_mask = feature['attention_mask']
+                        # Handle nested lists
+                        if isinstance(attention_mask, list) and attention_mask and isinstance(attention_mask[0], list):
+                            attention_mask = attention_mask[0]
+                        # Ensure correct length
+                        if len(attention_mask) < args.max_length:
+                            attention_mask = attention_mask + [0] * (args.max_length - len(attention_mask))
+                        elif len(attention_mask) > args.max_length:
+                            attention_mask = attention_mask[:args.max_length]
 
-                # Call the parent class method
-                return super().__call__(features)
+                    batch_input_ids.append(input_ids)
+                    batch_attention_mask.append(attention_mask)
+
+                # Create tensors on CPU to avoid CUDA issues
+                input_ids_tensor = torch.tensor(batch_input_ids, dtype=torch.long, device="cpu")
+                attention_mask_tensor = torch.tensor(batch_attention_mask, dtype=torch.long, device="cpu")
+
+                # For causal language modeling, labels are the same as input_ids
+                labels_tensor = input_ids_tensor.clone()
+
+                # Create the batch
+                batch = {
+                    "input_ids": input_ids_tensor,
+                    "attention_mask": attention_mask_tensor,
+                    "labels": labels_tensor
+                }
+
+                return batch
             except Exception as e:
                 logger.error(f"Error in data collator: {e}")
-                # Create tensors on CPU to avoid CUDA issues in worker processes
+                import traceback
+                logger.error(traceback.format_exc())
+
+                # Create minimal tensors on CPU as fallback
                 batch_size = len(features)
                 return {
                     "input_ids": torch.zeros((batch_size, args.max_length), dtype=torch.long, device="cpu"),
@@ -721,7 +782,7 @@ def train_with_unsloth(args):
                 }
 
     # Create data collator with improved handling
-    data_collator = RobustDataCollator(
+    data_collator = SimpleDataCollator(
         tokenizer=tokenizer,
         mlm=False,  # Not using masked language modeling
         pad_to_multiple_of=8  # Optimize for hardware efficiency
