@@ -22,54 +22,54 @@ def get_project_root():
 def is_paperspace_environment():
     """Checks if code is running in Paperspace Gradient environment."""
     return os.path.exists('/notebooks') and (
-        os.environ.get('PAPERSPACE') == 'true' or 
+        os.environ.get('PAPERSPACE') == 'true' or
         os.path.exists('/etc/paperspace') or
-        os.path.exists('/notebooks/Jarvis_AI_Assistant')
+        os.path.exists('notebooks/Jarvis_AI_Assistant')
     )
 
 def ensure_directory_exists(folder_type, relative_path=""):
     """
     Ensure that a directory exists, syncing from Google Drive first if needed.
     This handles cases where local directories have been deleted.
-    
+
     Args:
-        folder_type (str): One of "metrics", "models", "datasets", "checkpoints", 
+        folder_type (str): One of "metrics", "models", "datasets", "checkpoints",
                            "preprocessed_data", "logs"
         relative_path (str, optional): Relative path within the folder
-        
+
     Returns:
         str: Full path to the directory
     """
     # Get the appropriate path
     directory = get_storage_path(folder_type, relative_path)
-    
+
     # If the directory doesn't exist and we're in Paperspace, try to sync from Google Drive
     if not os.path.exists(directory) and is_paperspace_environment():
         try:
             # Create parent directory if it doesn't exist
             os.makedirs(os.path.dirname(directory), exist_ok=True)
-            
+
             # Try to sync from Google Drive to get the directory contents
             logger.info(f"Directory {directory} doesn't exist. Attempting to sync from Google Drive...")
             sync_from_gdrive(folder_type)
         except Exception as e:
             logger.warning(f"Error syncing from Google Drive: {str(e)}")
-    
+
     # Create the directory if it still doesn't exist
     os.makedirs(directory, exist_ok=True)
-    
+
     return directory
 
 def get_storage_path(folder_type, relative_path=""):
     """
     Get the appropriate storage path based on environment.
     On Paperspace, this will return the local path but also ensures Google Drive sync is configured.
-    
+
     Args:
-        folder_type (str): One of "metrics", "models", "datasets", "checkpoints", 
+        folder_type (str): One of "metrics", "models", "datasets", "checkpoints",
                            "preprocessed_data", "logs"
         relative_path (str, optional): Relative path within the folder
-        
+
     Returns:
         str: Full path to the storage location
     """
@@ -78,14 +78,14 @@ def get_storage_path(folder_type, relative_path=""):
         try:
             from .google_drive_storage import GoogleDriveSync
             path = GoogleDriveSync.get_local_path(folder_type, relative_path)
-            
+
             # Ensure the directory exists
             os.makedirs(os.path.dirname(path), exist_ok=True)
-            
+
             return path
         except ImportError:
             # Fallback if GoogleDriveSync is not available
-            path = os.path.join('/notebooks/Jarvis_AI_Assistant', folder_type, relative_path)
+            path = os.path.join('notebooks/Jarvis_AI_Assistant', folder_type, relative_path)
             os.makedirs(os.path.dirname(path), exist_ok=True)
             return path
     else:
@@ -98,7 +98,7 @@ def get_storage_path(folder_type, relative_path=""):
 def sync_to_gdrive(folder_type=None):
     """
     Sync data to Google Drive if running in Paperspace environment.
-    
+
     Args:
         folder_type (str, optional): One of "metrics", "models", "datasets", "checkpoints", "preprocessed_data"
                                      or None to sync all folders
@@ -115,7 +115,7 @@ def sync_to_gdrive(folder_type=None):
 def sync_from_gdrive(folder_type=None):
     """
     Sync data from Google Drive if running in Paperspace environment.
-    
+
     Args:
         folder_type (str, optional): One of "metrics", "models", "datasets", "checkpoints", "preprocessed_data"
                                      or None to sync all folders
@@ -132,10 +132,10 @@ def sync_from_gdrive(folder_type=None):
 def is_zipfile(file_path: str) -> bool:
     """
     Check if a file is a valid ZIP file.
-    
+
     Args:
         file_path: Path to the file to check
-        
+
     Returns:
         bool: True if the file is a valid ZIP file, False otherwise
     """
@@ -144,11 +144,11 @@ def is_zipfile(file_path: str) -> bool:
 def process_zip(zip_path: str, extract_to: str) -> bool:
     """
     Process a ZIP file by extracting its contents.
-    
+
     Args:
         zip_path: Path to the ZIP file
         extract_to: Directory to extract the files to
-        
+
     Returns:
         bool: True if extraction was successful, False otherwise
     """
@@ -156,14 +156,14 @@ def process_zip(zip_path: str, extract_to: str) -> bool:
         if not is_zipfile(zip_path):
             logger.error(f"File {zip_path} is not a valid ZIP file")
             return False
-            
+
         # Create extraction directory if it doesn't exist
         os.makedirs(extract_to, exist_ok=True)
-        
+
         # Extract the ZIP file
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(extract_to)
-            
+
         logger.info(f"Successfully extracted {zip_path} to {extract_to}")
         return True
     except Exception as e:
@@ -175,21 +175,21 @@ def setup_logging(log_filename=None):
     Set up logging configuration to log to both console and a file.
     If running in Paperspace, this will store logs in the logs directory
     that syncs to Google Drive.
-    
+
     Args:
         log_filename (str, optional): Name of the log file. If not provided,
                                      a timestamp-based name will be used.
-    
+
     Returns:
         str: Path to the log file
     """
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     log_filename = log_filename or f"jarvis_log_{timestamp}.log"
-    
+
     # Get the logs directory path and ensure it exists
     log_dir = ensure_directory_exists("logs")
     log_path = os.path.join(log_dir, log_filename)
-    
+
     # Configure logging
     logging.basicConfig(
         level=logging.INFO,
@@ -199,10 +199,10 @@ def setup_logging(log_filename=None):
             logging.StreamHandler()
         ]
     )
-    
+
     logger = logging.getLogger(__name__)
     logger.info(f"Logging to {log_path}")
-    
+
     return log_path
 
 def sync_logs():
@@ -225,29 +225,29 @@ def sync_logs():
 def save_log_file(content, filename=None):
     """
     Save content to a log file and sync to Google Drive.
-    
+
     Args:
         content (str): Content to save
         filename (str, optional): Name of the log file. If not provided,
                                  a timestamp-based name will be used.
-    
+
     Returns:
         str: Path to the log file
     """
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = filename or f"custom_log_{timestamp}.log"
-    
+
     # Get the logs directory path and ensure it exists
     log_dir = ensure_directory_exists("logs")
     log_path = os.path.join(log_dir, filename)
-    
+
     # Save content to log file
     with open(log_path, 'w') as f:
         f.write(content)
-    
+
     # Sync logs to Google Drive
     sync_logs()
-    
+
     return log_path
 
 # Add spaCy utilities with Paperspace compatibility
@@ -260,7 +260,7 @@ def is_spacy_available():
             return True, "minimal-tokenizer"
         except ImportError:
             pass
-        
+
         # Try importing regular spaCy
         import spacy
         return True, spacy.__version__
@@ -286,7 +286,7 @@ def is_spacy_model_loaded(model_name="en_core_web_sm"):
             return True, f"Minimal tokenizer loaded successfully (Paperspace-safe)"
     except ImportError:
         pass
-    
+
     # Try regular spaCy model
     try:
         import spacy
@@ -318,21 +318,21 @@ def is_spacy_model_loaded(model_name="en_core_web_sm"):
 def initialize_spacy(fallback_to_basic=True, log_errors=True, paperspace_safe=None):
     """
     Initialize spaCy with the en_core_web_sm model if available.
-    
+
     Args:
         fallback_to_basic: If True, will not raise errors but return None if spaCy is unavailable
         log_errors: If True, will log errors and warnings
         paperspace_safe: Override for Paperspace detection - if None, will auto-detect
-        
+
     Returns:
         nlp: The spaCy NLP object if available, None otherwise
     """
     import logging
-    
+
     # Auto-detect Paperspace if not specified
     if paperspace_safe is None:
         paperspace_safe = is_paperspace_environment()
-    
+
     # Try using minimal tokenizer first if in Paperspace
     if paperspace_safe:
         try:
@@ -340,12 +340,12 @@ def initialize_spacy(fallback_to_basic=True, log_errors=True, paperspace_safe=No
             if tokenizer.is_available:
                 if log_errors:
                     logging.info("Using minimal spaCy tokenizer (Paperspace-safe)")
-                
+
                 # Return a simplified object with just tokenizer functionality
                 class MinimalNLP:
                     def __init__(self, tokenizer):
                         self.tokenizer = tokenizer
-                    
+
                     def __call__(self, text):
                         tokens = self.tokenizer.tokenize(text)
                         # Return a dummy doc object with just the tokens
@@ -361,12 +361,12 @@ def initialize_spacy(fallback_to_basic=True, log_errors=True, paperspace_safe=No
                                     return [type('DummyToken', (), {'text': t}) for t in self.tokens[i]]
                                 return type('DummyToken', (), {'text': self.tokens[i]})
                         return DummyDoc(tokens)
-                
+
                 return MinimalNLP(tokenizer)
         except ImportError:
             if log_errors:
                 logging.warning("Minimal tokenizer not available, trying regular spaCy")
-    
+
     # For non-Paperspace or if minimal tokenizer failed, try regular spaCy
     try:
         import spacy
@@ -378,7 +378,7 @@ def initialize_spacy(fallback_to_basic=True, log_errors=True, paperspace_safe=No
                 nlp = spacy.load("en_core_web_sm", disable=["ner", "parser", "attribute_ruler", "lemmatizer"])
             else:
                 nlp = spacy.load("en_core_web_sm")
-            
+
             if log_errors:
                 logging.info("spaCy initialized with en_core_web_sm model")
             return nlp
@@ -417,17 +417,17 @@ def initialize_spacy(fallback_to_basic=True, log_errors=True, paperspace_safe=No
 def process_text_with_spacy_or_fallback(text, nlp=None):
     """
     Process text with spaCy if available, or use a simple fallback method.
-    
+
     Args:
         text: The text to process
         nlp: Optional spaCy NLP object. If None, will try to initialize
-        
+
     Returns:
         dict: Processed text information (entities, tokens, etc.)
     """
     # Check if we're in Paperspace
     paperspace_mode = is_paperspace_environment()
-    
+
     # Check for minimal tokenizer first
     try:
         from .minimal_spacy_tokenizer import tokenize as minimal_tokenize
@@ -446,16 +446,16 @@ def process_text_with_spacy_or_fallback(text, nlp=None):
             }
     except ImportError:
         pass  # Continue with standard approach if minimal_tokenize not available
-    
+
     # If nlp is not provided, try to initialize spaCy
     if nlp is None:
         nlp = initialize_spacy(fallback_to_basic=True, log_errors=False, paperspace_safe=paperspace_mode)
-    
+
     # If spaCy is available, use it for processing
     if nlp is not None:
         try:
             doc = nlp(text)
-            
+
             # In Paperspace/minimal mode, only return tokens to avoid segfaults
             if paperspace_mode or hasattr(nlp, 'tokenizer') and not hasattr(doc, 'ents'):
                 tokens = [token.text for token in doc]
@@ -470,7 +470,7 @@ def process_text_with_spacy_or_fallback(text, nlp=None):
                     "sentences": [s.strip() for s in text.split('.') if s.strip()],  # Simple period splitting
                     "minimal_mode": True
                 }
-            
+
             # Full mode for non-Paperspace environments
             return {
                 "entities": [(ent.text, ent.label_) for ent in doc.ents],
@@ -486,13 +486,13 @@ def process_text_with_spacy_or_fallback(text, nlp=None):
         except Exception:
             # Fall back to basic processing if spaCy fails
             pass
-    
+
     # Basic fallback processing
     import re
     words = text.split()
     sentences = re.split(r'[.!?]+', text)
     sentences = [s.strip() for s in sentences if s.strip()]
-    
+
     # Basic POS guesses - very rudimentary!
     nouns = [word for word in words if word[0].isupper() and len(word) > 3]
     potential_verbs = [word for word in words if word.lower() in {
@@ -500,7 +500,7 @@ def process_text_with_spacy_or_fallback(text, nlp=None):
         'can', 'could', 'will', 'would', 'shall', 'should', 'may', 'might',
         'make', 'create', 'generate', 'write', 'build', 'design', 'develop'
     }]
-    
+
     return {
         "entities": [],  # Empty since we can't detect entities
         "tokens": words,
@@ -516,10 +516,10 @@ def process_text_with_spacy_or_fallback(text, nlp=None):
 def setup_gpu_for_training(force_gpu=True):
     """
     Configure GPU usage for model training/inference, with special handling for RTX5000 GPU on Paperspace.
-    
+
     Args:
         force_gpu (bool): If True, will raise an error if GPU is not available when specifically requested
-        
+
     Returns:
         torch.device: The device to use for model training/inference
         dict: Additional configuration parameters for specific GPU optimizations
@@ -529,9 +529,9 @@ def setup_gpu_for_training(force_gpu=True):
     import re
     import logging
     import os
-    
+
     logger = logging.getLogger("jarvis_unified")
-    
+
     # Default optimization parameters
     config = {
         "use_fp16": False,
@@ -541,21 +541,21 @@ def setup_gpu_for_training(force_gpu=True):
         "gradient_accumulation_steps": 8,  # Default for RTX5000 with 16GB VRAM
         "attention_implementation": "sdpa",  # Default for LLMs on newer GPUs
     }
-    
+
     # Always force GPU usage
     force_gpu = True
-    
+
     # Ensure CUDA devices are visible
     if "CUDA_VISIBLE_DEVICES" not in os.environ:
         os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-        
+
     # Set memory allocation config for better efficiency
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
-        
+
     # Set CUDA benchmark for faster training with fixed input sizes
     if hasattr(torch, 'backends') and hasattr(torch.backends, 'cudnn'):
         torch.backends.cudnn.benchmark = True
-    
+
     # Try to use CUDA if available
     if not torch.cuda.is_available():
         if force_gpu:
@@ -568,7 +568,7 @@ def setup_gpu_for_training(force_gpu=True):
                 return torch.device("cuda"), config
             except Exception as e:
                 logger.error(f"Attempted to force CUDA initialization but failed: {e}")
-                
+
             # Check if this is Paperspace and we're missing CUDA
             if is_paperspace_environment():
                 logger.error("GPU requested but CUDA not available on Paperspace. This may indicate a configuration issue.")
@@ -578,10 +578,10 @@ def setup_gpu_for_training(force_gpu=True):
                     logger.error(f"GPU info from nvidia-smi: {gpu_info}")
                 except Exception as cmd_error:
                     logger.error(f"Couldn't get GPU info via nvidia-smi. NVIDIA drivers may not be installed correctly: {cmd_error}")
-                
+
                 # Since user specifically requested GPU enforcement, this is an error condition
                 raise RuntimeError("Failed to find CUDA GPU despite being requested. Please check your system configuration.")
-            
+
             # Check for Apple Silicon as fallback
             try:
                 if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
@@ -589,20 +589,20 @@ def setup_gpu_for_training(force_gpu=True):
                     return torch.device("mps"), config
             except Exception as mps_error:
                 logger.error(f"Error checking for MPS availability: {mps_error}")
-                
+
             logger.error("GPU was requested but no CUDA or MPS device is available.")
             raise RuntimeError("GPU was specifically requested but no GPU is available on this system. Check your configuration.")
         else:
             logger.warning("No GPU available, falling back to CPU despite preference for GPU.")
             return torch.device("cpu"), config
-    
+
     # If we reach here, CUDA is available. Now check for RTX5000 specifically
     device = torch.device("cuda")
     gpu_name = torch.cuda.get_device_name(0)
-    
+
     # Check for RTX5000 in Paperspace environment
     is_rtx5000 = "RTX5000" in gpu_name or "RTX 5000" in gpu_name
-    
+
     # Get GPU memory
     try:
         gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
@@ -610,23 +610,23 @@ def setup_gpu_for_training(force_gpu=True):
     except Exception as memory_error:
         gpu_memory_gb = None
         logger.warning(f"Could not determine GPU memory size: {memory_error}")
-    
+
     # If this is Paperspace + RTX5000, apply specific optimizations
     if is_paperspace_environment() and is_rtx5000:
         # Log that we've detected the specific setup
         logger.info(f"Using GPU: {gpu_name}")
-        
+
         # Get CUDA version
         cuda_version = torch.version.cuda if hasattr(torch.version, 'cuda') else "Unknown"
         logger.info(f"CUDA Version: {cuda_version}")
-        
+
         # RTX5000 has 16GB VRAM, optimize accordingly
         logger.info("RTX 5000 GPU detected - applying optimized settings")
-        
+
         # Check for BF16 support (not available on RTX5000 but check anyway for future compatibility)
         bf16_support = torch.cuda.is_bf16_supported() if hasattr(torch.cuda, 'is_bf16_supported') else False
         logger.info(f"BF16 support: {bf16_support}")
-        
+
         config.update({
             "use_fp16": True,         # Use FP16 precision
             "use_bf16": bf16_support, # Use BF16 if supported
@@ -636,14 +636,14 @@ def setup_gpu_for_training(force_gpu=True):
             "gradient_checkpointing": True,
             "low_cpu_mem_usage": True
         })
-        
+
         # Set environment variables to optimize GPU memory usage
         os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
         os.environ["CUDA_LAUNCH_BLOCKING"] = "0"  # Better performance but less debugging info
-        
+
         if "CUDA_VISIBLE_DEVICES" not in os.environ:
             os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # Ensure GPU is visible
-            
+
         # Log availability of Unsloth optimizations
         try:
             import unsloth
@@ -653,41 +653,41 @@ def setup_gpu_for_training(force_gpu=True):
     else:
         # General optimizations for other NVIDIA GPUs
         logger.info(f"Using GPU: {gpu_name}")
-        
+
         # Force default tensor type to CUDA
         torch.set_default_tensor_type('torch.cuda.FloatTensor')
-            
+
     # Force PyTorch to use CUDA for all operations where possible
     torch.set_default_device('cuda')
-            
+
     return device, config
 
 def force_cuda_device():
     """
     Force all PyTorch operations to use CUDA device if available,
     with special handling for RTX5000 on Paperspace.
-    This is a simpler version of setup_gpu_for_training when 
+    This is a simpler version of setup_gpu_for_training when
     you just need to ensure GPU usage without detailed configuration.
-    
+
     Returns:
         torch.device: The CUDA device if available, otherwise CPU
     """
     import torch
     import os
     import logging
-    
+
     logger = logging.getLogger("jarvis_unified")
-    
+
     # Ensure CUDA devices are visible
-    os.environ["CUDA_VISIBLE_DEVICES"] = "0" 
-    
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
     # Set memory allocation config for better efficiency
     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
-    
+
     # Set CUDA benchmark for faster training with fixed input sizes
     if hasattr(torch, 'backends') and hasattr(torch.backends, 'cudnn'):
         torch.backends.cudnn.benchmark = True
-    
+
     # Check for CUDA availability
     if torch.cuda.is_available():
         try:
@@ -699,22 +699,22 @@ def force_cuda_device():
                 # Legacy approach - will show deprecation warnings
                 torch.set_default_tensor_type('torch.cuda.FloatTensor')
                 logger.info("Using legacy tensor type setting approach")
-                
+
             # For model inference
             device = torch.device('cuda')
-            
+
             # Get device properties for optimizations
             device_props = torch.cuda.get_device_properties(0)
             total_memory_gb = device_props.total_memory / (1024**3)
             gpu_name = torch.cuda.get_device_name(0)
-            
+
             # Add to config
             config = {
                 "gpu_memory": f"{total_memory_gb:.2f} GB",
                 "gpu_name": gpu_name,
                 "cuda_version": torch.version.cuda
             }
-            
+
             return device, config
         except Exception as e:
             logger.error(f"Error setting up CUDA device: {e}")
@@ -722,4 +722,3 @@ def force_cuda_device():
     else:
         logger.warning("No GPU available. Falling back to CPU.")
         return torch.device("cpu"), {}
-    

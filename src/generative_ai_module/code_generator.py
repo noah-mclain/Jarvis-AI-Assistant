@@ -1196,14 +1196,14 @@ class CodeGenerator:
                 import sys
                 import os
 
-                # Add the current directory to the path to find the fix_attention_mask module
+                # Add the current directory to the path to find the setup.fix_attention_mask module
                 current_dir = os.path.dirname(os.path.abspath(__file__))
                 project_root = os.path.dirname(os.path.dirname(current_dir))
                 if project_root not in sys.path:
                     sys.path.append(project_root)
 
                 # Import and apply the fix
-                from fix_attention_mask import patch_llama_model_forward, patch_attention_mask_in_dataset_collator
+                from setup.fix_attention_mask import patch_llama_model_forward, patch_attention_mask_in_dataset_collator
                 patch_llama_model_forward()
                 patch_attention_mask_in_dataset_collator()
                 log_checkpoint("Successfully applied attention mask fix")

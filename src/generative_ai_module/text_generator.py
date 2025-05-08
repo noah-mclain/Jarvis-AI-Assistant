@@ -489,42 +489,189 @@ class CNNTextGenerator(TextGenerator):
     pattern recognition in text generation tasks. It combines the strengths of
     CNNs for local feature extraction with transformers for sequence modeling.
 
-    Optimized for RTX 5000 GPUs with memory-efficient training options.
+    Optimized for A6000 GPUs with 48 GiB VRAM and memory-efficient training options.
     """
 
     def __init__(self,
                 model_name_or_path="google/flan-ul2-20b",
-                cnn_layers=2,
+                cnn_layers=3,  # Increased for A6000 GPU
                 cnn_kernel_sizes=None,
                 cnn_dropout=0.1,
                 force_gpu=True,
+                gpu_type="A6000",
+                vram_size=48,
+                load_in_4bit=True,  # Use 4-bit quantization by default for memory efficiency
+                load_in_8bit=False,  # 8-bit quantization alternative
                 quantization_config=None,
-                use_flash_attention_2=False,
-                gradient_checkpointing=False):
+                use_flash_attention_2=True,  # Enabled by default for A6000
+                gradient_checkpointing=True,  # Enabled by default for memory efficiency
+                lora_rank=32,  # Optimized for A6000 GPU
+                lora_alpha=64,
+                lora_dropout=0.05,
+                batch_size=None,  # Will be set based on GPU type
+                gradient_accumulation_steps=None,  # Will be set based on GPU type
+                max_length=4096,  # Increased for A6000 GPU
+                bf16=True):  # Use bfloat16 precision for A6000 GPUs
         super().__init__(force_gpu)
         """
-        Initialize the CNN-enhanced text generator
+        Initialize the CNN-enhanced text generator optimized for A6000 GPUs
 
         Args:
             model_name_or_path: Model name or path for the base transformer
-            cnn_layers: Number of CNN layers to use
+            cnn_layers: Number of CNN layers to use (3 for A6000)
             cnn_kernel_sizes: List of kernel sizes for CNN layers (default: [3, 5, 7])
             cnn_dropout: Dropout rate for CNN layers
             force_gpu: Whether to force GPU usage
-            quantization_config: Quantization configuration for 4-bit or 8-bit precision
-            use_flash_attention_2: Whether to use Flash Attention 2 for faster training
-            gradient_checkpointing: Whether to use gradient checkpointing
+            gpu_type: GPU type (A6000, A4000, RTX5000)
+            vram_size: GPU VRAM size in GiB
+            load_in_4bit: Whether to load model in 4-bit precision (default: True for memory efficiency)
+            load_in_8bit: Whether to load model in 8-bit precision (default: False)
+            quantization_config: Custom quantization configuration (overrides load_in_4bit/8bit if provided)
+            use_flash_attention_2: Whether to use Flash Attention 2 for faster training (default: True for A6000)
+            gradient_checkpointing: Whether to use gradient checkpointing for memory efficiency (default: True)
+            lora_rank: LoRA rank parameter for fine-tuning (32 for A6000)
+            lora_alpha: LoRA alpha parameter for fine-tuning (64 for A6000)
+            lora_dropout: LoRA dropout parameter for fine-tuning
+            batch_size: Batch size for training (if None, will be set based on GPU type)
+            gradient_accumulation_steps: Steps to accumulate gradients (if None, will be set based on GPU type)
+            max_length: Maximum sequence length for training (4096 for A6000)
+            bf16: Whether to use bfloat16 precision (True for A6000 with Ampere or newer architecture)
         """
-        # Store CNN-specific parameters
+        # Store parameters
         self.cnn_layers = cnn_layers
         self.cnn_kernel_sizes = cnn_kernel_sizes or [3, 5, 7]
         self.cnn_dropout = cnn_dropout
         self.quantization_config = quantization_config
         self.use_flash_attention_2 = use_flash_attention_2
         self.gradient_checkpointing = gradient_checkpointing
+        self.gpu_type = gpu_type
+        self.vram_size = vram_size
+        self.lora_rank = lora_rank
+        self.lora_alpha = lora_alpha
+        self.lora_dropout = lora_dropout
+        self.batch_size = batch_size
+        self.gradient_accumulation_steps = gradient_accumulation_steps
+        self.max_length = max_length
+        self.bf16 = bf16
+        self.load_in_4bit = load_in_4bit
+        self.load_in_8bit = load_in_8bit
+
+        # Configure based on GPU type and VRAM
+        self._configure_for_gpu()
 
         # Initialize CNN model
         self._initialize_model(model_name_or_path)
+
+    def _configure_for_gpu(self):
+        """Configure training parameters based on GPU type and VRAM size"""
+        print(f"Configuring for GPU type {self.gpu_type} with {self.vram_size} GiB VRAM")
+
+        # Set batch size and gradient accumulation steps based on GPU type if not specified
+        if self.batch_size is None or self.gradient_accumulation_steps is None:
+            if self.gpu_type == "A6000" and self.vram_size >= 48:
+                # A6000 with 48+ GiB VRAM - maximize parameters while staying within constraints
+                print("Using optimized settings for A6000 with 48+ GiB VRAM")
+                self.batch_size = self.batch_size or 3  # Reduced to ensure stability with large models
+                self.gradient_accumulation_steps = self.gradient_accumulation_steps or 8
+                self.max_length = 2048  # Reduced from 4096 to ensure stability with FLAN-UL2
+                self.lora_rank = 32     # Increase LoRA rank for better quality
+                self.lora_alpha = 64    # Increase LoRA alpha for better adaptation
+                self.lora_dropout = 0.05  # Optimal dropout for stability
+                self.num_workers = 8    # Match your 8 CPU cores
+                self.warmup_ratio = 0.03  # Optimal warmup for large models
+                self.weight_decay = 0.01  # Prevent overfitting
+                self.adam_beta1 = 0.9   # Standard beta1 for AdamW
+                self.adam_beta2 = 0.999  # Standard beta2 for AdamW
+                self.adam_epsilon = 1e-8  # Standard epsilon for AdamW
+                self.max_grad_norm = 1.0  # Prevent gradient explosion
+                # Memory optimization
+                self.load_in_4bit = True  # Use 4-bit quantization for maximum memory efficiency
+
+            elif self.gpu_type == "A6000" and self.vram_size >= 40:
+                # A6000 with 40-48 GiB VRAM
+                print("Using optimized settings for A6000 with 40-48 GiB VRAM")
+                self.batch_size = self.batch_size or 3
+                self.gradient_accumulation_steps = self.gradient_accumulation_steps or 8
+                self.max_length = 3072
+                self.lora_rank = 24
+                self.lora_alpha = 48
+                self.lora_dropout = 0.05
+                self.num_workers = 6
+                self.warmup_ratio = 0.03
+                self.weight_decay = 0.01
+                self.adam_beta1 = 0.9
+                self.adam_beta2 = 0.999
+                self.adam_epsilon = 1e-8
+                self.max_grad_norm = 1.0
+
+            elif self.gpu_type == "A4000" or (self.gpu_type == "A6000" and self.vram_size < 40):
+                # A4000 or A6000 with less VRAM
+                print("Using optimized settings for A4000 or A6000 with <40 GiB VRAM")
+                self.batch_size = self.batch_size or 2
+                self.gradient_accumulation_steps = self.gradient_accumulation_steps or 16
+                self.max_length = 2048
+                self.lora_rank = 16
+                self.lora_alpha = 32
+                self.lora_dropout = 0.05
+                self.num_workers = 4
+                self.warmup_ratio = 0.03
+                self.weight_decay = 0.01
+                self.adam_beta1 = 0.9
+                self.adam_beta2 = 0.999
+                self.adam_epsilon = 1e-8
+                self.max_grad_norm = 1.0
+
+            elif self.gpu_type == "RTX5000":
+                # RTX5000 with limited VRAM
+                print("Using optimized settings for RTX5000")
+                self.batch_size = self.batch_size or 1
+                self.gradient_accumulation_steps = self.gradient_accumulation_steps or 32
+                self.max_length = 1024
+                self.lora_rank = 8
+                self.lora_alpha = 16
+                self.lora_dropout = 0.05
+                self.num_workers = 2
+                self.warmup_ratio = 0.03
+                self.weight_decay = 0.01
+                self.adam_beta1 = 0.9
+                self.adam_beta2 = 0.999
+                self.adam_epsilon = 1e-8
+                self.max_grad_norm = 1.0
+
+        # Calculate effective batch size
+        self.effective_batch_size = self.batch_size * self.gradient_accumulation_steps
+        print(f"Effective batch size: {self.effective_batch_size}")
+
+        # Adjust learning rate based on batch size (linear scaling rule)
+        base_lr = 2e-5
+        base_batch_size = 32
+        self.learning_rate = base_lr * (self.effective_batch_size / base_batch_size)
+        print(f"Adjusted learning rate: {self.learning_rate}")
+
+        # Calculate warmup steps based on warmup ratio
+        self.warmup_steps = int(self.warmup_ratio * self.effective_batch_size * 100)  # Assuming ~100 steps per epoch
+        print(f"Warmup steps: {self.warmup_steps}")
+
+        # Memory optimization settings
+        if torch.cuda.is_available():
+            # Set environment variables for optimal memory usage
+            os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:32,garbage_collection_threshold:0.8"
+            os.environ["TOKENIZERS_PARALLELISM"] = "false"
+            os.environ["OMP_NUM_THREADS"] = str(min(8, os.cpu_count() or 1))  # Use available CPU cores efficiently
+            os.environ["CUDA_LAUNCH_BLOCKING"] = "0"  # Disable for better performance
+            os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # Use first GPU
+            os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"  # Reduce TensorFlow logging
+
+            # Clear CUDA cache
+            torch.cuda.empty_cache()
+
+            # Print GPU information
+            device_name = torch.cuda.get_device_name(0)
+            device_capability = torch.cuda.get_device_capability(0)
+            print(f"Using GPU: {device_name} with CUDA capability {device_capability[0]}.{device_capability[1]}")
+            print(f"Available GPU memory: {torch.cuda.get_device_properties(0).total_memory / (1024**3):.2f} GiB")
+
+        return self
 
     def _initialize_model(self, model_name_or_path: str, **kwargs):
         """Initialize the hybrid CNN-Transformer model"""
@@ -549,9 +696,27 @@ class CNNTextGenerator(TextGenerator):
         # Load base model with optimization options
         load_kwargs = {}
 
-        # Add quantization configuration if provided
+        # Configure quantization for memory efficiency
         if self.quantization_config:
+            # Use provided quantization config
             load_kwargs['quantization_config'] = self.quantization_config
+        elif self.load_in_4bit:
+            # Configure 4-bit quantization for maximum memory efficiency
+            from transformers import BitsAndBytesConfig
+            load_kwargs['quantization_config'] = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_quant_type="nf4"
+            )
+            print("Using 4-bit quantization for maximum memory efficiency")
+        elif self.load_in_8bit:
+            # Configure 8-bit quantization
+            from transformers import BitsAndBytesConfig
+            load_kwargs['quantization_config'] = BitsAndBytesConfig(
+                load_in_8bit=True
+            )
+            print("Using 8-bit quantization")
 
         # Add Flash Attention 2 if requested and possible
         if self.use_flash_attention_2:
@@ -561,20 +726,29 @@ class CNNTextGenerator(TextGenerator):
             else:
                 # Check if flash attention is available
                 try:
-                    import flash_attn
-                    print("Flash Attention 2 detected - enabling for transformer model")
-                    load_kwargs['use_flash_attention_2'] = True
+                    # Just check if it can be imported
+                    import importlib.util
+                    if importlib.util.find_spec("flash_attn") is not None:
+                        print("Flash Attention 2 detected - enabling for transformer model")
+                        load_kwargs['use_flash_attention_2'] = True
+                    else:
+                        raise ImportError("flash_attn module not found")
                 except ImportError:
                     print("Flash Attention 2 requested but not installed - continuing without it")
                     print("To install: pip install flash-attn --no-build-isolation")
 
-        # Load the appropriate model type
+        # Load the appropriate model type with optimized settings
+        torch_dtype = torch.bfloat16 if torch.cuda.is_available() and self.bf16 else torch.float16 if torch.cuda.is_available() else torch.float32
+        print(f"Using {torch_dtype} precision for model loading")
+
         if is_t5_model:
             print(f"Loading T5-based model: {model_name_or_path}")
             self.base_model = AutoModelForSeq2SeqLM.from_pretrained(
                 model_name_or_path,
-                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                torch_dtype=torch_dtype,
                 device_map="auto" if torch.cuda.is_available() else None,
+                max_length=self.max_length,
+                trust_remote_code=True,
                 **load_kwargs
             )
         else:
@@ -582,15 +756,44 @@ class CNNTextGenerator(TextGenerator):
             print(f"Loading causal language model: {model_name_or_path}")
             self.base_model = AutoModelForCausalLM.from_pretrained(
                 model_name_or_path,
-                torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+                torch_dtype=torch_dtype,
                 device_map="auto" if torch.cuda.is_available() else None,
+                trust_remote_code=True,
                 **load_kwargs
             )
 
-        # Enable gradient checkpointing if requested
+        # Enable gradient checkpointing if requested (for memory efficiency)
         if self.gradient_checkpointing and hasattr(self.base_model, "gradient_checkpointing_enable"):
             self.base_model.gradient_checkpointing_enable()
             print("Gradient checkpointing enabled for transformer model")
+
+        # Apply LoRA adapters if using quantization
+        if self.quantization_config or self.load_in_4bit or self.load_in_8bit:
+            try:
+                from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+
+                # Prepare model for k-bit training
+                self.base_model = prepare_model_for_kbit_training(
+                    self.base_model,
+                    use_gradient_checkpointing=self.gradient_checkpointing
+                )
+
+                # Define LoRA configuration
+                lora_config = LoraConfig(
+                    r=self.lora_rank,
+                    lora_alpha=self.lora_alpha,
+                    lora_dropout=self.lora_dropout,
+                    target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+                    bias="none",
+                    task_type="CAUSAL_LM" if not is_t5_model else "SEQ_2_SEQ_LM"
+                )
+
+                # Apply LoRA adapters
+                self.base_model = get_peft_model(self.base_model, lora_config)
+                print(f"Applied LoRA adapters with rank={self.lora_rank}, alpha={self.lora_alpha}")
+            except ImportError:
+                print("PEFT library not available. LoRA adapters not applied.")
+                print("To install: pip install peft")
 
         # Get the model's config
         config = self.base_model.config
@@ -629,13 +832,34 @@ class CNNTextGenerator(TextGenerator):
             else torch.device("cpu")
         )
 
-        # Initialize optimizer (to be set in train method)
-        self.optimizer = None
+        # Initialize optimizer with configured learning rate and parameters
+        from torch.optim import AdamW
+        from transformers import get_scheduler
+
+        # Use AdamW optimizer with optimized parameters
+        self.optimizer = AdamW(
+            self.parameters(),
+            lr=self.learning_rate,
+            weight_decay=self.weight_decay,
+            betas=(self.adam_beta1, self.adam_beta2),
+            eps=self.adam_epsilon
+        )
+
+        # Create learning rate scheduler
+        self.lr_scheduler = get_scheduler(
+            name="cosine",  # Cosine scheduler with warmup for better convergence
+            optimizer=self.optimizer,
+            num_warmup_steps=self.warmup_steps,
+            num_training_steps=self.effective_batch_size * 100  # Estimate total steps
+        )
 
         # Print model information
         num_params = sum(p.numel() for p in self.parameters())
+        trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
         print(f"Initialized CNN-enhanced text generator with {self.cnn_layers} CNN layers")
         print(f"Model has ~{num_params / 1_000_000:.2f}M parameters")
+        print(f"Trainable parameters: ~{trainable_params / 1_000_000:.2f}M")
+        print(f"Learning rate: {self.learning_rate}")
 
         # Move model to device
         self.to(self.device)
@@ -707,7 +931,7 @@ class CNNTextGenerator(TextGenerator):
 
         return outputs
 
-    def train(self, data, epochs=3, gradient_accumulation_steps=8, eval_steps=None, save_steps=None, checkpoint_dir=None):
+    def train(self, data, epochs=3, gradient_accumulation_steps=None, eval_steps=None, save_steps=None, checkpoint_dir=None):
         """
         Train the hybrid CNN-Transformer model with gradient accumulation
 
@@ -722,6 +946,11 @@ class CNNTextGenerator(TextGenerator):
         Returns:
             List of losses during training
         """
+        # Use configured gradient_accumulation_steps if not provided
+        if gradient_accumulation_steps is None:
+            gradient_accumulation_steps = self.gradient_accumulation_steps
+            print(f"Using configured gradient accumulation steps: {gradient_accumulation_steps}")
+
         # Move model to training mode
         self.base_model.train()
         for layer in self.cnn_layers_list:
@@ -732,10 +961,11 @@ class CNNTextGenerator(TextGenerator):
 
         # Configure progress bar
         try:
-            from tqdm import tqdm
+            from tqdm.auto import tqdm
             use_tqdm = True
         except ImportError:
             use_tqdm = False
+            print("tqdm not installed. Progress bar disabled.")
 
         # Ensure data is in right format
         batches = data.get('batches', []) if isinstance(data, dict) else data
@@ -745,8 +975,19 @@ class CNNTextGenerator(TextGenerator):
             raise ValueError("No training data available. Dataset processing failed.")
 
         if len(batches) == 0:
-            self.logger.error("No valid batches found in dataset")
+            print("No valid batches found in dataset")
             raise RuntimeError("Training data is empty. Check dataset processing.")
+
+        # Print training configuration
+        print(f"Starting training with:")
+        print(f"- Epochs: {epochs}")
+        print(f"- Batch size: {self.batch_size}")
+        print(f"- Gradient accumulation steps: {gradient_accumulation_steps}")
+        print(f"- Effective batch size: {self.batch_size * gradient_accumulation_steps}")
+        print(f"- Learning rate: {self.learning_rate}")
+        print(f"- Max sequence length: {self.max_length}")
+        print(f"- Evaluation steps: {eval_steps if eval_steps else 'None'}")
+        print(f"- Save steps: {save_steps if save_steps else 'None'}")
 
         # Track global step for eval_steps
         global_step = 0
@@ -808,11 +1049,20 @@ class CNNTextGenerator(TextGenerator):
                             list(self.cnn_layers_list.parameters()) +
                             list(self.adapter.parameters()) +
                             list(self.base_model.parameters()),
-                            max_norm=1.0
+                            max_norm=self.max_grad_norm
                         )
 
                         # Update weights
                         self.optimizer.step()
+
+                        # Update learning rate with scheduler
+                        self.lr_scheduler.step()
+
+                        # Log current learning rate
+                        if global_step % 10 == 0:
+                            current_lr = self.optimizer.param_groups[0]['lr']
+                            print(f"Step {global_step}: Learning rate = {current_lr:.6f}")
+
                         self.optimizer.zero_grad()
                         steps_since_update = 0
 
@@ -881,10 +1131,15 @@ class CNNTextGenerator(TextGenerator):
                     list(self.cnn_layers_list.parameters()) +
                     list(self.adapter.parameters()) +
                     list(self.base_model.parameters()),
-                    max_norm=1.0
+                    max_norm=self.max_grad_norm
                 )
                 self.optimizer.step()
+                self.lr_scheduler.step()
                 self.optimizer.zero_grad()
+
+                # Log final learning rate
+                final_lr = self.optimizer.param_groups[0]['lr']
+                print(f"Final learning rate: {final_lr:.6f}")
 
             # Calculate average loss for epoch
             if batch_count > 0:
@@ -925,22 +1180,36 @@ class CNNTextGenerator(TextGenerator):
         print(f"Model saved to {path}")
         print(f"Tokenizer saved to {tokenizer_path}")
 
-def create_cnn_text_generator(model_name="google/flan-ul2-20b", force_gpu=True, cnn_layers=2,
-                             quantization_config=None, use_flash_attention_2=False,
-                             gradient_checkpointing=False):
+def create_cnn_text_generator(model_name="google/flan-ul2-20b", force_gpu=True, cnn_layers=3,
+                             gpu_type="A6000", vram_size=48,
+                             load_in_4bit=True, load_in_8bit=False,
+                             quantization_config=None, use_flash_attention_2=True,
+                             gradient_checkpointing=True, lora_rank=32, lora_alpha=64,
+                             lora_dropout=0.05, batch_size=None, gradient_accumulation_steps=None,
+                             max_length=4096):
     """
-    Helper function to create a CNN-enhanced text generator
+    Helper function to create a CNN-enhanced text generator optimized for A6000 GPUs
 
     Args:
         model_name: Base model name or path
         force_gpu: Whether to force GPU usage
         cnn_layers: Number of CNN layers to use
+        gpu_type: GPU type (A6000, A4000, RTX5000)
+        vram_size: GPU VRAM size in GiB
+        load_in_4bit: Whether to load model in 4-bit precision
+        load_in_8bit: Whether to load model in 8-bit precision
         quantization_config: Configuration for 4-bit or 8-bit quantization
         use_flash_attention_2: Whether to use Flash Attention 2
         gradient_checkpointing: Whether to use gradient checkpointing
+        lora_rank: LoRA rank parameter for fine-tuning
+        lora_alpha: LoRA alpha parameter for fine-tuning
+        lora_dropout: LoRA dropout parameter for fine-tuning
+        batch_size: Batch size for training (if None, will be set based on GPU)
+        gradient_accumulation_steps: Steps to accumulate gradients (if None, will be set based on GPU)
+        max_length: Maximum sequence length for training
 
     Returns:
-        Initialized CNNTextGenerator
+        Initialized CNNTextGenerator optimized for the specified GPU
     """
     # Check if model is GPT2 - Flash Attention 2 is not supported for GPT2
     is_gpt2_model = "gpt2" in model_name.lower()
@@ -950,13 +1219,37 @@ def create_cnn_text_generator(model_name="google/flan-ul2-20b", force_gpu=True, 
         print("Flash Attention 2 is not supported for GPT2 models - disabling")
         use_flash_attention_2 = False
 
+    # Determine if we should use bfloat16 based on model type and GPU capabilities
+    use_bf16 = False
+    if torch.cuda.is_available():
+        try:
+            # Check if GPU supports bfloat16 (Ampere or newer architecture)
+            if torch.cuda.get_device_capability()[0] >= 8:
+                use_bf16 = not is_gpt2_model  # bfloat16 not well supported for GPT2
+                print(f"GPU supports bfloat16: {'Yes' if use_bf16 else 'No'}")
+            else:
+                print("GPU does not support bfloat16, using float16 instead")
+        except Exception as e:
+            print(f"Error checking GPU capabilities: {e}. Using float16 instead.")
+
     return CNNTextGenerator(
         model_name_or_path=model_name,
         force_gpu=force_gpu,
         cnn_layers=cnn_layers,
         cnn_kernel_sizes=[3, 5, 7][:cnn_layers],
         cnn_dropout=0.1,
+        gpu_type=gpu_type,
+        vram_size=vram_size,
+        load_in_4bit=load_in_4bit,
+        load_in_8bit=load_in_8bit,
         quantization_config=quantization_config,
         use_flash_attention_2=use_flash_attention_2,
-        gradient_checkpointing=gradient_checkpointing
+        gradient_checkpointing=gradient_checkpointing,
+        lora_rank=lora_rank,
+        lora_alpha=lora_alpha,
+        lora_dropout=lora_dropout,
+        batch_size=batch_size,
+        gradient_accumulation_steps=gradient_accumulation_steps,
+        max_length=max_length,
+        bf16=use_bf16
     )

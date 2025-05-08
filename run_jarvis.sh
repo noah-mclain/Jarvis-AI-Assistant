@@ -1,1 +1,1 @@
-train_jarvis.sh
+setup/train_jarvis.sh
