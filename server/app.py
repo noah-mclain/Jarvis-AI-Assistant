@@ -94,7 +94,7 @@ except Exception as e:
     jarvis_ai = None  # Set to None to indicate that Jarvis AI is not available
     JARVIS_AVAILABLE = False  # Flag to indicate that Jarvis AI is not available
 
-def get_jarvis_response(message_text):
+def get_jarvis_response(message_text, model_type=None):
     """
     Process a user message through the Jarvis AI assistant and get a response.
 
@@ -107,6 +107,7 @@ def get_jarvis_response(message_text):
 
     Args:
         message_text (str): The user's message text to process
+        model_type (str, optional): The type of model to use. If None, the current model type will be used.
 
     Returns:
         str: The AI assistant's response text, or a fallback response if the
@@ -120,7 +121,7 @@ def get_jarvis_response(message_text):
             logger.info(f"Sending query to Jarvis AI: {message_text[:50]}...")
 
             # Process the query through the Jarvis AI assistant
-            response = jarvis_ai.process_query(message_text)
+            response = jarvis_ai.process_query(message_text, model_type)
 
             # Log the response (first 50 characters) for debugging
             logger.info(f"Received response from Jarvis AI: {response[:50]}...")
@@ -249,6 +250,50 @@ load_data()  # Load data from files or initialize with defaults
 
 # API Routes
 # These routes define the REST API endpoints for the frontend to interact with
+
+@app.route('/api/models/select', methods=['POST'])
+def select_model():
+    """
+    API endpoint to select a specific model type.
+
+    This endpoint:
+    1. Receives a model type from the frontend
+    2. Sets the current model type in the Jarvis AI assistant
+    3. Returns a success or error response
+
+    Request Body:
+        JSON object with 'modelType' field containing the model type
+
+    Returns:
+        JSON response with success message or error
+    """
+    try:
+        # Check if Jarvis AI is available
+        if not JARVIS_AVAILABLE or not jarvis_ai:
+            return jsonify({"error": "Jarvis AI is not available"}), 503
+
+        # Get the model type from the request body
+        data = request.json
+        model_type = data.get('modelType', '')
+
+        # Validate that the model type is not empty
+        if not model_type.strip():
+            return jsonify({"error": "Model type cannot be empty"}), 400
+
+        # Set the model type in the Jarvis AI assistant
+        success = jarvis_ai.set_model_type(model_type)
+
+        if success:
+            # Log the model selection and return success response
+            logger.info(f"Selected model type: {model_type}")
+            return jsonify({"success": True, "message": f"Model type set to {model_type}"})
+        else:
+            # Return error if the model type is not recognized
+            return jsonify({"error": f"Unknown model type: {model_type}"}), 400
+    except Exception as e:
+        # Log and return any errors that occur
+        logger.error(f"Error selecting model type: {e}")
+        return jsonify({"error": "Failed to select model type"}), 500
 
 @app.route('/api/chats', methods=['GET'])
 def get_chats():
@@ -410,9 +455,10 @@ def send_message(chat_id):
         JSON response with user message, AI response, and chat title update info
     """
     try:
-        # Get the message content from the request body
+        # Get the message content and model type from the request body
         data = request.json
         message_content = data.get('content', '')
+        model_type = data.get('modelType', None)
 
         # Validate that the message is not empty
         if not message_content.strip():
@@ -435,7 +481,7 @@ def send_message(chat_id):
 
             # Get response from Jarvis AI
             try:
-                ai_response_content = get_jarvis_response(message_content)
+                ai_response_content = get_jarvis_response(message_content, model_type)
             except Exception as e:
                 logger.error(f"Error getting AI response in fallback mode: {e}")
                 ai_response_content = "I'm sorry, I encountered an error processing your request. Please try again."
@@ -490,7 +536,7 @@ def send_message(chat_id):
         # Get response from Jarvis AI assistant
         try:
             # Process the user message through the Jarvis AI assistant
-            ai_response_content = get_jarvis_response(message_content)
+            ai_response_content = get_jarvis_response(message_content, model_type)
         except Exception as e:
             # Handle any errors in AI processing with a fallback response
             logger.error(f"Error getting AI response: {e}")

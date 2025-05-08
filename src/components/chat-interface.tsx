@@ -68,6 +68,9 @@ export function ChatInterface() {
   // State for tracking offline status (always false in this offline application)
   const [isOffline, setIsOffline] = useState(false);
 
+  // State for tracking the currently selected model type
+  const [currentModelType, setCurrentModelType] = useState<string>("");
+
   // Custom hooks for responsive design
   const windowSize = useWindowSize(); // Tracks window dimensions
   const isMobile = useIsMobile(); // Determines if viewport is mobile size
@@ -341,13 +344,16 @@ export function ChatInterface() {
     setIsLoading(true);
 
     try {
-      // Send message to backend API
+      // Send message to backend API with the current model type
       const response = await fetch(`/api/chats/${activeChat}/messages`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ content: message }),
+        body: JSON.stringify({
+          content: message,
+          modelType: currentModelType,
+        }),
       });
 
       if (response.ok) {
@@ -505,6 +511,24 @@ export function ChatInterface() {
       // Hide loading indicator regardless of success/failure
       setIsLoading(false);
     }
+  };
+
+  /**
+   * Handles model selection
+   *
+   * This function:
+   * 1. Updates the current model type state
+   * 2. Shows a toast notification to indicate the model has been selected
+   *
+   * @param {string} modelType - The type of model selected
+   * @param {string} defaultPrompt - The default prompt for the selected model
+   */
+  const handleModelSelect = (modelType: string, defaultPrompt: string) => {
+    // Update the current model type
+    setCurrentModelType(modelType);
+
+    // Log the model selection for debugging
+    console.log(`Selected model: ${modelType}`);
   };
 
   /**
@@ -687,6 +711,8 @@ export function ChatInterface() {
                   ? "You are offline. Cannot send messages."
                   : "Ask Jarvis anything..."
               }
+              showModelButtons={true} // Show model selection buttons
+              onModelSelect={handleModelSelect} // Handler for model selection
             />
           </div>
         </div>

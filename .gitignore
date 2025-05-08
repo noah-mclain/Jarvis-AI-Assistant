@@ -54,3 +54,33 @@ venv/
 *.dmg
 *.app
 *.pkg
+
+# Device-specific files
+static/
+.static/
+public/static/
+src/static/
+*.static.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Generated model files
+data/models/
+models/
+checkpoints/
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.onnx
+*.tflite
+*.pb
+
+# Temporary files
+.temp/
+.tmp/
+tmp/
+temp/
+.cache/

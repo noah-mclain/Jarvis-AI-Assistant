@@ -809,3 +809,459 @@
 2025-05-08 06:10:08,711 - jarvis_app - INFO - Deleted chat: new-chat-1746670200
 2025-05-08 06:10:10,890 - jarvis_app - INFO - Data saved successfully
 2025-05-08 06:10:10,891 - jarvis_app - INFO - Created new chat: new-chat-1746673810
+2025-05-08 23:13:28,445 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static
+2025-05-08 23:13:28,445 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data
+2025-05-08 23:13:28,445 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-08 23:13:28,445 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-08 23:13:28,449 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/models
+2025-05-08 23:13:28,449 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 23:13:28,449 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 23:13:28,449 - jarvis_app - INFO - Loaded 6 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-08 23:13:28,449 - jarvis_app - INFO - Loaded messages for 6 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-08 23:13:28,452 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant
+2025-05-08 23:13:28,452 - jarvis_desktop - INFO - Operating system: posix - darwin
+2025-05-08 23:13:28,452 - jarvis_desktop - INFO - Setting up for macOS environment
+2025-05-08 23:13:28,453 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 23:13:28,453 - jarvis_desktop - INFO - Server is ready
+2025-05-08 23:13:28,456 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 23:13:28,456 - jarvis_desktop - INFO - Using 8 worker threads (detected 12 CPU cores)
+2025-05-08 23:13:28,456 - jarvis_desktop - INFO - Using macOS-optimized server configuration
+2025-05-08 23:13:28,459 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 23:13:29,454 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/dist/index.html
+2025-05-08 23:13:29,454 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 23:13:29,454 - jarvis_desktop - INFO - Using macOS-optimized window configuration
+2025-05-08 23:13:29,455 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 23:13:29,455 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 23:13:30,008 - jarvis_desktop - INFO - Application window shown
+2025-05-08 23:13:30,698 - jarvis_app - INFO - Serving path: 
+2025-05-08 23:13:30,699 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 23:13:30,743 - jarvis_app - INFO - Serving path: assets/index.fe5bnOPf.js
+2025-05-08 23:13:30,743 - jarvis_app - INFO - Serving asset: index.fe5bnOPf.js from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-08 23:13:30,746 - jarvis_app - INFO - Serving path: assets/index.R1_V6Amj.css
+2025-05-08 23:13:30,747 - jarvis_app - INFO - Serving asset: index.R1_V6Amj.css from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-08 23:13:30,847 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 23:13:30,847 - jarvis_desktop - INFO - Setting up macOS-optimized offline mode
+2025-05-08 23:13:30,980 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 23:13:31,457 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 23:13:33,743 - jarvis_app - INFO - Sending query to Jarvis AI: Generate code for a function that: ...
+2025-05-08 23:13:33,743 - jarvis_assistant - INFO - Processing query: Generate code for a function that: 
+2025-05-08 23:13:33,744 - jarvis_assistant - INFO - Using specified model type: codeGeneration
+2025-05-08 23:13:33,744 - jarvis_assistant - INFO - Using model handler: codeGeneration
+2025-05-08 23:13:33,744 - jarvis_models - INFO - Loading code generation model (DeepSeek Coder)...
+2025-05-08 23:13:33,744 - jarvis_models - INFO - Code generation model loaded successfully
+2025-05-08 23:13:33,744 - jarvis_app - INFO - Received response from Jarvis AI: Code generation model would process: Generate code...
+2025-05-08 23:13:33,745 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:13:33,745 - jarvis_app - INFO - Processed message in chat new-chat-1746673810
+2025-05-08 23:13:39,252 - jarvis_app - INFO - Sending query to Jarvis AI: Let's have a conversation about: ...
+2025-05-08 23:13:39,253 - jarvis_assistant - INFO - Processing query: Let's have a conversation about: 
+2025-05-08 23:13:39,253 - jarvis_assistant - INFO - Using specified model type: textGeneration
+2025-05-08 23:13:39,253 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-08 23:13:39,253 - jarvis_models - INFO - Loading text generation model (FLAN-UL2)...
+2025-05-08 23:13:39,253 - jarvis_models - INFO - Text generation model loaded successfully
+2025-05-08 23:13:39,253 - jarvis_app - INFO - Received response from Jarvis AI: Text generation model would process: Let's have a ...
+2025-05-08 23:13:39,254 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:13:39,254 - jarvis_app - INFO - Processed message in chat new-chat-1746673810
+2025-05-08 23:13:48,072 - jarvis_app - INFO - Sending query to Jarvis AI: Analyze the sentiment, entities, and intent in thi...
+2025-05-08 23:13:48,072 - jarvis_assistant - INFO - Processing query: Analyze the sentiment, entities, and intent in this text: 
+2025-05-08 23:13:48,072 - jarvis_assistant - INFO - Using specified model type: nlp
+2025-05-08 23:13:48,072 - jarvis_assistant - INFO - Using model handler: nlp
+2025-05-08 23:13:48,072 - jarvis_models - INFO - Loading NLP model...
+2025-05-08 23:13:48,072 - jarvis_models - INFO - NLP model loaded successfully
+2025-05-08 23:13:48,072 - jarvis_app - INFO - Received response from Jarvis AI: NLP model would analyze: Analyze the sentiment, en...
+2025-05-08 23:13:48,073 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:13:48,073 - jarvis_app - INFO - Processed message in chat new-chat-1746673810
+2025-05-08 23:14:02,659 - jarvis_app - INFO - Sending query to Jarvis AI: Write a creative story about: ...
+2025-05-08 23:14:02,659 - jarvis_assistant - INFO - Processing query: Write a creative story about: 
+2025-05-08 23:14:02,659 - jarvis_assistant - INFO - Using specified model type: storyGeneration
+2025-05-08 23:14:02,659 - jarvis_assistant - INFO - Using model handler: storyGeneration
+2025-05-08 23:14:02,659 - jarvis_models - INFO - Loading story generation model...
+2025-05-08 23:14:02,659 - jarvis_models - INFO - Story generation model loaded successfully
+2025-05-08 23:14:02,659 - jarvis_app - INFO - Received response from Jarvis AI: Story generation model would create a story about:...
+2025-05-08 23:14:02,660 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:14:02,660 - jarvis_app - INFO - Processed message in chat new-chat-1746673810
+2025-05-08 23:14:06,810 - jarvis_app - INFO - Sending query to Jarvis AI: Transcribe the following audio file (provide a pat...
+2025-05-08 23:14:06,810 - jarvis_assistant - INFO - Processing query: Transcribe the following audio file (provide a path to the audio file): 
+2025-05-08 23:14:06,810 - jarvis_assistant - INFO - Using specified model type: speechToText
+2025-05-08 23:14:06,810 - jarvis_assistant - INFO - Using model handler: speechToText
+2025-05-08 23:14:06,810 - jarvis_models - INFO - Loading speech-to-text model...
+2025-05-08 23:14:06,810 - jarvis_models - INFO - Speech-to-text model loaded successfully
+2025-05-08 23:14:06,810 - jarvis_app - INFO - Received response from Jarvis AI: Speech-to-text model would process: Transcribe the...
+2025-05-08 23:14:06,811 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:14:06,811 - jarvis_app - INFO - Processed message in chat new-chat-1746673810
+2025-05-08 23:14:15,394 - jarvis_desktop - INFO - Application window closed
+2025-05-08 23:16:51,135 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static
+2025-05-08 23:16:51,136 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data
+2025-05-08 23:16:51,136 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-08 23:16:51,136 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-08 23:16:51,137 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/models
+2025-05-08 23:16:51,137 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 23:16:51,137 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 23:16:51,137 - jarvis_app - INFO - Loaded 6 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-08 23:16:51,138 - jarvis_app - INFO - Loaded messages for 6 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-08 23:16:51,140 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant
+2025-05-08 23:16:51,140 - jarvis_desktop - INFO - Operating system: posix - darwin
+2025-05-08 23:16:51,140 - jarvis_desktop - INFO - Setting up for macOS environment
+2025-05-08 23:16:51,140 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 23:16:51,140 - jarvis_desktop - INFO - Server is ready
+2025-05-08 23:16:51,143 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 23:16:51,143 - jarvis_desktop - INFO - Using 8 worker threads (detected 12 CPU cores)
+2025-05-08 23:16:51,143 - jarvis_desktop - INFO - Using macOS-optimized server configuration
+2025-05-08 23:16:51,145 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 23:16:52,146 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/dist/index.html
+2025-05-08 23:16:52,146 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 23:16:52,146 - jarvis_desktop - INFO - Using macOS-optimized window configuration
+2025-05-08 23:16:52,146 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 23:16:52,146 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 23:16:52,715 - jarvis_desktop - INFO - Application window shown
+2025-05-08 23:16:53,247 - jarvis_app - INFO - Serving path: 
+2025-05-08 23:16:53,247 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 23:16:53,265 - jarvis_app - INFO - Serving path: assets/index.Dcm5ufAi.js
+2025-05-08 23:16:53,265 - jarvis_app - INFO - Serving asset: index.Dcm5ufAi.js from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-08 23:16:53,266 - jarvis_app - INFO - Serving path: assets/index.DZLQoI56.css
+2025-05-08 23:16:53,266 - jarvis_app - INFO - Serving asset: index.DZLQoI56.css from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-08 23:16:53,309 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 23:16:53,309 - jarvis_desktop - INFO - Setting up macOS-optimized offline mode
+2025-05-08 23:16:53,401 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 23:16:53,465 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:16:53,465 - jarvis_app - INFO - Created new chat: new-chat-1746735413
+2025-05-08 23:16:54,150 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 23:20:21,628 - jarvis_desktop - INFO - Application window closed
+2025-05-08 23:20:36,223 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static
+2025-05-08 23:20:36,223 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data
+2025-05-08 23:20:36,223 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-08 23:20:36,224 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-08 23:20:36,225 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/models
+2025-05-08 23:20:36,225 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 23:20:36,225 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 23:20:36,225 - jarvis_app - INFO - Loaded 7 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-08 23:20:36,226 - jarvis_app - INFO - Loaded messages for 7 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-08 23:20:36,228 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant
+2025-05-08 23:20:36,228 - jarvis_desktop - INFO - Operating system: posix - darwin
+2025-05-08 23:20:36,228 - jarvis_desktop - INFO - Setting up for macOS environment
+2025-05-08 23:20:36,228 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 23:20:36,228 - jarvis_desktop - INFO - Server is ready
+2025-05-08 23:20:36,231 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 23:20:36,231 - jarvis_desktop - INFO - Using 8 worker threads (detected 12 CPU cores)
+2025-05-08 23:20:36,231 - jarvis_desktop - INFO - Using macOS-optimized server configuration
+2025-05-08 23:20:36,233 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 23:20:37,229 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/dist/index.html
+2025-05-08 23:20:37,230 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 23:20:37,230 - jarvis_desktop - INFO - Using macOS-optimized window configuration
+2025-05-08 23:20:37,231 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 23:20:37,231 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 23:20:37,906 - jarvis_desktop - INFO - Application window shown
+2025-05-08 23:20:38,949 - jarvis_app - INFO - Serving path: 
+2025-05-08 23:20:38,949 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 23:20:38,986 - jarvis_app - INFO - Serving path: assets/index.DrgoC9YP.js
+2025-05-08 23:20:38,986 - jarvis_app - INFO - Serving asset: index.DrgoC9YP.js from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-08 23:20:38,987 - jarvis_app - INFO - Serving path: assets/index.DZLQoI56.css
+2025-05-08 23:20:38,987 - jarvis_app - INFO - Serving asset: index.DZLQoI56.css from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-08 23:20:39,047 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 23:20:39,047 - jarvis_desktop - INFO - Setting up macOS-optimized offline mode
+2025-05-08 23:20:39,124 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 23:20:39,234 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 23:20:49,062 - jarvis_app - INFO - Sending query to Jarvis AI: Generate code for a function that: ...
+2025-05-08 23:20:49,063 - jarvis_assistant - INFO - Processing query: Generate code for a function that: 
+2025-05-08 23:20:49,063 - jarvis_assistant - INFO - Using specified model type: codeGeneration
+2025-05-08 23:20:49,063 - jarvis_assistant - INFO - Using model handler: codeGeneration
+2025-05-08 23:20:49,063 - jarvis_models - INFO - Loading code generation model (DeepSeek Coder)...
+2025-05-08 23:20:49,063 - jarvis_models - INFO - Code generation model loaded successfully
+2025-05-08 23:20:49,063 - jarvis_app - INFO - Received response from Jarvis AI: Code generation model would process: Generate code...
+2025-05-08 23:20:49,064 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:20:49,064 - jarvis_app - INFO - Processed message in chat new-chat-1746735413
+2025-05-08 23:20:52,375 - jarvis_app - INFO - Sending query to Jarvis AI: Write a creative story about: ...
+2025-05-08 23:20:52,375 - jarvis_assistant - INFO - Processing query: Write a creative story about: 
+2025-05-08 23:20:52,375 - jarvis_assistant - INFO - Using specified model type: storyGeneration
+2025-05-08 23:20:52,375 - jarvis_assistant - INFO - Using model handler: storyGeneration
+2025-05-08 23:20:52,375 - jarvis_models - INFO - Loading story generation model...
+2025-05-08 23:20:52,375 - jarvis_models - INFO - Story generation model loaded successfully
+2025-05-08 23:20:52,375 - jarvis_app - INFO - Received response from Jarvis AI: Story generation model would create a story about:...
+2025-05-08 23:20:52,376 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:20:52,376 - jarvis_app - INFO - Processed message in chat new-chat-1746735413
+2025-05-08 23:20:56,021 - jarvis_app - INFO - Sending query to Jarvis AI: Analyze the sentiment, entities, and intent in thi...
+2025-05-08 23:20:56,022 - jarvis_assistant - INFO - Processing query: Analyze the sentiment, entities, and intent in this text: 
+2025-05-08 23:20:56,022 - jarvis_assistant - INFO - Using specified model type: nlp
+2025-05-08 23:20:56,022 - jarvis_assistant - INFO - Using model handler: nlp
+2025-05-08 23:20:56,022 - jarvis_models - INFO - Loading NLP model...
+2025-05-08 23:20:56,022 - jarvis_models - INFO - NLP model loaded successfully
+2025-05-08 23:20:56,022 - jarvis_app - INFO - Received response from Jarvis AI: NLP model would analyze: Analyze the sentiment, en...
+2025-05-08 23:20:56,023 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:20:56,023 - jarvis_app - INFO - Processed message in chat new-chat-1746735413
+2025-05-08 23:24:17,913 - jarvis_app - INFO - Sending query to Jarvis AI: Transcribe the following audio file (provide a pat...
+2025-05-08 23:24:17,914 - jarvis_assistant - INFO - Processing query: Transcribe the following audio file (provide a path to the audio file): 
+2025-05-08 23:24:17,915 - jarvis_assistant - INFO - Using specified model type: speechToText
+2025-05-08 23:24:17,915 - jarvis_assistant - INFO - Using model handler: speechToText
+2025-05-08 23:24:17,915 - jarvis_models - INFO - Loading speech-to-text model...
+2025-05-08 23:24:17,915 - jarvis_models - INFO - Speech-to-text model loaded successfully
+2025-05-08 23:24:17,915 - jarvis_app - INFO - Received response from Jarvis AI: Speech-to-text model would process: Transcribe the...
+2025-05-08 23:24:17,917 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:24:17,917 - jarvis_app - INFO - Processed message in chat new-chat-1746735413
+2025-05-08 23:25:02,357 - jarvis_app - INFO - Sending query to Jarvis AI: Analyze the sentiment, entities, and intent in thi...
+2025-05-08 23:25:02,359 - jarvis_assistant - INFO - Processing query: Analyze the sentiment, entities, and intent in this text: 
+2025-05-08 23:25:02,359 - jarvis_assistant - INFO - Using specified model type: nlp
+2025-05-08 23:25:02,359 - jarvis_assistant - INFO - Using model handler: nlp
+2025-05-08 23:25:02,360 - jarvis_app - INFO - Received response from Jarvis AI: NLP model would analyze: Analyze the sentiment, en...
+2025-05-08 23:25:02,365 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:25:02,365 - jarvis_app - INFO - Processed message in chat new-chat-1746735413
+2025-05-08 23:25:10,025 - jarvis_app - INFO - Sending query to Jarvis AI: Let's have a conversation about: ...
+2025-05-08 23:25:10,025 - jarvis_assistant - INFO - Processing query: Let's have a conversation about: 
+2025-05-08 23:25:10,025 - jarvis_assistant - INFO - Using specified model type: textGeneration
+2025-05-08 23:25:10,025 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-08 23:25:10,025 - jarvis_models - INFO - Loading text generation model (FLAN-UL2)...
+2025-05-08 23:25:10,025 - jarvis_models - INFO - Text generation model loaded successfully
+2025-05-08 23:25:10,025 - jarvis_app - INFO - Received response from Jarvis AI: Text generation model would process: Let's have a ...
+2025-05-08 23:25:10,027 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:25:10,027 - jarvis_app - INFO - Processed message in chat new-chat-1746735413
+2025-05-08 23:25:16,272 - jarvis_app - INFO - Sending query to Jarvis AI: Generate code for a function that: ...
+2025-05-08 23:25:16,273 - jarvis_assistant - INFO - Processing query: Generate code for a function that: 
+2025-05-08 23:25:16,273 - jarvis_assistant - INFO - Using specified model type: codeGeneration
+2025-05-08 23:25:16,273 - jarvis_assistant - INFO - Using model handler: codeGeneration
+2025-05-08 23:25:16,273 - jarvis_app - INFO - Received response from Jarvis AI: Code generation model would process: Generate code...
+2025-05-08 23:25:16,274 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:25:16,274 - jarvis_app - INFO - Processed message in chat new-chat-1746735413
+2025-05-08 23:25:17,538 - jarvis_app - INFO - Sending query to Jarvis AI: Generate code for a function that: ...
+2025-05-08 23:25:17,538 - jarvis_assistant - INFO - Processing query: Generate code for a function that: 
+2025-05-08 23:25:17,538 - jarvis_assistant - INFO - Using specified model type: codeGeneration
+2025-05-08 23:25:17,538 - jarvis_assistant - INFO - Using model handler: codeGeneration
+2025-05-08 23:25:17,538 - jarvis_app - INFO - Received response from Jarvis AI: Code generation model would process: Generate code...
+2025-05-08 23:25:17,539 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:25:17,539 - jarvis_app - INFO - Processed message in chat new-chat-1746735413
+2025-05-08 23:28:25,811 - jarvis_desktop - INFO - Application window closed
+2025-05-08 23:28:38,607 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static
+2025-05-08 23:28:38,607 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data
+2025-05-08 23:28:38,607 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-08 23:28:38,607 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-08 23:28:38,608 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/models
+2025-05-08 23:28:38,608 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 23:28:38,608 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 23:28:38,609 - jarvis_app - INFO - Loaded 7 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-08 23:28:38,609 - jarvis_app - INFO - Loaded messages for 7 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-08 23:28:38,611 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant
+2025-05-08 23:28:38,611 - jarvis_desktop - INFO - Operating system: posix - darwin
+2025-05-08 23:28:38,611 - jarvis_desktop - INFO - Setting up for macOS environment
+2025-05-08 23:28:38,611 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 23:28:38,612 - jarvis_desktop - INFO - Server is ready
+2025-05-08 23:28:38,614 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 23:28:38,614 - jarvis_desktop - INFO - Using 8 worker threads (detected 12 CPU cores)
+2025-05-08 23:28:38,614 - jarvis_desktop - INFO - Using macOS-optimized server configuration
+2025-05-08 23:28:38,616 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 23:28:39,617 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/dist/index.html
+2025-05-08 23:28:39,617 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 23:28:39,617 - jarvis_desktop - INFO - Using macOS-optimized window configuration
+2025-05-08 23:28:39,618 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 23:28:39,618 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 23:28:40,072 - jarvis_desktop - INFO - Application window shown
+2025-05-08 23:28:40,487 - jarvis_app - INFO - Serving path: 
+2025-05-08 23:28:40,487 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 23:28:40,504 - jarvis_app - INFO - Serving path: assets/index.CqzSFwer.js
+2025-05-08 23:28:40,504 - jarvis_app - INFO - Serving asset: index.CqzSFwer.js from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-08 23:28:40,504 - jarvis_app - INFO - Serving path: assets/index.r4K2EM3m.css
+2025-05-08 23:28:40,505 - jarvis_app - INFO - Serving asset: index.r4K2EM3m.css from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-08 23:28:40,539 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 23:28:40,540 - jarvis_desktop - INFO - Setting up macOS-optimized offline mode
+2025-05-08 23:28:40,599 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 23:28:40,665 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:28:40,665 - jarvis_app - INFO - Created new chat: new-chat-1746736120
+2025-05-08 23:28:41,623 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 23:29:00,722 - jarvis_app - INFO - Sending query to Jarvis AI: Write a creative story about: ...
+2025-05-08 23:29:00,722 - jarvis_assistant - INFO - Processing query: Write a creative story about: 
+2025-05-08 23:29:00,722 - jarvis_assistant - INFO - Using specified model type: storyGeneration
+2025-05-08 23:29:00,722 - jarvis_assistant - INFO - Using model handler: storyGeneration
+2025-05-08 23:29:00,722 - jarvis_models - INFO - Loading story generation model...
+2025-05-08 23:29:00,722 - jarvis_models - INFO - Story generation model loaded successfully
+2025-05-08 23:29:00,722 - jarvis_app - INFO - Received response from Jarvis AI: Story generation model would create a story about:...
+2025-05-08 23:29:00,723 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:29:00,723 - jarvis_app - INFO - Processed message in chat new-chat-1746736120
+2025-05-08 23:29:07,398 - jarvis_app - INFO - Sending query to Jarvis AI: Generate code for a function that: ...
+2025-05-08 23:29:07,398 - jarvis_assistant - INFO - Processing query: Generate code for a function that: 
+2025-05-08 23:29:07,398 - jarvis_assistant - INFO - Using specified model type: codeGeneration
+2025-05-08 23:29:07,398 - jarvis_assistant - INFO - Using model handler: codeGeneration
+2025-05-08 23:29:07,398 - jarvis_models - INFO - Loading code generation model (DeepSeek Coder)...
+2025-05-08 23:29:07,398 - jarvis_models - INFO - Code generation model loaded successfully
+2025-05-08 23:29:07,398 - jarvis_app - INFO - Received response from Jarvis AI: Code generation model would process: Generate code...
+2025-05-08 23:29:07,400 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:29:07,400 - jarvis_app - INFO - Processed message in chat new-chat-1746736120
+2025-05-08 23:29:17,147 - jarvis_desktop - INFO - Application window closed
+2025-05-08 23:34:38,790 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static
+2025-05-08 23:34:38,791 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data
+2025-05-08 23:34:38,791 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-08 23:34:38,791 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-08 23:34:38,792 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/models
+2025-05-08 23:34:38,792 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 23:34:38,792 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 23:34:38,793 - jarvis_app - INFO - Loaded 8 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-08 23:34:38,793 - jarvis_app - INFO - Loaded messages for 8 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-08 23:34:38,795 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant
+2025-05-08 23:34:38,795 - jarvis_desktop - INFO - Operating system: posix - darwin
+2025-05-08 23:34:38,795 - jarvis_desktop - INFO - Setting up for macOS environment
+2025-05-08 23:34:38,796 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 23:34:38,796 - jarvis_desktop - INFO - Server is ready
+2025-05-08 23:34:38,799 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 23:34:38,799 - jarvis_desktop - INFO - Using 8 worker threads (detected 12 CPU cores)
+2025-05-08 23:34:38,799 - jarvis_desktop - INFO - Using macOS-optimized server configuration
+2025-05-08 23:34:38,802 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 23:34:39,802 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/dist/index.html
+2025-05-08 23:34:39,802 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 23:34:39,802 - jarvis_desktop - INFO - Using macOS-optimized window configuration
+2025-05-08 23:34:39,802 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 23:34:39,802 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 23:34:40,258 - jarvis_desktop - INFO - Application window shown
+2025-05-08 23:34:40,796 - jarvis_app - INFO - Serving path: 
+2025-05-08 23:34:40,796 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 23:34:40,818 - jarvis_app - INFO - Serving path: assets/index.C3KNjJev.js
+2025-05-08 23:34:40,820 - jarvis_app - INFO - Serving asset: index.C3KNjJev.js from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-08 23:34:40,829 - jarvis_app - INFO - Serving path: assets/index.Czty9hQT.css
+2025-05-08 23:34:40,829 - jarvis_app - INFO - Serving asset: index.Czty9hQT.css from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-08 23:34:40,865 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 23:34:40,865 - jarvis_desktop - INFO - Setting up macOS-optimized offline mode
+2025-05-08 23:34:40,934 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 23:34:41,005 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:34:41,005 - jarvis_app - INFO - Created new chat: new-chat-1746736481
+2025-05-08 23:34:41,804 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 23:35:36,096 - jarvis_app - INFO - Sending query to Jarvis AI: Write a creative story about: ...
+2025-05-08 23:35:36,096 - jarvis_assistant - INFO - Processing query: Write a creative story about: 
+2025-05-08 23:35:36,097 - jarvis_assistant - INFO - Using specified model type: storyGeneration
+2025-05-08 23:35:36,097 - jarvis_assistant - INFO - Using model handler: storyGeneration
+2025-05-08 23:35:36,097 - jarvis_models - INFO - Loading story generation model...
+2025-05-08 23:35:36,097 - jarvis_models - INFO - Story generation model loaded successfully
+2025-05-08 23:35:36,097 - jarvis_app - INFO - Received response from Jarvis AI: Story generation model would create a story about:...
+2025-05-08 23:35:36,098 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:35:36,098 - jarvis_app - INFO - Processed message in chat new-chat-1746736481
+2025-05-08 23:35:40,769 - jarvis_app - INFO - Sending query to Jarvis AI: Analyze the sentiment, entities, and intent in thi...
+2025-05-08 23:35:40,770 - jarvis_assistant - INFO - Processing query: Analyze the sentiment, entities, and intent in this text: 
+2025-05-08 23:35:40,770 - jarvis_assistant - INFO - Using specified model type: nlp
+2025-05-08 23:35:40,770 - jarvis_assistant - INFO - Using model handler: nlp
+2025-05-08 23:35:40,770 - jarvis_models - INFO - Loading NLP model...
+2025-05-08 23:35:40,770 - jarvis_models - INFO - NLP model loaded successfully
+2025-05-08 23:35:40,770 - jarvis_app - INFO - Received response from Jarvis AI: NLP model would analyze: Analyze the sentiment, en...
+2025-05-08 23:35:40,771 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:35:40,771 - jarvis_app - INFO - Processed message in chat new-chat-1746736481
+2025-05-08 23:37:05,619 - jarvis_app - INFO - Sending query to Jarvis AI: Let's have a conversation about: ...
+2025-05-08 23:37:05,624 - jarvis_assistant - INFO - Processing query: Let's have a conversation about: 
+2025-05-08 23:37:05,624 - jarvis_assistant - INFO - Using specified model type: textGeneration
+2025-05-08 23:37:05,624 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-08 23:37:05,624 - jarvis_models - INFO - Loading text generation model (FLAN-UL2)...
+2025-05-08 23:37:05,624 - jarvis_models - INFO - Text generation model loaded successfully
+2025-05-08 23:37:05,625 - jarvis_app - INFO - Received response from Jarvis AI: Text generation model would process: Let's have a ...
+2025-05-08 23:37:05,628 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:37:05,628 - jarvis_app - INFO - Processed message in chat new-chat-1746736481
+2025-05-08 23:37:12,498 - jarvis_desktop - INFO - Application window closed
+2025-05-08 23:38:02,657 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static
+2025-05-08 23:38:02,658 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data
+2025-05-08 23:38:02,658 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-08 23:38:02,658 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-08 23:38:02,659 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/models
+2025-05-08 23:38:02,660 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 23:38:02,660 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 23:38:02,660 - jarvis_app - INFO - Loaded 9 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-08 23:38:02,660 - jarvis_app - INFO - Loaded messages for 9 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-08 23:38:02,663 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant
+2025-05-08 23:38:02,663 - jarvis_desktop - INFO - Operating system: posix - darwin
+2025-05-08 23:38:02,663 - jarvis_desktop - INFO - Setting up for macOS environment
+2025-05-08 23:38:02,663 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 23:38:02,664 - jarvis_desktop - INFO - Server is ready
+2025-05-08 23:38:02,666 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 23:38:02,666 - jarvis_desktop - INFO - Using 8 worker threads (detected 12 CPU cores)
+2025-05-08 23:38:02,666 - jarvis_desktop - INFO - Using macOS-optimized server configuration
+2025-05-08 23:38:02,668 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 23:38:03,668 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/dist/index.html
+2025-05-08 23:38:03,669 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 23:38:03,669 - jarvis_desktop - INFO - Using macOS-optimized window configuration
+2025-05-08 23:38:03,670 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 23:38:03,670 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 23:38:04,014 - jarvis_desktop - INFO - Application window shown
+2025-05-08 23:38:04,570 - jarvis_app - INFO - Serving path: 
+2025-05-08 23:38:04,570 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 23:38:04,594 - jarvis_app - INFO - Serving path: assets/index.BmK2pV0G.js
+2025-05-08 23:38:04,594 - jarvis_app - INFO - Serving asset: index.BmK2pV0G.js from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-08 23:38:04,594 - jarvis_app - INFO - Serving path: assets/index.Czty9hQT.css
+2025-05-08 23:38:04,594 - jarvis_app - INFO - Serving asset: index.Czty9hQT.css from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-08 23:38:04,624 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 23:38:04,625 - jarvis_desktop - INFO - Setting up macOS-optimized offline mode
+2025-05-08 23:38:04,695 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 23:38:04,745 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:38:04,745 - jarvis_app - INFO - Created new chat: new-chat-1746736684
+2025-05-08 23:38:05,674 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 23:38:06,655 - jarvis_app - INFO - Sending query to Jarvis AI: Generate code for a function that: ...
+2025-05-08 23:38:06,656 - jarvis_assistant - INFO - Processing query: Generate code for a function that: 
+2025-05-08 23:38:06,656 - jarvis_assistant - INFO - Using specified model type: codeGeneration
+2025-05-08 23:38:06,656 - jarvis_assistant - INFO - Using model handler: codeGeneration
+2025-05-08 23:38:06,656 - jarvis_models - INFO - Loading code generation model (DeepSeek Coder)...
+2025-05-08 23:38:06,656 - jarvis_models - INFO - Code generation model loaded successfully
+2025-05-08 23:38:06,656 - jarvis_app - INFO - Received response from Jarvis AI: Code generation model would process: Generate code...
+2025-05-08 23:38:06,657 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:38:06,657 - jarvis_app - INFO - Processed message in chat new-chat-1746736684
+2025-05-08 23:38:16,644 - jarvis_app - INFO - Sending query to Jarvis AI: Let's have a conversation about: ...
+2025-05-08 23:38:16,645 - jarvis_assistant - INFO - Processing query: Let's have a conversation about: 
+2025-05-08 23:38:16,645 - jarvis_assistant - INFO - Using specified model type: textGeneration
+2025-05-08 23:38:16,645 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-08 23:38:16,645 - jarvis_models - INFO - Loading text generation model (FLAN-UL2)...
+2025-05-08 23:38:16,645 - jarvis_models - INFO - Text generation model loaded successfully
+2025-05-08 23:38:16,645 - jarvis_app - INFO - Received response from Jarvis AI: Text generation model would process: Let's have a ...
+2025-05-08 23:38:16,647 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:38:16,647 - jarvis_app - INFO - Processed message in chat new-chat-1746736684
+2025-05-08 23:38:22,583 - jarvis_desktop - INFO - Application window closed
+2025-05-08 23:42:19,394 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static
+2025-05-08 23:42:19,394 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data
+2025-05-08 23:42:19,394 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-08 23:42:19,395 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-08 23:42:19,396 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/models
+2025-05-08 23:42:19,396 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-08 23:42:19,396 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-08 23:42:19,396 - jarvis_app - INFO - Loaded 10 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-08 23:42:19,397 - jarvis_app - INFO - Loaded messages for 10 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-08 23:42:19,399 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant
+2025-05-08 23:42:19,399 - jarvis_desktop - INFO - Operating system: posix - darwin
+2025-05-08 23:42:19,399 - jarvis_desktop - INFO - Setting up for macOS environment
+2025-05-08 23:42:19,399 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-08 23:42:19,399 - jarvis_desktop - INFO - Server is ready
+2025-05-08 23:42:19,402 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-08 23:42:19,402 - jarvis_desktop - INFO - Using 8 worker threads (detected 12 CPU cores)
+2025-05-08 23:42:19,402 - jarvis_desktop - INFO - Using macOS-optimized server configuration
+2025-05-08 23:42:19,404 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-08 23:42:20,405 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/dist/index.html
+2025-05-08 23:42:20,405 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-08 23:42:20,405 - jarvis_desktop - INFO - Using macOS-optimized window configuration
+2025-05-08 23:42:20,406 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-08 23:42:20,406 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-08 23:42:20,786 - jarvis_desktop - INFO - Application window shown
+2025-05-08 23:42:21,312 - jarvis_app - INFO - Serving path: 
+2025-05-08 23:42:21,313 - jarvis_app - INFO - Serving index.html for root path
+2025-05-08 23:42:21,417 - jarvis_app - INFO - Serving path: assets/index.cjI6Br9x.js
+2025-05-08 23:42:21,423 - jarvis_app - INFO - Serving path: assets/index.Czty9hQT.css
+2025-05-08 23:42:21,424 - jarvis_app - INFO - Serving asset: index.Czty9hQT.css from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-08 23:42:21,424 - jarvis_app - INFO - Serving asset: index.cjI6Br9x.js from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-08 23:42:21,523 - jarvis_desktop - INFO - Application window loaded
+2025-05-08 23:42:21,523 - jarvis_desktop - INFO - Setting up macOS-optimized offline mode
+2025-05-08 23:42:21,548 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-08 23:42:21,633 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:42:21,633 - jarvis_app - INFO - Created new chat: new-chat-1746736941
+2025-05-08 23:42:22,407 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-08 23:42:23,848 - jarvis_app - INFO - Sending query to Jarvis AI: Generate code for a function that: ...
+2025-05-08 23:42:23,848 - jarvis_assistant - INFO - Processing query: Generate code for a function that: 
+2025-05-08 23:42:23,848 - jarvis_assistant - INFO - Using specified model type: codeGeneration
+2025-05-08 23:42:23,848 - jarvis_assistant - INFO - Using model handler: codeGeneration
+2025-05-08 23:42:23,848 - jarvis_models - INFO - Loading code generation model (DeepSeek Coder)...
+2025-05-08 23:42:23,848 - jarvis_models - INFO - Code generation model loaded successfully
+2025-05-08 23:42:23,848 - jarvis_app - INFO - Received response from Jarvis AI: Code generation model would process: Generate code...
+2025-05-08 23:42:23,849 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:42:23,849 - jarvis_app - INFO - Processed message in chat new-chat-1746736941
+2025-05-08 23:42:31,568 - jarvis_app - INFO - Sending query to Jarvis AI: Let's have a conversation about: ...
+2025-05-08 23:42:31,568 - jarvis_assistant - INFO - Processing query: Let's have a conversation about: 
+2025-05-08 23:42:31,568 - jarvis_assistant - INFO - Using specified model type: textGeneration
+2025-05-08 23:42:31,568 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-08 23:42:31,568 - jarvis_models - INFO - Loading text generation model (FLAN-UL2)...
+2025-05-08 23:42:31,568 - jarvis_models - INFO - Text generation model loaded successfully
+2025-05-08 23:42:31,568 - jarvis_app - INFO - Received response from Jarvis AI: Text generation model would process: Let's have a ...
+2025-05-08 23:42:31,570 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:42:31,570 - jarvis_app - INFO - Processed message in chat new-chat-1746736941
+2025-05-08 23:42:42,923 - jarvis_app - INFO - Sending query to Jarvis AI: Transcribe the following audio file (provide a pat...
+2025-05-08 23:42:42,923 - jarvis_assistant - INFO - Processing query: Transcribe the following audio file (provide a path to the audio file): 
+2025-05-08 23:42:42,924 - jarvis_assistant - INFO - Using specified model type: speechToText
+2025-05-08 23:42:42,924 - jarvis_assistant - INFO - Using model handler: speechToText
+2025-05-08 23:42:42,925 - jarvis_models - INFO - Loading speech-to-text model...
+2025-05-08 23:42:42,925 - jarvis_models - INFO - Speech-to-text model loaded successfully
+2025-05-08 23:42:42,925 - jarvis_app - INFO - Received response from Jarvis AI: Speech-to-text model would process: Transcribe the...
+2025-05-08 23:42:42,927 - jarvis_app - INFO - Data saved successfully
+2025-05-08 23:42:42,927 - jarvis_app - INFO - Processed message in chat new-chat-1746736941
+2025-05-08 23:42:48,031 - jarvis_desktop - INFO - Application window closed

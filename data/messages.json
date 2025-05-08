@@ -105,6 +105,322 @@
       "role": "assistant",
       "content": "How can I help you with this new conversation?",
       "timestamp": "06:10 AM"
+    },
+    {
+      "id": "msg-1746735213",
+      "role": "user",
+      "content": "Generate code for a function that: ",
+      "timestamp": "11:13 PM"
+    },
+    {
+      "id": "msg-1746735214",
+      "role": "assistant",
+      "content": "Code generation model would process: Generate code for a function that: \n\n```python\n# Example generated code\ndef hello_world():\n    print('Hello, world!')\n\nhello_world()\n```",
+      "timestamp": "11:13 PM"
+    },
+    {
+      "id": "msg-1746735219",
+      "role": "user",
+      "content": "Let's have a conversation about: ",
+      "timestamp": "11:13 PM"
+    },
+    {
+      "id": "msg-1746735220",
+      "role": "assistant",
+      "content": "Text generation model would process: Let's have a conversation about: \n\nThis is a simulated response from the FLAN-UL2 text generation model. In a real implementation, this would use the loaded model to generate a relevant response based on the query.",
+      "timestamp": "11:13 PM"
+    },
+    {
+      "id": "msg-1746735228",
+      "role": "user",
+      "content": "Analyze the sentiment, entities, and intent in this text: ",
+      "timestamp": "11:13 PM"
+    },
+    {
+      "id": "msg-1746735229",
+      "role": "assistant",
+      "content": "NLP model would analyze: Analyze the sentiment, entities, and intent in this text: \n\nSentiment: Positive\nEntities: None detected\nIntent: Information request",
+      "timestamp": "11:13 PM"
+    },
+    {
+      "id": "msg-1746735242",
+      "role": "user",
+      "content": "Write a creative story about: ",
+      "timestamp": "11:14 PM"
+    },
+    {
+      "id": "msg-1746735243",
+      "role": "assistant",
+      "content": "Story generation model would create a story about: Write a creative story about: \n\nOnce upon a time, in a land far away, there was a kingdom of wonder and magic. The people lived in harmony with nature, and the kingdom prospered under the wise rule of its benevolent monarch...",
+      "timestamp": "11:14 PM"
+    },
+    {
+      "id": "msg-1746735246",
+      "role": "user",
+      "content": "Transcribe the following audio file (provide a path to the audio file): ",
+      "timestamp": "11:14 PM"
+    },
+    {
+      "id": "msg-1746735247",
+      "role": "assistant",
+      "content": "Speech-to-text model would process: Transcribe the following audio file (provide a path to the audio file): ",
+      "timestamp": "11:14 PM"
+    }
+  ],
+  "new-chat-1746735413": [
+    {
+      "id": "welcome",
+      "role": "assistant",
+      "content": "How can I help you with this new conversation?",
+      "timestamp": "11:16 PM"
+    },
+    {
+      "id": "msg-1746735649",
+      "role": "user",
+      "content": "Generate code for a function that: ",
+      "timestamp": "11:20 PM"
+    },
+    {
+      "id": "msg-1746735650",
+      "role": "assistant",
+      "content": "Code generation model would process: Generate code for a function that: \n\n```python\n# Example generated code\ndef hello_world():\n    print('Hello, world!')\n\nhello_world()\n```",
+      "timestamp": "11:20 PM"
+    },
+    {
+      "id": "msg-1746735652",
+      "role": "user",
+      "content": "Write a creative story about: ",
+      "timestamp": "11:20 PM"
+    },
+    {
+      "id": "msg-1746735653",
+      "role": "assistant",
+      "content": "Story generation model would create a story about: Write a creative story about: \n\nOnce upon a time, in a land far away, there was a kingdom of wonder and magic. The people lived in harmony with nature, and the kingdom prospered under the wise rule of its benevolent monarch...",
+      "timestamp": "11:20 PM"
+    },
+    {
+      "id": "msg-1746735656",
+      "role": "user",
+      "content": "Analyze the sentiment, entities, and intent in this text: ",
+      "timestamp": "11:20 PM"
+    },
+    {
+      "id": "msg-1746735657",
+      "role": "assistant",
+      "content": "NLP model would analyze: Analyze the sentiment, entities, and intent in this text: \n\nSentiment: Positive\nEntities: None detected\nIntent: Information request",
+      "timestamp": "11:20 PM"
+    },
+    {
+      "id": "msg-1746735857",
+      "role": "user",
+      "content": "Transcribe the following audio file (provide a path to the audio file): ",
+      "timestamp": "11:24 PM"
+    },
+    {
+      "id": "msg-1746735858",
+      "role": "assistant",
+      "content": "Speech-to-text model would process: Transcribe the following audio file (provide a path to the audio file): ",
+      "timestamp": "11:24 PM"
+    },
+    {
+      "id": "msg-1746735902",
+      "role": "user",
+      "content": "Analyze the sentiment, entities, and intent in this text: ",
+      "timestamp": "11:25 PM"
+    },
+    {
+      "id": "msg-1746735903",
+      "role": "assistant",
+      "content": "NLP model would analyze: Analyze the sentiment, entities, and intent in this text: \n\nSentiment: Positive\nEntities: None detected\nIntent: Information request",
+      "timestamp": "11:25 PM"
+    },
+    {
+      "id": "msg-1746735910",
+      "role": "user",
+      "content": "Let's have a conversation about: ",
+      "timestamp": "11:25 PM"
+    },
+    {
+      "id": "msg-1746735911",
+      "role": "assistant",
+      "content": "Text generation model would process: Let's have a conversation about: \n\nThis is a simulated response from the FLAN-UL2 text generation model. In a real implementation, this would use the loaded model to generate a relevant response based on the query.",
+      "timestamp": "11:25 PM"
+    },
+    {
+      "id": "msg-1746735916",
+      "role": "user",
+      "content": "Generate code for a function that: ",
+      "timestamp": "11:25 PM"
+    },
+    {
+      "id": "msg-1746735917",
+      "role": "assistant",
+      "content": "Code generation model would process: Generate code for a function that: \n\n```python\n# Example generated code\ndef hello_world():\n    print('Hello, world!')\n\nhello_world()\n```",
+      "timestamp": "11:25 PM"
+    },
+    {
+      "id": "msg-1746735917",
+      "role": "user",
+      "content": "Generate code for a function that: ",
+      "timestamp": "11:25 PM"
+    },
+    {
+      "id": "msg-1746735918",
+      "role": "assistant",
+      "content": "Code generation model would process: Generate code for a function that: \n\n```python\n# Example generated code\ndef hello_world():\n    print('Hello, world!')\n\nhello_world()\n```",
+      "timestamp": "11:25 PM"
+    }
+  ],
+  "new-chat-1746736120": [
+    {
+      "id": "welcome",
+      "role": "assistant",
+      "content": "How can I help you with this new conversation?",
+      "timestamp": "11:28 PM"
+    },
+    {
+      "id": "msg-1746736140",
+      "role": "user",
+      "content": "Write a creative story about: ",
+      "timestamp": "11:29 PM"
+    },
+    {
+      "id": "msg-1746736141",
+      "role": "assistant",
+      "content": "Story generation model would create a story about: Write a creative story about: \n\nOnce upon a time, in a land far away, there was a kingdom of wonder and magic. The people lived in harmony with nature, and the kingdom prospered under the wise rule of its benevolent monarch...",
+      "timestamp": "11:29 PM"
+    },
+    {
+      "id": "msg-1746736147",
+      "role": "user",
+      "content": "Generate code for a function that: ",
+      "timestamp": "11:29 PM"
+    },
+    {
+      "id": "msg-1746736148",
+      "role": "assistant",
+      "content": "Code generation model would process: Generate code for a function that: \n\n```python\n# Example generated code\ndef hello_world():\n    print('Hello, world!')\n\nhello_world()\n```",
+      "timestamp": "11:29 PM"
+    }
+  ],
+  "new-chat-1746736481": [
+    {
+      "id": "welcome",
+      "role": "assistant",
+      "content": "How can I help you with this new conversation?",
+      "timestamp": "11:34 PM"
+    },
+    {
+      "id": "msg-1746736536",
+      "role": "user",
+      "content": "Write a creative story about: ",
+      "timestamp": "11:35 PM"
+    },
+    {
+      "id": "msg-1746736537",
+      "role": "assistant",
+      "content": "Story generation model would create a story about: Write a creative story about: \n\nOnce upon a time, in a land far away, there was a kingdom of wonder and magic. The people lived in harmony with nature, and the kingdom prospered under the wise rule of its benevolent monarch...",
+      "timestamp": "11:35 PM"
+    },
+    {
+      "id": "msg-1746736540",
+      "role": "user",
+      "content": "Analyze the sentiment, entities, and intent in this text: ",
+      "timestamp": "11:35 PM"
+    },
+    {
+      "id": "msg-1746736541",
+      "role": "assistant",
+      "content": "NLP model would analyze: Analyze the sentiment, entities, and intent in this text: \n\nSentiment: Positive\nEntities: None detected\nIntent: Information request",
+      "timestamp": "11:35 PM"
+    },
+    {
+      "id": "msg-1746736625",
+      "role": "user",
+      "content": "Let's have a conversation about: ",
+      "timestamp": "11:37 PM"
+    },
+    {
+      "id": "msg-1746736626",
+      "role": "assistant",
+      "content": "Text generation model would process: Let's have a conversation about: \n\nThis is a simulated response from the FLAN-UL2 text generation model. In a real implementation, this would use the loaded model to generate a relevant response based on the query.",
+      "timestamp": "11:37 PM"
+    }
+  ],
+  "new-chat-1746736684": [
+    {
+      "id": "welcome",
+      "role": "assistant",
+      "content": "How can I help you with this new conversation?",
+      "timestamp": "11:38 PM"
+    },
+    {
+      "id": "msg-1746736686",
+      "role": "user",
+      "content": "Generate code for a function that: ",
+      "timestamp": "11:38 PM"
+    },
+    {
+      "id": "msg-1746736687",
+      "role": "assistant",
+      "content": "Code generation model would process: Generate code for a function that: \n\n```python\n# Example generated code\ndef hello_world():\n    print('Hello, world!')\n\nhello_world()\n```",
+      "timestamp": "11:38 PM"
+    },
+    {
+      "id": "msg-1746736696",
+      "role": "user",
+      "content": "Let's have a conversation about: ",
+      "timestamp": "11:38 PM"
+    },
+    {
+      "id": "msg-1746736697",
+      "role": "assistant",
+      "content": "Text generation model would process: Let's have a conversation about: \n\nThis is a simulated response from the FLAN-UL2 text generation model. In a real implementation, this would use the loaded model to generate a relevant response based on the query.",
+      "timestamp": "11:38 PM"
+    }
+  ],
+  "new-chat-1746736941": [
+    {
+      "id": "welcome",
+      "role": "assistant",
+      "content": "How can I help you with this new conversation?",
+      "timestamp": "11:42 PM"
+    },
+    {
+      "id": "msg-1746736943",
+      "role": "user",
+      "content": "Generate code for a function that: ",
+      "timestamp": "11:42 PM"
+    },
+    {
+      "id": "msg-1746736944",
+      "role": "assistant",
+      "content": "Code generation model would process: Generate code for a function that: \n\n```python\n# Example generated code\ndef hello_world():\n    print('Hello, world!')\n\nhello_world()\n```",
+      "timestamp": "11:42 PM"
+    },
+    {
+      "id": "msg-1746736951",
+      "role": "user",
+      "content": "Let's have a conversation about: ",
+      "timestamp": "11:42 PM"
+    },
+    {
+      "id": "msg-1746736952",
+      "role": "assistant",
+      "content": "Text generation model would process: Let's have a conversation about: \n\nThis is a simulated response from the FLAN-UL2 text generation model. In a real implementation, this would use the loaded model to generate a relevant response based on the query.",
+      "timestamp": "11:42 PM"
+    },
+    {
+      "id": "msg-1746736962",
+      "role": "user",
+      "content": "Transcribe the following audio file (provide a path to the audio file): ",
+      "timestamp": "11:42 PM"
+    },
+    {
+      "id": "msg-1746736963",
+      "role": "assistant",
+      "content": "Speech-to-text model would process: Transcribe the following audio file (provide a path to the audio file): ",
+      "timestamp": "11:42 PM"
     }
   ]
 }

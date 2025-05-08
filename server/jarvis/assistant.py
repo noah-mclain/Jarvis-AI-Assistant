@@ -20,6 +20,10 @@ License: MIT
 
 import os  # Used for file path operations
 import logging  # Used for application logging
+from typing import Dict, Optional
+
+# Import model handlers
+from server.jarvis.models import MODEL_HANDLERS, ModelHandler
 
 # Configure logger for this module
 # This logger will be used to track the assistant's operations
@@ -74,6 +78,15 @@ class JarvisAI:
         # Initialize any other components or state variables needed by the assistant
         self.conversation_history = []
 
+        # Initialize model handlers with the same model path
+        self.model_handlers: Dict[str, ModelHandler] = {}
+        for model_type, handler in MODEL_HANDLERS.items():
+            handler.model_path = self.model_path
+            self.model_handlers[model_type] = handler
+
+        # Current active model type (default to text generation)
+        self.current_model_type = "textGeneration"
+
         logger.info("Jarvis AI initialized")
 
     def _get_datetime_info(self):
@@ -89,20 +102,18 @@ class JarvisAI:
         current_date = now.strftime("%A, %B %d, %Y")
         return current_time, current_date
 
-    def process_query(self, query):
+    def process_query(self, query, model_type=None):
         """
         Process a user query and return an appropriate response.
 
         This method:
         1. Analyzes the user's query
-        2. Determines the appropriate response
+        2. Determines the appropriate model to use
         3. Generates and returns the response text
-
-        In a full implementation, this would use the loaded AI model to generate
-        responses based on the query content and conversation context.
 
         Args:
             query (str): The user's natural language query text
+            model_type (str, optional): The type of model to use. If None, the current model type will be used.
 
         Returns:
             str: The AI assistant's response text
@@ -110,39 +121,87 @@ class JarvisAI:
         # Log the incoming query for debugging and monitoring
         logger.info(f"Processing query: {query}")
 
-        # Store lowercase version of query for easier matching
-        query_lower = query.lower()
+        # Check for model type in the query
+        if model_type:
+            # If a specific model type is requested, use it
+            self.current_model_type = model_type
+            logger.info(f"Using specified model type: {model_type}")
+        else:
+            # Check if the query contains keywords that indicate a specific model type
+            query_lower = query.lower()
 
-        # TODO: Replace this with your actual Jarvis AI query processing
-        # This is just a placeholder implementation with simple pattern matching
-        # A real implementation would use NLP techniques or a language model
+            # Simple keyword detection for model type
+            if any(keyword in query_lower for keyword in ["code", "program", "function", "class"]):
+                self.current_model_type = "codeGeneration"
+            elif any(keyword in query_lower for keyword in ["story", "tale", "narrative"]):
+                self.current_model_type = "storyGeneration"
+            elif any(keyword in query_lower for keyword in ["analyze", "sentiment", "extract", "classify"]):
+                self.current_model_type = "nlp"
+            elif "transcribe" in query_lower:
+                self.current_model_type = "speechToText"
+            # Default to text generation if no specific keywords are found
 
-        # Greeting detection
-        if "hello" in query_lower or "hi" in query_lower:
-            return "Hello! I'm Jarvis, your AI assistant. How can I help you today?"
+            logger.info(f"Detected model type from query: {self.current_model_type}")
 
-        # Weather query detection
-        if "weather" in query_lower:
-            return "I'm sorry, I don't have access to real-time weather data in this offline mode."
+        # Get the appropriate model handler
+        if self.current_model_type in self.model_handlers:
+            handler = self.model_handlers[self.current_model_type]
+            logger.info(f"Using model handler: {self.current_model_type}")
 
-        # Time query detection
-        if "time" in query_lower:
-            current_time, _ = self._get_datetime_info()
-            return f"The current time is {current_time}."
+            # Process the query with the selected model handler
+            response = handler.process_query(query)
+            return response
+        else:
+            # Fallback to basic responses if the model type is not recognized
+            logger.warning(f"Unknown model type: {self.current_model_type}, using fallback responses")
 
-        # Date query detection
-        if "date" in query_lower:
-            _, current_date = self._get_datetime_info()
-            return f"Today is {current_date}."
+            # Store lowercase version of query for easier matching
+            query_lower = query.lower()
 
-        # Gratitude detection
-        if "thank" in query_lower:
-            return "You're welcome! Is there anything else I can help you with?"
+            # Basic pattern matching for common queries
+            # Greeting detection
+            if "hello" in query_lower or "hi" in query_lower:
+                return "Hello! I'm Jarvis, your AI assistant. How can I help you today?"
 
-        # Farewell detection
-        if "bye" in query_lower or "goodbye" in query_lower:
-            return "Goodbye! Feel free to chat with me anytime."
+            # Weather query detection
+            if "weather" in query_lower:
+                return "I'm sorry, I don't have access to real-time weather data in this offline mode."
 
-        # Default response for unrecognized queries
-        # In a real implementation, this would use the AI model to generate a relevant response
-        return f"I've received your query: '{query}'. This is a placeholder response. Replace this with your actual Jarvis AI implementation."
+            # Time query detection
+            if "time" in query_lower:
+                current_time, _ = self._get_datetime_info()
+                return f"The current time is {current_time}."
+
+            # Date query detection
+            if "date" in query_lower:
+                _, current_date = self._get_datetime_info()
+                return f"Today is {current_date}."
+
+            # Gratitude detection
+            if "thank" in query_lower:
+                return "You're welcome! Is there anything else I can help you with?"
+
+            # Farewell detection
+            if "bye" in query_lower or "goodbye" in query_lower:
+                return "Goodbye! Feel free to chat with me anytime."
+
+            # Default response for unrecognized queries
+            return f"I've received your query: '{query}'. I'm not sure how to process this with the current configuration."
+
+    def set_model_type(self, model_type):
+        """
+        Set the current model type to use for processing queries.
+
+        Args:
+            model_type (str): The type of model to use
+
+        Returns:
+            bool: True if the model type was set successfully, False otherwise
+        """
+        if model_type in self.model_handlers:
+            self.current_model_type = model_type
+            logger.info(f"Set current model type to: {model_type}")
+            return True
+        else:
+            logger.warning(f"Unknown model type: {model_type}")
+            return False

@@ -8,6 +8,7 @@
  * - Keyboard shortcuts (Enter to send, Shift+Enter for new line)
  * - Loading and disabled states
  * - Custom placeholder text
+ * - Model selection buttons for different AI functionalities
  *
  * The component is designed to work offline and integrates with the main chat interface.
  *
@@ -18,6 +19,8 @@
 import { useState, useRef, FormEvent, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { TextareaAutosize } from "@/components/ui/textarea-autosize";
+import { ModelButtons } from "@/components/model-buttons";
+import { ExecutePopup } from "@/components/execute-popup";
 
 /**
  * Props for the ChatInput component
@@ -27,12 +30,16 @@ import { TextareaAutosize } from "@/components/ui/textarea-autosize";
  * @property {boolean} [isLoading=false] - Whether the application is currently processing a message
  * @property {boolean} [disabled=false] - Whether the input should be disabled
  * @property {string} [placeholder="Ask Jarvis anything..."] - Placeholder text for the textarea
+ * @property {boolean} [showModelButtons=true] - Whether to show the model selection buttons
+ * @property {function} [onModelSelect] - Callback function that receives the model type and default prompt
  */
 interface ChatInputProps {
   onSend: (message: string) => void;
   isLoading?: boolean;
   disabled?: boolean;
   placeholder?: string;
+  showModelButtons?: boolean;
+  onModelSelect?: (modelType: string, defaultPrompt: string) => void;
 }
 
 /**
@@ -49,9 +56,36 @@ export function ChatInput({
   isLoading = false,
   disabled = false,
   placeholder = "Ask Jarvis anything...",
+  showModelButtons = true,
+  onModelSelect,
 }: ChatInputProps) {
   // State to track the current input value
   const [input, setInput] = useState("");
+
+  /**
+   * Handles model selection
+   *
+   * This function:
+   * 1. Updates the input field with the default prompt for the selected model
+   * 2. Calls the onModelSelect callback if provided
+   *
+   * @param {string} modelType - The type of model selected
+   * @param {string} defaultPrompt - The default prompt for the selected model
+   */
+  const handleModelSelect = (modelType: string, defaultPrompt: string) => {
+    // Update the input field with the default prompt
+    setInput(defaultPrompt);
+
+    // Focus the textarea after updating the input
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+
+    // Call the onModelSelect callback if provided
+    if (onModelSelect) {
+      onModelSelect(modelType, defaultPrompt);
+    }
+  };
 
   // Reference to the textarea element for direct DOM manipulation
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -130,6 +164,7 @@ export function ChatInput({
         {/*
           Auto-resizing textarea component
           This textarea grows as the user types more content, up to a maximum number of rows
+          Reduced min-height from 70px to 50px to make it shorter
         */}
         <TextareaAutosize
           ref={textareaRef} // Reference for DOM manipulation
@@ -137,12 +172,12 @@ export function ChatInput({
           onChange={(e) => setInput(e.target.value)} // Update state on change
           onKeyDown={handleKeyDown} // Handle keyboard shortcuts
           placeholder={placeholder} // Custom placeholder text
-          className="min-h-[70px] border-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/70 p-3 scrollbar-themed chat-input transition-all duration-300"
-          maxRows={8} // Maximum number of visible rows
+          className="min-h-[50px] border-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/70 p-3 scrollbar-themed chat-input transition-all duration-300"
+          maxRows={4} // Reduced from 8 to 4 maximum visible rows
           disabled={disabled} // Disable when needed
           style={{
-            // Show scrollbar only when content exceeds 8 rows
-            overflowY: input.split("\n").length > 8 ? "auto" : "hidden",
+            // Show scrollbar only when content exceeds 4 rows
+            overflowY: input.split("\n").length > 4 ? "auto" : "hidden",
             overflowX: "hidden", // Never show horizontal scrollbar
             lineHeight: "var(--line-height-normal)", // Use theme-defined line height
             // Hardware acceleration for smoother animations
@@ -151,51 +186,72 @@ export function ChatInput({
           }}
         />
 
-        {/* Button container aligned to the right */}
-        <div className="flex justify-end p-1">
-          {/*
-            Submit button
-            Disabled when:
-            - The input is empty
-            - A message is currently being processed
-            - The component is explicitly disabled
-          */}
-          <Button
-            type="submit"
-            size="sm"
-            disabled={isLoading || !input.trim() || disabled}
-            className={`rounded-full transition-all duration-300 transform ${
-              input.trim() && !isLoading && !disabled
-                ? "hover:scale-105 active:scale-95"
-                : ""
-            }`}
-            style={{
-              // Hardware acceleration for smoother animations
-              transform: "translateZ(0)",
-              backfaceVisibility: "hidden",
-            }}
-          >
-            {isLoading ? (
-              <span className="flex items-center">
-                <span className="mr-1">Processing</span>
-                <span className="inline-flex">
-                  <span className="animate-[pulse_0.8s_ease-in-out_infinite]">
-                    .
-                  </span>
-                  <span className="animate-[pulse_0.8s_ease-in-out_0.2s_infinite]">
-                    .
-                  </span>
-                  <span className="animate-[pulse_0.8s_ease-in-out_0.4s_infinite]">
-                    .
+        {/* Button container with flexible layout - moved below the text area */}
+        <div className="flex justify-between items-center p-1 mt-2">
+          {/* Left side - Command Terminal Button */}
+          <div>
+            <ExecutePopup
+              onExecute={(command) => {
+                // Placeholder for execute functionality
+                console.log("Executing command:", command);
+              }}
+            />
+          </div>
+
+          {/* Right side - Send Button */}
+          <div>
+            {/*
+              Submit button
+              Disabled when:
+              - The input is empty
+              - A message is currently being processed
+              - The component is explicitly disabled
+            */}
+            <Button
+              type="submit"
+              size="sm"
+              disabled={isLoading || !input.trim() || disabled}
+              className={`rounded-full transition-all duration-300 transform ${
+                input.trim() && !isLoading && !disabled
+                  ? "hover:scale-110 active:scale-95"
+                  : ""
+              }`}
+              style={{
+                // Hardware acceleration for smoother animations
+                transform: "translateZ(0)",
+                backfaceVisibility: "hidden",
+              }}
+              title="Send message to Jarvis AI"
+            >
+              {isLoading ? (
+                <span className="flex items-center">
+                  <span className="mr-1">Processing</span>
+                  <span className="inline-flex">
+                    <span className="animate-[pulse_0.8s_ease-in-out_infinite]">
+                      .
+                    </span>
+                    <span className="animate-[pulse_0.8s_ease-in-out_0.2s_infinite]">
+                      .
+                    </span>
+                    <span className="animate-[pulse_0.8s_ease-in-out_0.4s_infinite]">
+                      .
+                    </span>
                   </span>
                 </span>
-              </span>
-            ) : (
-              "Send"
-            )}
-          </Button>
+              ) : (
+                "Send"
+              )}
+            </Button>
+          </div>
         </div>
       </div>
+
+      {/* Model selection buttons - moved below the text area */}
+      {showModelButtons && (
+        <div className="mt-3">
+          <ModelButtons onSelectModel={handleModelSelect} />
+        </div>
+      )}
     </form>
   );
 }
