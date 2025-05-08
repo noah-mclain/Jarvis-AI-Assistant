@@ -503,6 +503,7 @@ echo "Applying attention mask fix for DeepSeek models..."
 # Make the scripts executable
 chmod +x setup/fix_transformers_attention_mask.py
 chmod +x setup/fix_attention_mask_params.py
+chmod +x setup/fix_tensor_size_mismatch.py
 
 # Run the general fix script first
 echo "Applying general attention mask fixes..."
@@ -511,6 +512,10 @@ python setup/fix_transformers_attention_mask.py
 # Run the parameter-specific fix script
 echo "Applying parameter-specific attention mask fixes..."
 python setup/fix_attention_mask_params.py
+
+# Run the tensor size mismatch fix script
+echo "Applying tensor size mismatch fixes..."
+python setup/fix_tensor_size_mismatch.py
 
 if [ $? -ne 0 ]; then
     echo "⚠️ Warning: Attention mask fix script failed, but continuing anyway..."
