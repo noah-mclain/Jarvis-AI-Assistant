@@ -462,14 +462,28 @@ def train_with_unsloth(args):
     tokenizer.pad_token = tokenizer.eos_token
 
     def tokenize_function(examples):
+        """Tokenize examples with proper handling of potential issues"""
+        # Ensure all texts are strings
+        texts = [str(text) if not isinstance(text, str) else text for text in examples["text"]]
+
+        # Tokenize without return_tensors to avoid the "too many dimensions" error
         return tokenizer(
-            examples["text"],
+            texts,
             truncation=True,
             padding="max_length",
             max_length=args.max_length,
-            return_tensors="pt"
+            # Removed return_tensors="pt" to avoid the "too many dimensions" error
         )
 
+    # Remove any problematic fields that might cause issues during tokenization
+    if 'repository_name' in train_dataset.features:
+        logger.info("Removing repository_name field from datasets")
+        train_dataset = train_dataset.remove_columns(['repository_name'])
+    if 'repository_name' in eval_dataset.features:
+        eval_dataset = eval_dataset.remove_columns(['repository_name'])
+
+    # Apply tokenization
+    logger.info("Applying tokenization to datasets")
     train_dataset = train_dataset.map(tokenize_function, batched=True)
     eval_dataset = eval_dataset.map(tokenize_function, batched=True)
 
@@ -533,10 +547,11 @@ def train_with_unsloth(args):
         seed=42,
     )
 
-    # Create data collator
+    # Create data collator with improved handling
     data_collator = DataCollatorForLanguageModeling(
         tokenizer=tokenizer,
-        mlm=False
+        mlm=False,  # Not using masked language modeling
+        pad_to_multiple_of=8  # Optimize for hardware efficiency
     )
 
     # Create trainer
