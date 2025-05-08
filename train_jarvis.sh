@@ -880,7 +880,7 @@ def train_with_unsloth(args):
             "q_proj", "k_proj", "v_proj", "o_proj",
             "gate_proj", "up_proj", "down_proj"
         ],
-        use_gradient_checkpointing=True,
+        # Note: use_gradient_checkpointing is set in TrainingArguments, not here
         random_state=42,
     )
 
@@ -921,6 +921,8 @@ def train_with_unsloth(args):
         dataloader_num_workers=args.num_workers,
         dataloader_pin_memory=True,
         group_by_length=True,
+        # Enable gradient checkpointing for memory efficiency
+        gradient_checkpointing=True,
     )
 
     # Create data collator
