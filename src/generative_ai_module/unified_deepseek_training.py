@@ -64,12 +64,59 @@ def apply_attention_mask_fix():
             minor = int(version_parts[1]) if len(version_parts) > 1 else 0
             logger.info(f"Detected transformers version: {major}.{minor}")
 
-            # For newer versions of transformers (4.28+), the attention mask handling is different
+            # For newer versions of transformers (4.28+), we need to patch the attention mask handling
+            # to fix the device mismatch issue
             if major > 4 or (major == 4 and minor >= 28):
-                logger.info(f"Using newer attention mask fix for transformers {transformers_version}")
-                # For newer versions, we don't need to patch the forward method
-                # as the _prepare_4d_causal_attention_mask_for_sdpa function handles it properly
-                logger.info("Attention mask handling is already fixed in this transformers version")
+                logger.info(f"Applying device mismatch fix for transformers {transformers_version}")
+
+                # Fix the _unmask_unattended function that causes device mismatch
+                from transformers.modeling_attn_mask_utils import AttentionMaskConverter
+
+                # Store the original function
+                original_unmask_unattended = AttentionMaskConverter._unmask_unattended
+
+                @staticmethod
+                def patched_unmask_unattended(
+                    attention_mask: torch.Tensor,
+                    indices_k: Optional[torch.LongTensor] = None,
+                    indices_q: Optional[torch.LongTensor] = None,
+                ):
+                    """
+                    Patched version of _unmask_unattended that keeps tensors on the same device.
+
+                    The original function has a call to .cpu() which causes device mismatch errors.
+                    This patch ensures all operations happen on the same device.
+                    """
+                    # Get the device of the attention mask
+                    device = attention_mask.device
+
+                    # Create a temporary tensor on the same device (instead of using CPU)
+                    tmp = torch.ones(attention_mask.shape[-1], device=device)
+
+                    # Find the first non-masked position for each sequence
+                    # Original: indices = torch.argmax(attention_mask.cpu() * tmp, 1, keepdim=True)
+                    # Fixed: Keep everything on the same device
+                    indices = torch.argmax(attention_mask * tmp, 1, keepdim=True)
+
+                    # Create a mask for unattended positions
+                    mask = torch.arange(attention_mask.shape[-1], device=device).expand(attention_mask.shape[0], -1)
+                    mask = mask < indices
+
+                    # Expand mask to 4D
+                    mask = mask.unsqueeze(1).unsqueeze(2)
+
+                    # Handle indices_k and indices_q if provided
+                    if indices_k is not None:
+                        mask = mask.expand(-1, -1, indices_k, -1)
+                    if indices_q is not None:
+                        mask = mask.expand(-1, indices_q, -1, -1)
+
+                    return mask
+
+                # Replace the original function with our patched version
+                AttentionMaskConverter._unmask_unattended = patched_unmask_unattended
+                logger.info("Successfully patched AttentionMaskConverter._unmask_unattended to fix device mismatch")
+
                 return True
         except Exception as e:
             logger.warning(f"Could not parse transformers version: {e}. Applying legacy fix.")
@@ -99,6 +146,19 @@ def apply_attention_mask_fix():
                 if use_cache:
                     logger.info("use_cache=True is incompatible with gradient checkpointing. Setting use_cache=False...")
                 use_cache = False
+
+            # Get the device from input tensors
+            device = None
+            if input_ids is not None:
+                device = input_ids.device
+            elif inputs_embeds is not None:
+                device = inputs_embeds.device
+
+            # Ensure attention_mask is on the correct device
+            if attention_mask is not None and device is not None:
+                if attention_mask.device != device:
+                    logger.info(f"Moving attention mask from {attention_mask.device} to {device}")
+                    attention_mask = attention_mask.to(device)
 
             # Fix attention mask shape if needed
             if attention_mask is not None and attention_mask.dim() == 2:

@@ -72,6 +72,9 @@ echo "GPU Type: $GPU_TYPE"
 echo "VRAM Size: $VRAM_SIZE GiB"
 if [ -n "$MODEL_TYPE" ]; then
     echo "Model Type: $MODEL_TYPE"
+    if [ "$MODEL_TYPE" = "code" ]; then
+        echo "✅ Device mismatch fix enabled for DeepSeek model"
+    fi
 fi
 echo "========================================"
 
@@ -126,7 +129,7 @@ except ImportError:
 export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:32,garbage_collection_threshold:0.8"
 export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=1
-export CUDA_LAUNCH_BLOCKING=0  # Changed to 0 for better performance
+export CUDA_LAUNCH_BLOCKING=1  # Changed to 1 for better error messages with device mismatch fix
 export TRANSFORMERS_OFFLINE=0
 export CUDA_VISIBLE_DEVICES=0  # Ensure we're using the first GPU
 
@@ -156,6 +159,7 @@ fi
 case $MODEL_TYPE in
     code)
         echo "Running code generation model training with enhanced GPU handling..."
+        echo "Using device mismatch fix for DeepSeek model to prevent CUDA errors"
 
         # Verify GPU availability before starting training
         python -c "
@@ -191,7 +195,13 @@ else:
         # Apply additional safeguards for GPU training
         export PYTORCH_NO_CUDA_MEMORY_CACHING=1  # Disable CUDA memory caching
 
-        # Run the training with enhanced GPU handling
+        # Create log directory if it doesn't exist
+        mkdir -p logs
+        LOG_FILE="logs/deepseek_training_$(date +%Y%m%d_%H%M%S).log"
+        echo "📝 Logging to $LOG_FILE"
+
+        # Run the training with enhanced GPU handling and device mismatch fix
+        echo "🧠 Starting DeepSeek training with device mismatch fix..."
         python src/generative_ai_module/unified_deepseek_training.py \
             --gpu-type $GPU_TYPE \
             --vram $VRAM_SIZE \
@@ -221,7 +231,7 @@ else:
             --adam_beta1 0.9 \
             --adam_beta2 0.999 \
             --adam_epsilon 1e-8 \
-            --num_workers 0  # Set to 0 to avoid multiprocessing issues with CUDA
+            --num_workers 0 2>&1 | tee -a "$LOG_FILE"  # Log output and display it
 
         # Check if training was successful
         if [ $? -ne 0 ]; then
