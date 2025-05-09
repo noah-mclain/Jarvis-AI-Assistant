@@ -1,20 +1,27 @@
 #!/bin/bash
 
 echo "================================================================"
-echo "Creating Minimal Unsloth Implementation (No Dependencies)"
+echo "Jarvis AI Assistant - Consolidated Unsloth Fix"
 echo "================================================================"
 
-# First, clean up any existing unsloth installations
-echo "Removing existing unsloth packages..."
-pip uninstall -y unsloth unsloth_zoo
+# Directory paths
+SRC_DIR="/notebooks/src/generative_ai_module"
+CUSTOM_UNSLOTH_DIR="/notebooks/custom_unsloth"
 
-# Create directory for our custom implementation
-echo "Creating custom unsloth directory..."
-CUSTOM_DIR="/notebooks/custom_unsloth"
-mkdir -p "$CUSTOM_DIR/unsloth/models"
-
-# Create the __init__.py file in the root directory
-cat > "$CUSTOM_DIR/unsloth/__init__.py" << 'EOF'
+# Function to create minimal unsloth implementation
+create_minimal_unsloth() {
+    echo "Creating Minimal Unsloth Implementation (No Dependencies)"
+    
+    # First, clean up any existing unsloth installations
+    echo "Removing existing unsloth packages..."
+    pip uninstall -y unsloth unsloth_zoo
+    
+    # Create directory for our custom implementation
+    echo "Creating custom unsloth directory..."
+    mkdir -p "$CUSTOM_UNSLOTH_DIR/unsloth/models"
+    
+    # Create the __init__.py file in the root directory
+    cat > "$CUSTOM_UNSLOTH_DIR/unsloth/__init__.py" << 'EOF'
 """
 Minimal Unsloth Implementation - No dependencies on unsloth_zoo
 This is a stripped-down version of unsloth that provides basic functionality
@@ -44,9 +51,9 @@ class PatchDynamicLora:
 
 print("✅ Minimal Unsloth loaded successfully!")
 EOF
-
-# Create models/__init__.py
-cat > "$CUSTOM_DIR/unsloth/models/__init__.py" << 'EOF'
+    
+    # Create models/__init__.py
+    cat > "$CUSTOM_UNSLOTH_DIR/unsloth/models/__init__.py" << 'EOF'
 """
 Minimal implementation of unsloth.models
 """
@@ -159,13 +166,9 @@ class FastLanguageModel:
         
         return peft_model
 EOF
-
-# Add the directory to PYTHONPATH
-echo "Adding custom unsloth to PYTHONPATH..."
-export PYTHONPATH="$CUSTOM_DIR:$PYTHONPATH"
-
-# Create a helper script to use this version
-cat > "$CUSTOM_DIR/use_minimal_unsloth.py" << 'EOF'
+    
+    # Create a helper script to use this version
+    cat > "$CUSTOM_UNSLOTH_DIR/use_minimal_unsloth.py" << 'EOF'
 """
 Example of using minimal unsloth
 """
@@ -208,43 +211,166 @@ print(f"sys.path.insert(0, '{script_dir}')")
 print("import unsloth")
 print("from unsloth.models import FastLanguageModel")
 EOF
-
-# Create an activation script
-cat > "$CUSTOM_DIR/activate_minimal_unsloth.sh" << EOF
+    
+    # Create an activation script
+    cat > "$CUSTOM_UNSLOTH_DIR/activate_minimal_unsloth.sh" << EOF
 #!/bin/bash
 
 # Add minimal unsloth to PYTHONPATH
-export PYTHONPATH="$CUSTOM_DIR:\$PYTHONPATH"
-echo "Minimal Unsloth activated at $CUSTOM_DIR"
+export PYTHONPATH="$CUSTOM_UNSLOTH_DIR:\$PYTHONPATH"
+echo "Minimal Unsloth activated at $CUSTOM_UNSLOTH_DIR"
 echo "PYTHONPATH now includes minimal unsloth"
 echo ""
-echo "To test, run: python $CUSTOM_DIR/use_minimal_unsloth.py"
+echo "To test, run: python $CUSTOM_UNSLOTH_DIR/use_minimal_unsloth.py"
 EOF
+    
+    chmod +x "$CUSTOM_UNSLOTH_DIR/activate_minimal_unsloth.sh"
+}
 
-chmod +x "$CUSTOM_DIR/activate_minimal_unsloth.sh"
+# Function to apply fixed unsloth to Python files
+apply_fixed_unsloth() {
+    echo "Applying Fixed Minimal Unsloth to Python Files"
+    
+    # Make sure the src directory exists
+    if [ ! -d "$SRC_DIR" ]; then
+        echo "⚠️ Warning: Source directory not found at $SRC_DIR"
+        echo "Please enter the path to your code directory:"
+        read -p "> " SRC_DIR
+        
+        if [ ! -d "$SRC_DIR" ]; then
+            echo "❌ Error: Directory not found at $SRC_DIR"
+            return 1
+        fi
+    fi
+    
+    # Find files that use unsloth
+    echo "Finding files that use unsloth..."
+    UNSLOTH_FILES=$(grep -l -r "unsloth" --include="*.py" "$SRC_DIR" || echo "")
+    
+    if [ -z "$UNSLOTH_FILES" ]; then
+        echo "⚠️ Warning: No files found that use unsloth. Trying to scan all Python files."
+        find "$SRC_DIR" -name "*.py" > /tmp/python_files.txt
+    else
+        echo "$UNSLOTH_FILES" > /tmp/python_files.txt
+        echo "Found $(wc -l < /tmp/python_files.txt) files that use unsloth"
+    fi
+    
+    # Process each file individually
+    while read -r file; do
+        echo "Processing $file..."
+        
+        # Create backup if it doesn't exist
+        if [ ! -f "${file}.bak" ]; then
+            cp "$file" "${file}.bak"
+            echo "Created backup: ${file}.bak"
+        fi
+        
+        # Fix the file by adding the necessary imports at the top
+        cat > /tmp/temp_header.py << EOF
+import sys
+import os
+# Use custom minimal unsloth implementation
+if "$CUSTOM_UNSLOTH_DIR" not in sys.path:
+    sys.path.insert(0, "$CUSTOM_UNSLOTH_DIR")
+
+EOF
+        
+        # Check if the file already has our custom path
+        if ! grep -q "$CUSTOM_UNSLOTH_DIR" "$file"; then
+            # Add it to the top of the file (after any possible shebang or docstring)
+            if head -1 "$file" | grep -q "^#!"; then
+                # File has shebang, insert after it
+                sed -i.tmp '1r /tmp/temp_header.py' "$file"
+            elif head -10 "$file" | grep -q '"""'; then
+                # File has docstring, need to insert after it
+                # This is more complex, use a Python script
+                python -c "
+import re
+with open('$file', 'r') as f:
+    content = f.read()
+if content.startswith('\"\"\"'):
+    match = re.search(r'^(\"\"\".*?\"\"\")(.*)$', content, re.DOTALL)
+    if match:
+        with open('$file', 'w') as f:
+            docstring, rest = match.groups()
+            with open('/tmp/temp_header.py', 'r') as header:
+                header_content = header.read()
+            f.write(docstring + '\n' + header_content + rest)
+else:
+    with open('$file', 'r') as f:
+        content = f.read()
+    with open('$file', 'w') as f:
+        with open('/tmp/temp_header.py', 'r') as header:
+            header_content = header.read()
+        f.write(header_content + content)
+"
+            else
+                # No shebang or docstring, insert at the top
+                cat /tmp/temp_header.py "$file" > "${file}.new"
+                mv "${file}.new" "$file"
+            fi
+        fi
+        
+        echo "✅ Modified $file to use minimal unsloth"
+    done < /tmp/python_files.txt
+    
+    # Clean up
+    rm -f /tmp/temp_header.py /tmp/python_files.txt
+}
+
+# Main execution flow
+echo "Starting consolidated Unsloth fix..."
+
+# Create minimal unsloth implementation
+if [ ! -d "$CUSTOM_UNSLOTH_DIR" ]; then
+    create_minimal_unsloth
+else
+    echo "Custom unsloth directory already exists at $CUSTOM_UNSLOTH_DIR"
+    echo "Skipping creation step"
+fi
+
+# Apply fixed unsloth to Python files
+apply_fixed_unsloth
+
+# Add the directory to PYTHONPATH
+echo "Adding custom unsloth to PYTHONPATH..."
+export PYTHONPATH="$CUSTOM_UNSLOTH_DIR:$PYTHONPATH"
+echo 'export PYTHONPATH="'$CUSTOM_UNSLOTH_DIR':$PYTHONPATH"' >> ~/.bashrc
+
+# Verify unsloth minimal import
+echo "Verifying minimal unsloth functionality..."
+python -c "
+try:
+    import unsloth
+    print(f'✅ Basic unsloth imports working in compatibility mode')
+    print(f'Unsloth version: {unsloth.__version__}')
+    
+    from unsloth.models import FastLanguageModel
+    print(f'✅ FastLanguageModel imported successfully')
+    
+    # Show available functionality
+    print('\nAvailable unsloth functionality:')
+    funcs = [attr for attr in dir(unsloth) if not attr.startswith('_')]
+    for func in funcs:
+        print(f'- {func}')
+except Exception as e:
+    print(f'❌ Error importing unsloth: {e}')
+    import traceback
+    traceback.print_exc()
+"
 
 echo "================================================================"
-echo "Minimal Unsloth Implementation Created!"
+echo "Unsloth fix complete!"
 echo ""
 echo "To use this unsloth version:"
 echo ""
 echo "1. Add to your PYTHONPATH:"
-echo "   export PYTHONPATH=\"$CUSTOM_DIR:\$PYTHONPATH\""
+echo "   export PYTHONPATH=\"$CUSTOM_UNSLOTH_DIR:\$PYTHONPATH\""
 echo ""
 echo "2. Or use the activation script:"
-echo "   source $CUSTOM_DIR/activate_minimal_unsloth.sh"
+echo "   source $CUSTOM_UNSLOTH_DIR/activate_minimal_unsloth.sh"
 echo ""
 echo "3. Then in your Python code:"
 echo "   import unsloth"
 echo "   from unsloth.models import FastLanguageModel"
-echo ""
-echo "4. Example usage:"
-echo "   model, tokenizer = FastLanguageModel.from_pretrained("
-echo "       'meta-llama/Llama-2-7b-hf',"
-echo "       load_in_4bit=True"
-echo "   )"
-echo "   model = FastLanguageModel.get_peft_model(model)"
-echo ""
-echo "5. You can test with:"
-echo "   python $CUSTOM_DIR/use_minimal_unsloth.py"
-echo "================================================================" 
+echo "================================================================"

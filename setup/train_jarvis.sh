@@ -265,15 +265,23 @@ fi
 if [ "$MODEL_TYPE" = "code" ]; then
     echo "Applying attention mask fix for DeepSeek model..."
 
-    # Make the scripts executable
-    chmod +x setup/fix_transformers_attention_mask.py
-    chmod +x setup/fix_attention_mask_params.py
-    chmod +x setup/fix_tensor_size_mismatch.py
-    chmod +x setup/fix_attention_dimension_mismatch.py
-    chmod +x setup/fix_tuple_unpacking_error.py
-    chmod +x setup/comprehensive_attention_mask_fix.py
-    chmod +x setup/fix_all_attention_issues.py
-    chmod +x setup/ultimate_attention_fix.py
+    # Use the consolidated setup script which includes all attention mask fixes
+    if [ -f "setup/consolidated_unified_setup.sh" ]; then
+        echo "Using consolidated setup script for attention mask fixes..."
+        chmod +x setup/consolidated_unified_setup.sh
+        ./setup/consolidated_unified_setup.sh
+    else
+        # Fallback to individual scripts if consolidated script is not available
+        echo "Falling back to individual attention mask fix scripts..."
+        chmod +x setup/fix_transformers_attention_mask.py
+        chmod +x setup/fix_attention_mask_params.py
+        chmod +x setup/fix_tensor_size_mismatch.py
+        chmod +x setup/fix_attention_dimension_mismatch.py
+        chmod +x setup/fix_tuple_unpacking_error.py
+        chmod +x setup/comprehensive_attention_mask_fix.py
+        chmod +x setup/fix_all_attention_issues.py
+        chmod +x setup/ultimate_attention_fix.py
+    fi
 
     # Try to use the ultimate fix first
     if [ -f "setup/ultimate_attention_fix.py" ]; then

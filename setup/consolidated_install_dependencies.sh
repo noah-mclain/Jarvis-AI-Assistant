@@ -1,0 +1,209 @@
+#!/bin/bash
+
+echo "===================================================================="
+echo "Jarvis AI Assistant - Consolidated Dependencies Installation"
+echo "===================================================================="
+
+# Stop on errors
+set -e
+
+# Detect environment
+IN_COLAB=0
+IN_PAPERSPACE=0
+if python -c "import google.colab" 2>/dev/null; then
+    echo "Running in Google Colab environment"
+    IN_COLAB=1
+elif [ -d "/notebooks" ] || [ -d "/storage" ]; then
+    echo "Running in Paperspace environment"
+    IN_PAPERSPACE=1
+else
+    echo "Running in standard environment"
+fi
+
+# Function to install a package with version constraint
+install_package() {
+    package=$1
+    version=$2
+    options=$3
+    
+    echo "Installing $package $version..."
+    
+    if [ -z "$version" ]; then
+        pip install "$package" --no-deps $options
+        pip install "$package" $options
+    else
+        pip install "$package$version" --no-deps $options
+        pip install "$package$version" $options
+    fi
+    
+    # Check if installation was successful
+    if python -c "import $package" 2>/dev/null; then
+        echo "✅ $package installed successfully"
+    else
+        echo "⚠️ $package installation may have issues"
+    fi
+}
+
+# Check if CUDA is available
+echo "Checking for CUDA availability..."
+if ! python -c "import torch; print(torch.cuda.is_available())" 2>/dev/null | grep -q "True"; then
+    echo "❌ ERROR: CUDA is not available. This setup requires CUDA."
+    exit 1
+fi
+
+# Get CUDA version
+CUDA_VERSION=$(python -c "import torch; print(torch.version.cuda)")
+echo "CUDA Version: $CUDA_VERSION"
+
+# Check PyTorch version
+TORCH_VERSION=$(python -c "import torch; print(torch.__version__)")
+echo "PyTorch Version: $TORCH_VERSION"
+
+# Set LD_LIBRARY_PATH for CUDA libraries
+echo "Setting up CUDA library paths..."
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/lib64-nvidia
+echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/lib64-nvidia' >> ~/.bashrc
+
+# 1. Install core dependencies
+echo "Installing core dependencies with specific compatible versions..."
+
+# 1.1 NumPy 1.26.4 (crucial for compatibility)
+echo "Installing NumPy 1.26.4 (foundation package)..."
+pip install numpy==1.26.4 --no-deps --force-reinstall
+pip install numpy==1.26.4 --force-reinstall
+
+# Verify NumPy installation
+if ! python -c "import numpy; print(f'NumPy version: {numpy.__version__}'); exit(0 if numpy.__version__ == '1.26.4' else 1)"; then
+    echo "ERROR: NumPy 1.26.4 installation failed. Cannot continue."
+    exit 1
+else
+    echo "✅ NumPy 1.26.4 successfully installed!"
+fi
+
+# 1.2 Install PyTorch 2.1.2 with CUDA 12.1 (verified compatible version)
+echo "Installing PyTorch 2.1.2 with CUDA 12.1 support..."
+pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --extra-index-url https://download.pytorch.org/whl/cu121
+
+# 1.3 Install core scientific packages
+echo "Installing core scientific packages..."
+pip install scipy==1.12.0 matplotlib==3.8.3 pandas==2.2.0
+
+# 1.4 Install utility packages required by transformers ecosystem
+pip install filelock==3.12.2 requests==2.31.0 tqdm==4.66.1
+pip install pyyaml==6.0.1 typing-extensions==4.8.0 packaging==23.1
+pip install fsspec==2023.6.0 psutil==5.9.5 ninja==1.11.1
+pip install markdown protobuf\<4.24 werkzeug
+
+# 1.5 Hugging Face ecosystem - in exact order for compatibility
+echo "Installing Hugging Face ecosystem..."
+pip install safetensors==0.4.0
+pip install huggingface-hub==0.19.4 --no-deps
+pip install huggingface-hub==0.19.4  # Second install pulls in compatible dependencies
+
+pip install tokenizers==0.14.0 --no-deps
+pip install tokenizers==0.14.0
+
+pip install transformers==4.36.2 --no-deps
+pip install transformers==4.36.2  # Second install pulls in compatible dependencies
+
+pip install peft==0.6.0 --no-deps
+pip install peft==0.6.0
+
+pip install accelerate==0.25.0 --no-deps
+pip install accelerate==0.25.0
+
+pip install datasets==2.14.5 --no-deps
+pip install datasets==2.14.5
+
+pip install trl==0.7.4 --no-deps
+pip install trl==0.7.4
+
+pip install einops==0.7.0
+
+# 1.6 Install optimization libraries with exact versions
+echo "Installing optimization libraries..."
+pip install bitsandbytes==0.41.0
+pip install triton==2.1.0
+
+# 2. Install xFormers with enhanced attention support
+echo "Installing xFormers with enhanced attention support..."
+pip install xformers==0.0.23.post1 --index-url https://download.pytorch.org/whl/cu121 --no-deps
+pip install xformers==0.0.23.post1 --index-url https://download.pytorch.org/whl/cu121
+
+# 3. Install additional dependencies for enhanced attention mechanisms
+echo "Installing additional dependencies for enhanced attention mechanisms..."
+pip install einops==0.7.0 --no-deps  # Required for attention operations
+pip install opt_einsum==3.3.0 --no-deps  # Optimized einsum operations for attention
+
+# 4. Install unsloth (version 2024.8 is confirmed to work with this setup)
+echo "Installing unsloth dependencies..."
+pip install sentencepiece==0.1.99
+pip install unsloth==2024.8 --no-deps
+
+# 5. Install Flash Attention 2.5.5 with proper dependency handling
+echo "Installing Flash Attention 2.5.5..."
+pip install packaging ninja --no-deps  # Ensure these are available
+pip install flash-attn==2.5.5 --no-build-isolation --no-deps
+
+# Verify Flash Attention installation
+if python -c "import flash_attn; print(f'Flash Attention version: {flash_attn.__version__}')"; then
+    echo "✅ Flash Attention 2.5.5 successfully installed!"
+else
+    echo "⚠️ Flash Attention installation failed. Trying alternative method..."
+    pip install flash-attn==2.5.5 --no-build-isolation
+    
+    # Verify again
+    if python -c "import flash_attn; print(f'Flash Attention version: {flash_attn.__version__}')"; then
+        echo "✅ Flash Attention successfully installed with alternative method!"
+    else
+        echo "⚠️ Flash Attention installation failed after multiple attempts."
+    fi
+fi
+
+# 6. Install additional dependencies
+echo "Installing additional dependencies..."
+install_package "markdown" ""
+pip install "protobuf<4.24" --no-deps
+pip install "protobuf<4.24"
+echo "✅ protobuf<4.24 installed"
+install_package "werkzeug" ""
+install_package "pandas" "==2.2.0"
+install_package "huggingface_hub" "==0.19.4"
+
+# Verify installations
+echo "Verifying installations..."
+
+# Check xFormers
+python -c "
+try:
+    import xformers
+    import xformers.ops
+    print(f'xFormers version: {xformers.__version__ if hasattr(xformers, \"__version__\") else \"installed\"}')
+    print('✅ xFormers successfully imported')
+except Exception as e:
+    print(f'❌ xFormers error: {e}')
+"
+
+# Check einops
+python -c "
+try:
+    import einops
+    print(f'einops version: {einops.__version__ if hasattr(einops, \"__version__\") else \"installed\"}')
+    print('✅ einops successfully imported')
+except Exception as e:
+    print(f'❌ einops error: {e}')
+"
+
+# Check opt_einsum
+python -c "
+try:
+    import opt_einsum
+    print(f'opt_einsum version: {opt_einsum.__version__ if hasattr(opt_einsum, \"__version__\") else \"installed\"}')
+    print('✅ opt_einsum successfully imported')
+except Exception as e:
+    print(f'❌ opt_einsum error: {e}')
+"
+
+echo "===================================================================="
+echo "All dependencies installed successfully!"
+echo "===================================================================="

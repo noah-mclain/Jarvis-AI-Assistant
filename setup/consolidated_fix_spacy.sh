@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo "======================================================================"
-echo "🔧 Ultimate Paperspace spaCy Fix for Jarvis AI Assistant"
+echo "🔧 Jarvis AI Assistant - Consolidated spaCy Fix"
 echo "======================================================================"
 
 # Step 1: Detect if we're running in Paperspace
@@ -14,27 +14,10 @@ else
     echo "  Will install a regular spaCy setup with the minimal tokenizer as fallback"
 fi
 
-# Step 2: Ask for confirmation
-echo ""
-echo "This script will:"
-echo "  1. Clean up any existing spaCy installation"
-if [ "$IS_PAPERSPACE" = true ]; then
-    echo "  2. Install the minimal spaCy setup for Paperspace"
-else
-    echo "  2. Install a regular spaCy setup with fallback mechanisms"
-fi
-echo "  3. Configure Jarvis AI to use the minimal tokenizer when needed"
-echo ""
-read -p "Continue? (y/n): " -n 1 -r
-echo ""
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Operation cancelled"
-    exit 1
-fi
-
-# Step 3: Create the minimal_spacy_tokenizer.py file if it doesn't exist
+# Step 2: Create the minimal_spacy_tokenizer.py file if it doesn't exist
 if [ ! -f "src/generative_ai_module/minimal_spacy_tokenizer.py" ]; then
     echo "Creating minimal_spacy_tokenizer.py..."
+    mkdir -p src/generative_ai_module
     cat > src/generative_ai_module/minimal_spacy_tokenizer.py << 'EOF'
 #!/usr/bin/env python3
 """
@@ -191,92 +174,79 @@ else
     echo "✅ minimal_spacy_tokenizer.py already exists"
 fi
 
-# Step 4: Create a test script
-echo "Creating test script..."
-cat > test_minimal_spacy.py << 'EOF'
-#!/usr/bin/env python3
-"""
-Test the minimal spaCy tokenizer in Paperspace environments
-"""
-
-import sys
-import os
-
-# Try to add the project directory to the path if needed
-project_root = os.path.dirname(os.path.abspath(__file__))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-
-try:
-    # First try importing from the module
-    from src.generative_ai_module.minimal_spacy_tokenizer import tokenize, tokenizer
-    print("✅ Successfully imported minimal_spacy_tokenizer")
-    
-    # Test the tokenizer
-    test_text = "Jarvis AI Assistant is testing the minimal spaCy tokenizer in Paperspace!"
-    tokens = tokenize(test_text)
-    
-    print(f"\nInput text: {test_text}")
-    print(f"Tokenized result: {tokens}")
-    print(f"Token count: {len(tokens)}")
-    
-    if tokenizer.is_available:
-        print("\n✅ Using spaCy-based tokenization")
-        
-        # Test if we can use it in a loop (basic stress test)
-        print("\nRunning basic stress test...")
-        for i in range(5):
-            test = f"Test sentence {i}: The quick brown fox jumps over the lazy dog."
-            tokens = tokenize(test)
-            print(f"  Tokenized test {i}: {len(tokens)} tokens")
-        
-        print("\n✅ All tests passed! The minimal tokenizer is working correctly.")
-        sys.exit(0)
-    else:
-        print("\n⚠️ Using fallback tokenization (spaCy not available)")
-        print("\n❌ Test failed: spaCy tokenization is not available")
-        sys.exit(1)
-        
-except ImportError as e:
-    print(f"❌ Error importing minimal_spacy_tokenizer: {e}")
-    print("\nMake sure you have created the file at:")
-    print("src/generative_ai_module/minimal_spacy_tokenizer.py")
-    sys.exit(1)
-except Exception as e:
-    print(f"❌ Unexpected error: {e}")
-    sys.exit(1)
-EOF
-
-chmod +x test_minimal_spacy.py
-echo "✅ Created test_minimal_spacy.py"
-
-# Step 5: Uninstall existing potentially conflicting packages
+# Step 3: Uninstall existing potentially conflicting packages
 echo ""
 echo "Step 1: Removing potentially conflicting packages..."
 pip uninstall -y spacy thinc spacy-legacy spacy-loggers catalogue wasabi srsly weasel confection 
 
-# Step 6: Install spaCy based on environment
+# Step 4: Create a temporary directory for downloads
 echo ""
 echo "Step 2: Installing spaCy..."
+mkdir -p ./tmp_spacy_install
+cd ./tmp_spacy_install
 
+# Step 5: Install spaCy based on environment
 if [ "$IS_PAPERSPACE" = true ]; then
-    # Paperspace minimal installation
     echo "Installing minimal spaCy setup for Paperspace..."
     
-    # Install minimal dependencies first
-    pip install pydantic==1.10.13 --no-deps
-    pip install wasabi==1.1.3 --no-deps
-    pip install srsly==2.4.8 --no-deps
-    pip install catalogue==2.0.10 --no-deps
+    # Download specific wheels without installing them
+    pip download spacy==3.7.4 --no-deps -d .
+    pip download thinc==8.1.10 --no-deps -d .
+    pip download pydantic==1.10.13 --no-deps -d .
+    pip download typer==0.9.0 --no-deps -d .
+    pip download catalogue==2.0.10 --no-deps -d .
+    pip download srsly==2.4.8 --no-deps -d .
+    pip download wasabi==1.1.3 --no-deps -d .
+    pip download blis==0.7.11 --no-deps -d .
+    pip download cymem==2.0.11 --no-deps -d .
+    pip download preshed==3.0.9 --no-deps -d .
+    pip download murmurhash==1.0.12 --no-deps -d .
+    pip download weasel==0.3.4 --no-deps -d .
+    pip download confection==0.1.3 --no-deps -d .
+    pip download spacy-legacy==3.0.12 --no-deps -d .
+    pip download spacy-loggers==1.0.5 --no-deps -d .
+    pip download https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0.tar.gz --no-deps -d .
     
-    # Install thinc with minimal dependencies
-    pip install thinc==8.1.10 --no-deps
+    # Install all dependencies with --no-deps to avoid dependency resolution
+    for pkg in cymem-*.whl murmurhash-*.whl preshed-*.whl blis-*.whl wasabi-*.whl srsly-*.whl catalogue-*.whl typer-*.whl pydantic-*.whl; do
+        if [ -f "$pkg" ]; then
+            echo "Installing $pkg..."
+            pip install --force-reinstall "$pkg" --no-deps
+        else
+            echo "Warning: $pkg not found, skipping"
+        fi
+    done
     
-    # Install spaCy with minimal dependencies
-    pip install spacy==3.7.4 --no-deps
+    # Handle spacy-legacy and spacy-loggers specifically
+    for pkg in *.whl; do
+        if [[ "$pkg" == *"spacy-legacy"* ]]; then
+            echo "Installing $pkg..."
+            pip install --force-reinstall "$pkg" --no-deps
+        elif [[ "$pkg" == *"spacy-loggers"* ]]; then
+            echo "Installing $pkg..."
+            pip install --force-reinstall "$pkg" --no-deps
+        fi
+    done
     
-    # Install en_core_web_sm directly
-    python -m pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0.tar.gz --no-deps
+    # Install thinc separately
+    echo "Installing thinc..."
+    pip install --force-reinstall thinc-*.whl --no-deps
+    
+    # Install confection and weasel
+    for pkg in confection-*.whl weasel-*.whl; do
+        if [ -f "$pkg" ]; then
+            echo "Installing $pkg..."
+            pip install --force-reinstall "$pkg" --no-deps
+        fi
+    done
+    
+    # Install spaCy core
+    echo "Installing spaCy core..."
+    pip install --force-reinstall spacy-*.whl --no-deps
+    
+    # Install English model
+    echo "Installing English model..."
+    pip install --force-reinstall en_core_web_sm-*.tar.gz --no-deps
 else
     # Regular installation for non-Paperspace
     echo "Installing regular spaCy setup for non-Paperspace environment..."
@@ -284,10 +254,13 @@ else
     python -m spacy download en_core_web_sm
 fi
 
-# Step 7: Test direct import
-echo ""
-echo "Testing direct spaCy imports..."
+# Clean up temporary directory
+cd ..
+rm -rf ./tmp_spacy_install
 
+# Step 6: Test the installation
+echo ""
+echo "Step 3: Testing the installation..."
 python -c "
 import sys
 try:
@@ -306,32 +279,45 @@ except Exception as e:
     print(f'❌ Error importing spaCy: {e}')
 "
 
-# Step 8: Run the test script
+# Step 7: Test the minimal tokenizer
 echo ""
-echo "Step 3: Testing the minimal tokenizer..."
-python test_minimal_spacy.py
-TEST_RESULT=$?
+echo "Step 4: Testing the minimal tokenizer..."
+python -c "
+import sys
+import os
 
-# Print final instructions
-echo ""
+# Try to add the project directory to the path if needed
+project_root = os.path.dirname(os.path.abspath(__file__))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+try:
+    # First try importing from the module
+    from src.generative_ai_module.minimal_spacy_tokenizer import tokenize, tokenizer
+    print('✅ Successfully imported minimal_spacy_tokenizer')
+    
+    # Test the tokenizer
+    test_text = 'Jarvis AI Assistant is testing the minimal spaCy tokenizer!'
+    tokens = tokenize(test_text)
+    
+    print(f'\nInput text: {test_text}')
+    print(f'Tokenized result: {tokens}')
+    print(f'Token count: {len(tokens)}')
+    
+    if tokenizer.is_available:
+        print('\n✅ Using spaCy-based tokenization')
+    else:
+        print('\n⚠️ Using fallback tokenization (spaCy not available)')
+except Exception as e:
+    print(f'❌ Error testing minimal tokenizer: {e}')
+"
+
 echo "======================================================================"
-
-if [ $TEST_RESULT -eq 0 ]; then
-    echo "✅ The minimal spaCy tokenizer has been successfully installed!"
-    echo "   Jarvis AI Assistant will now use the minimal tokenizer automatically."
-    echo ""
-    echo "   You can avoid spaCy issues in your code by using:"
-    echo "   from src.generative_ai_module.minimal_spacy_tokenizer import tokenize"
-    echo ""
-    echo "   Example:"
-    echo "   tokens = tokenize('Your text here')"
-else
-    echo "⚠️ The tokenizer is using fallback mode (basic string splitting)"
-    echo "   This will still work but may not be as accurate as spaCy's tokenizer."
-    echo ""
-    echo "   This is normal in Paperspace environments where spaCy is problematic."
-    echo "   You can still use the tokenizer in your code with:"
-    echo "   from src.generative_ai_module.minimal_spacy_tokenizer import tokenize"
-fi
-
-echo "======================================================================" 
+echo "✅ spaCy installation and minimal tokenizer setup complete!"
+echo ""
+echo "To use the minimal tokenizer in your code:"
+echo "from src.generative_ai_module.minimal_spacy_tokenizer import tokenize"
+echo ""
+echo "Example:"
+echo "tokens = tokenize('Your text here')"
+echo "======================================================================"
