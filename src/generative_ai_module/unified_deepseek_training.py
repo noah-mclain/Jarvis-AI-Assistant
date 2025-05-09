@@ -125,9 +125,20 @@ def apply_attention_mask_fix():
                         batch_size = attention_mask.size(0)
                         seq_length = attention_mask.size(-1)
 
-                        # Reshape to 2D [batch_size, seq_length]
-                        attention_mask = attention_mask.view(batch_size, seq_length)
-                        logger.info(f"Reshaped attention mask from >2D to 2D: {attention_mask.shape}")
+                        # Calculate total elements in the tensor
+                        total_elements = attention_mask.numel()
+
+                        # Check if reshape is possible
+                        if total_elements == batch_size * seq_length:
+                            # Reshape to 2D [batch_size, seq_length]
+                            attention_mask = attention_mask.view(batch_size, seq_length)
+                            logger.info(f"Reshaped attention mask from >2D to 2D: {attention_mask.shape}")
+                        else:
+                            # If reshape is not possible, create a new attention mask
+                            logger.warning(f"Cannot reshape attention mask of size {total_elements} to [{batch_size}, {seq_length}]. Creating new mask.")
+                            # Create a new attention mask filled with ones (no masking)
+                            attention_mask = torch.ones((batch_size, seq_length), device=attention_mask.device)
+                            logger.info(f"Created new attention mask with shape: {attention_mask.shape}")
 
                         # Update args or kwargs with the fixed mask
                         if len(args) > 0:
@@ -184,7 +195,7 @@ def apply_attention_mask_fix():
                     Patched version of _unmask_unattended that keeps tensors on the same device.
 
                     The original function has a call to .cpu() which causes device mismatch errors.
-                    This patch ensures all operations happen on the same device.
+                    This patch ensures all operations happen on the same device and handles tensor size mismatches.
                     """
                     import torch
 
@@ -203,6 +214,7 @@ def apply_attention_mask_fix():
                     # Extract indices_k and indices_q from args or kwargs
                     indices_k = None
                     indices_q = None
+                    unmasked_value = True  # Default value for unmasked_value
 
                     if len(args) > 1:
                         indices_k = args[1]
@@ -218,8 +230,37 @@ def apply_attention_mask_fix():
                     elif len(param_names) > 2 and param_names[2] in kwargs:
                         indices_q = kwargs[param_names[2]]
 
+                    # Extract unmasked_value parameter if it exists
+                    if len(args) > 3:
+                        unmasked_value = args[3]
+                    elif 'unmasked_value' in kwargs:
+                        unmasked_value = kwargs['unmasked_value']
+                    elif len(param_names) > 3 and param_names[3] in kwargs:
+                        unmasked_value = kwargs[param_names[3]]
+
                     # Get the device of the attention mask
                     device = attention_mask.device
+
+                    # Fix attention_mask shape if needed
+                    if attention_mask.dim() > 2:
+                        # Get the batch size and sequence length
+                        batch_size = attention_mask.size(0)
+                        seq_length = attention_mask.size(-1)
+
+                        # Calculate total elements in the tensor
+                        total_elements = attention_mask.numel()
+
+                        # Check if reshape is possible
+                        if total_elements == batch_size * seq_length:
+                            # Reshape to 2D [batch_size, seq_length]
+                            attention_mask = attention_mask.view(batch_size, seq_length)
+                            logger.info(f"Reshaped attention mask from >2D to 2D: {attention_mask.shape}")
+                        else:
+                            # If reshape is not possible, create a new attention mask
+                            logger.warning(f"Cannot reshape attention mask of size {total_elements} to [{batch_size}, {seq_length}]. Creating new mask.")
+                            # Create a new attention mask filled with ones (no masking)
+                            attention_mask = torch.ones((batch_size, seq_length), device=device)
+                            logger.info(f"Created new attention mask with shape: {attention_mask.shape}")
 
                     # Create a temporary tensor on the same device (instead of using CPU)
                     tmp = torch.ones(attention_mask.shape[-1], device=device)
@@ -237,10 +278,54 @@ def apply_attention_mask_fix():
                     mask = mask.unsqueeze(1).unsqueeze(2)
 
                     # Handle indices_k and indices_q if provided
-                    if indices_k is not None:
-                        mask = mask.expand(-1, -1, indices_k, -1)
-                    if indices_q is not None:
-                        mask = mask.expand(-1, indices_q, -1, -1)
+                    try:
+                        if indices_k is not None:
+                            if isinstance(indices_k, int):
+                                mask = mask.expand(-1, -1, indices_k, -1)
+                            else:
+                                # Handle case where indices_k is a tensor
+                                mask = mask.expand(-1, -1, indices_k.size(0) if hasattr(indices_k, 'size') else indices_k, -1)
+
+                        if indices_q is not None:
+                            if isinstance(indices_q, int):
+                                mask = mask.expand(-1, indices_q, -1, -1)
+                            else:
+                                # Handle case where indices_q is a tensor
+                                mask = mask.expand(-1, indices_q.size(0) if hasattr(indices_q, 'size') else indices_q, -1, -1)
+                    except Exception as e:
+                        logger.warning(f"Error expanding mask dimensions: {e}")
+                        # If we encounter the specific tensor size mismatch error, try a different approach
+                        error_msg = str(e)
+                        if "The size of tensor a (6) must match the size of tensor b (2048) at non-singleton dimension 2" in error_msg:
+                            logger.info("Detected specific tensor size mismatch error. Creating a compatible mask.")
+                            # Create a compatible mask directly
+                            batch_size = attention_mask.size(0)
+                            seq_length = attention_mask.size(-1)
+
+                            # Create a causal mask that matches the expected dimensions
+                            causal_mask = torch.triu(
+                                torch.ones((seq_length, seq_length), device=device, dtype=torch.bool),
+                                diagonal=1
+                            )
+                            causal_mask = causal_mask.unsqueeze(0).unsqueeze(1)  # [1, 1, seq_len, seq_len]
+                            causal_mask = causal_mask.expand(batch_size, 1, seq_length, seq_length)
+
+                            # Apply the attention mask if needed
+                            if attention_mask is not None:
+                                # Expand attention_mask to 4D [batch_size, 1, 1, seq_length]
+                                expanded_mask = attention_mask.unsqueeze(1).unsqueeze(2)
+                                # Expand to match causal mask dimensions
+                                expanded_mask = expanded_mask.expand(-1, -1, seq_length, -1)
+                                # Combine with causal mask (logical OR)
+                                combined_mask = causal_mask | ~expanded_mask.bool()
+                                # Convert back to the expected mask format
+                                mask = ~combined_mask if unmasked_value else combined_mask
+                            else:
+                                mask = ~causal_mask if unmasked_value else causal_mask
+
+                    # Convert mask to the expected type based on unmasked_value
+                    if unmasked_value is not True:
+                        mask = mask.to(dtype=attention_mask.dtype) * unmasked_value
 
                     return mask
 

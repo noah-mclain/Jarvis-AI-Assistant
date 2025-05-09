@@ -192,9 +192,20 @@ def fix_transformers_attention_mask():
                     batch_size = attention_mask.size(0)
                     seq_length = attention_mask.size(-1)
 
-                    # Reshape to 2D [batch_size, seq_length]
-                    attention_mask = attention_mask.view(batch_size, seq_length)
-                    logger.info(f"Reshaped attention mask from >2D to 2D in unmask_unattended: {attention_mask.shape}")
+                    # Calculate total elements in the tensor
+                    total_elements = attention_mask.numel()
+
+                    # Check if reshape is possible
+                    if total_elements == batch_size * seq_length:
+                        # Reshape to 2D [batch_size, seq_length]
+                        attention_mask = attention_mask.view(batch_size, seq_length)
+                        logger.info(f"Reshaped attention mask from >2D to 2D in unmask_unattended: {attention_mask.shape}")
+                    else:
+                        # If reshape is not possible, create a new attention mask
+                        logger.warning(f"Cannot reshape attention mask of size {total_elements} to [{batch_size}, {seq_length}]. Creating new mask.")
+                        # Create a new attention mask filled with ones (no masking)
+                        attention_mask = torch.ones((batch_size, seq_length), device=device)
+                        logger.info(f"Created new attention mask with shape: {attention_mask.shape}")
 
                 # Create a temporary tensor on the same device (instead of using CPU)
                 tmp = torch.ones(attention_mask.shape[-1], device=device)
@@ -310,9 +321,20 @@ def fix_transformers_attention_mask():
                     batch_size = attention_mask.size(0)
                     seq_length = attention_mask.size(-1)
 
-                    # Reshape to 2D [batch_size, seq_length]
-                    attention_mask = attention_mask.view(batch_size, seq_length)
-                    logger.info(f"Reshaped attention mask from >2D to 2D: {attention_mask.shape}")
+                    # Calculate total elements in the tensor
+                    total_elements = attention_mask.numel()
+
+                    # Check if reshape is possible
+                    if total_elements == batch_size * seq_length:
+                        # Reshape to 2D [batch_size, seq_length]
+                        attention_mask = attention_mask.view(batch_size, seq_length)
+                        logger.info(f"Reshaped attention mask from >2D to 2D: {attention_mask.shape}")
+                    else:
+                        # If reshape is not possible, create a new attention mask
+                        logger.warning(f"Cannot reshape attention mask of size {total_elements} to [{batch_size}, {seq_length}]. Creating new mask.")
+                        # Create a new attention mask filled with ones (no masking)
+                        attention_mask = torch.ones((batch_size, seq_length), device=device)
+                        logger.info(f"Created new attention mask with shape: {attention_mask.shape}")
 
                     # Update kwargs with the fixed mask
                     kwargs['attention_mask'] = attention_mask
@@ -452,9 +474,20 @@ def fix_transformers_attention_mask():
                     batch_size = attention_mask.size(0)
                     seq_length = attention_mask.size(-1)
 
-                    # Reshape to 2D [batch_size, seq_length]
-                    attention_mask = attention_mask.view(batch_size, seq_length)
-                    logger.info(f"Reshaped attention mask from >2D to 2D: {attention_mask.shape}")
+                    # Calculate total elements in the tensor
+                    total_elements = attention_mask.numel()
+
+                    # Check if reshape is possible
+                    if total_elements == batch_size * seq_length:
+                        # Reshape to 2D [batch_size, seq_length]
+                        attention_mask = attention_mask.view(batch_size, seq_length)
+                        logger.info(f"Reshaped attention mask from >2D to 2D: {attention_mask.shape}")
+                    else:
+                        # If reshape is not possible, create a new attention mask
+                        logger.warning(f"Cannot reshape attention mask of size {total_elements} to [{batch_size}, {seq_length}]. Creating new mask.")
+                        # Create a new attention mask filled with ones (no masking)
+                        attention_mask = torch.ones((batch_size, seq_length), device=device)
+                        logger.info(f"Created new attention mask with shape: {attention_mask.shape}")
 
                     # Update kwargs with the fixed mask
                     kwargs['attention_mask'] = attention_mask

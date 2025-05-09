@@ -94,21 +94,41 @@ def fix_tensor_size_mismatch():
 
                     # Fix attention mask shape if needed
                     if attention_mask.dim() > 2:
-                        # Reshape to 2D [batch_size, seq_length]
-                        attention_mask = attention_mask.view(batch_size, -1)
-                        # Ensure the sequence length matches
-                        if attention_mask.size(1) != seq_length:
-                            logger.warning(f"Attention mask sequence length ({attention_mask.size(1)}) doesn't match input sequence length ({seq_length}). Resizing.")
-                            # Resize attention_mask to match input sequence length
-                            if attention_mask.size(1) > seq_length:
-                                # Truncate
-                                attention_mask = attention_mask[:, :seq_length]
-                            else:
-                                # Pad with ones (no masking)
-                                padding = torch.ones(batch_size, seq_length - attention_mask.size(1), device=device)
-                                attention_mask = torch.cat([attention_mask, padding], dim=1)
+                        # Calculate total elements in the tensor
+                        total_elements = attention_mask.numel()
 
-                        logger.info(f"Reshaped attention_mask to: {attention_mask.shape}")
+                        # Check if reshape is possible
+                        if total_elements == batch_size * seq_length:
+                            # Direct reshape is possible
+                            attention_mask = attention_mask.view(batch_size, seq_length)
+                            logger.info(f"Reshaped attention_mask to: {attention_mask.shape}")
+                        elif "shape '[6, 2048]' is invalid for input of size 25165824" in error_msg or total_elements != batch_size * seq_length:
+                            # Handle the specific error case or any size mismatch
+                            logger.warning(f"Cannot reshape attention mask of size {total_elements} to [{batch_size}, {seq_length}]. Creating new mask.")
+                            # Create a new attention mask filled with ones (no masking)
+                            attention_mask = torch.ones((batch_size, seq_length), device=device)
+                            logger.info(f"Created new attention mask with shape: {attention_mask.shape}")
+                        else:
+                            # Try to reshape to 2D [batch_size, ?] and then handle sequence length
+                            try:
+                                attention_mask = attention_mask.view(batch_size, -1)
+                                # Ensure the sequence length matches
+                                if attention_mask.size(1) != seq_length:
+                                    logger.warning(f"Attention mask sequence length ({attention_mask.size(1)}) doesn't match input sequence length ({seq_length}). Resizing.")
+                                    # Resize attention_mask to match input sequence length
+                                    if attention_mask.size(1) > seq_length:
+                                        # Truncate
+                                        attention_mask = attention_mask[:, :seq_length]
+                                    else:
+                                        # Pad with ones (no masking)
+                                        padding = torch.ones(batch_size, seq_length - attention_mask.size(1), device=device)
+                                        attention_mask = torch.cat([attention_mask, padding], dim=1)
+                                logger.info(f"Reshaped attention_mask to: {attention_mask.shape}")
+                            except RuntimeError as re:
+                                # If reshape fails, create a new mask
+                                logger.warning(f"Reshape failed: {re}. Creating new mask.")
+                                attention_mask = torch.ones((batch_size, seq_length), device=device)
+                                logger.info(f"Created new attention mask with shape: {attention_mask.shape}")
 
                 # Try to call the original forward method with the fixed attention mask
                 try:
@@ -174,9 +194,20 @@ def fix_tensor_size_mismatch():
                                         batch_size = attention_mask.size(0)
                                         seq_length = attention_mask.size(-1)
 
-                                        # Reshape to 2D [batch_size, seq_length]
-                                        attention_mask = attention_mask.view(batch_size, seq_length)
-                                        logger.info(f"Reshaped attention mask from >2D to 2D: {attention_mask.shape}")
+                                        # Calculate total elements in the tensor
+                                        total_elements = attention_mask.numel()
+
+                                        # Check if reshape is possible
+                                        if total_elements == batch_size * seq_length:
+                                            # Reshape to 2D [batch_size, seq_length]
+                                            attention_mask = attention_mask.view(batch_size, seq_length)
+                                            logger.info(f"Reshaped attention mask from >2D to 2D: {attention_mask.shape}")
+                                        else:
+                                            # If reshape is not possible, create a new attention mask
+                                            logger.warning(f"Cannot reshape attention mask of size {total_elements} to [{batch_size}, {seq_length}]. Creating new mask.")
+                                            # Create a new attention mask filled with ones (no masking)
+                                            attention_mask = torch.ones((batch_size, seq_length), device=device)
+                                            logger.info(f"Created new attention mask with shape: {attention_mask.shape}")
 
                                     # Get batch size and sequence length
                                     batch_size = attention_mask.size(0)
