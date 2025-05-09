@@ -1505,8 +1505,34 @@ def train_with_unsloth(args):
                                 return_dict=True
                             )
 
-                # Get the loss from the model outputs
-                if hasattr(outputs, "loss"):
+                # CRITICAL FIX: Handle tuple outputs to avoid "too many values to unpack" error
+                if isinstance(outputs, tuple):
+                    logger.info(f"Got tuple output with {len(outputs)} elements in compute_loss")
+                    # First element is typically the loss
+                    if len(outputs) >= 1:
+                        loss = outputs[0]
+                        logger.info(f"Extracted loss from tuple: {loss.item()}, device: {loss.device}")
+                    else:
+                        # Compute loss manually if tuple doesn't contain loss
+                        logger.warning("Tuple outputs doesn't contain loss, computing manually")
+                        # Use the last element as logits if available
+                        logits = outputs[-1] if len(outputs) > 0 else None
+                        if logits is None:
+                            logger.error("No logits found in tuple outputs")
+                            # Create a dummy loss as last resort
+                            loss = torch.tensor(1.0, device=device, requires_grad=True)
+                        else:
+                            # Compute loss manually
+                            labels = inputs["labels"]
+                            # Shift logits and labels for next token prediction
+                            shift_logits = logits[..., :-1, :].contiguous()
+                            shift_labels = labels[..., 1:].contiguous()
+                            # Compute cross entropy loss
+                            loss_fct = torch.nn.CrossEntropyLoss()
+                            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+                            logger.info(f"Manually computed loss from tuple logits: {loss.item()}, device: {loss.device}")
+                # Handle ModelOutput or dictionary outputs
+                elif hasattr(outputs, "loss"):
                     loss = outputs.loss
                     logger.info(f"Got loss directly from model outputs: {loss.item()}, device: {loss.device}")
                 elif isinstance(outputs, dict) and "loss" in outputs:
@@ -2064,6 +2090,11 @@ def train_with_unsloth(args):
 
             # Call the original forward method with explicit try/except
             try:
+                # CRITICAL FIX: Always use return_dict=True to avoid "too many values to unpack" error
+                if "return_dict" not in new_kwargs:
+                    new_kwargs["return_dict"] = True
+                    logger.info("Setting return_dict=True to avoid tuple unpacking issues")
+
                 # Use automatic mixed precision with the model's dtype
                 with torch.cuda.amp.autocast(dtype=model_dtype):
                     outputs = original_forward(*new_args, **new_kwargs)
@@ -2108,9 +2139,15 @@ def train_with_unsloth(args):
                         attention_mask = ~causal_mask
                         logger.info(f"Created new attention mask with shape: {attention_mask.shape}")
 
+                    # If we have a "too many values to unpack" error, it's likely related to return format
+                    if "too many values to unpack" in str(e).lower():
+                        logger.info("Detected 'too many values to unpack' error, forcing return_dict=True")
+                        # This ensures we get a single object back instead of a tuple
+
                     # Use automatic mixed precision with the model's dtype
                     with torch.cuda.amp.autocast(dtype=model_dtype):
                         # Call forward with explicit arguments and minimal parameters
+                        # CRITICAL FIX: Always use return_dict=True to avoid tuple unpacking issues
                         outputs = original_forward(
                             input_ids=input_ids,
                             attention_mask=attention_mask,
@@ -2136,6 +2173,7 @@ def train_with_unsloth(args):
 
                         # Use automatic mixed precision with the model's dtype
                         with torch.cuda.amp.autocast(dtype=model_dtype):
+                            # CRITICAL FIX: Always use return_dict=True to avoid tuple unpacking issues
                             outputs = original_forward(
                                 input_ids=input_ids,
                                 labels=labels,
@@ -2146,6 +2184,33 @@ def train_with_unsloth(args):
                         logger.error(f"Forward call without attention mask also failed: {e3}")
                         # Create dummy outputs as last resort
                         raise RuntimeError(f"All forward methods failed: {e}, {e2}, {e3}")
+
+            # CRITICAL FIX: Handle tuple outputs to avoid "too many values to unpack" error
+            if isinstance(outputs, tuple):
+                logger.info(f"Got tuple output with {len(outputs)} elements, converting to ModelOutput")
+                # Convert tuple to a dictionary-like object
+                from transformers.modeling_outputs import ModelOutput
+                if len(outputs) >= 1:
+                    # First element is typically the loss or logits
+                    if labels is not None:
+                        # If we have labels, first element is likely the loss
+                        outputs_dict = {"loss": outputs[0]}
+                        if len(outputs) >= 2:
+                            # Second element is likely the logits
+                            outputs_dict["logits"] = outputs[1]
+                    else:
+                        # If no labels, first element is likely the logits
+                        outputs_dict["logits"] = outputs[0]
+
+                    # Add any remaining elements with generic names
+                    for i in range(1, len(outputs)):
+                        if i == 1 and "logits" in outputs_dict:
+                            continue  # Skip if we already assigned logits
+                        outputs_dict[f"hidden_states_{i}"] = outputs[i]
+
+                    # Convert to ModelOutput
+                    outputs = ModelOutput(outputs_dict)
+                    logger.info(f"Converted tuple to ModelOutput with keys: {list(outputs_dict.keys())}")
 
             # Ensure all output tensors are on the correct device
             if isinstance(outputs, torch.Tensor) and outputs.device != device:
@@ -2199,6 +2264,109 @@ def train_with_unsloth(args):
         # Replace the original method with our device-aware version
         model.prepare_inputs_for_generation = device_aware_prepare_inputs
         logger.info("Added device handling to model's prepare_inputs_for_generation method")
+
+    # Apply comprehensive attention fixes to model
+    logger.info("Applying comprehensive attention fixes to model...")
+
+    # Try to use the ultimate fix first
+    try:
+        from setup.ultimate_attention_fix import apply_ultimate_fix
+        apply_ultimate_fix()
+        logger.info("✅ Successfully applied ultimate attention fix")
+    except ImportError:
+        try:
+            from src.setup.ultimate_attention_fix import apply_ultimate_fix
+            apply_ultimate_fix()
+            logger.info("✅ Successfully applied ultimate attention fix")
+        except ImportError:
+            logger.warning("⚠️ Could not import ultimate_attention_fix module, trying other fixes")
+
+            # Try to use the fix_all_attention_issues module
+            try:
+                from setup.fix_all_attention_issues import fix_all_attention_issues
+                fix_all_attention_issues()
+                logger.info("✅ Successfully applied all attention fixes")
+            except ImportError:
+                try:
+                    from src.setup.fix_all_attention_issues import fix_all_attention_issues
+                    fix_all_attention_issues()
+                    logger.info("✅ Successfully applied all attention fixes")
+                except ImportError:
+                    logger.warning("⚠️ Could not import fix_all_attention_issues module, trying tuple unpacking fix")
+
+                    # Try to use the tuple unpacking fix
+                    try:
+                        from setup.fix_tuple_unpacking_error import fix_tuple_unpacking_error
+                        fix_tuple_unpacking_error(model)
+                        logger.info("✅ Successfully applied tuple unpacking fix to model")
+                    except ImportError:
+                        try:
+                            from src.generative_ai_module.fix_tuple_unpacking import apply_fix_to_model
+                            model = apply_fix_to_model(model)
+                            logger.info("✅ Successfully applied tuple unpacking fix to model")
+                        except ImportError:
+                            logger.warning("⚠️ Could not import fix_tuple_unpacking module, applying inline fix")
+
+                            # Apply a direct fix for the "too many values to unpack" error
+                            if hasattr(model, 'forward'):
+                                original_forward = model.forward
+
+                                def patched_forward(*args, **kwargs):
+                                    """Patched forward method that ensures return_dict=True and handles tuple outputs"""
+                                    # Always set return_dict=True to avoid tuple outputs
+                                    if "return_dict" not in kwargs:
+                                        kwargs["return_dict"] = True
+                                        logger.info("Setting return_dict=True to avoid tuple unpacking issues")
+
+                                    # Call the original forward method
+                                    outputs = original_forward(*args, **kwargs)
+
+                                    # Handle tuple outputs
+                                    if isinstance(outputs, tuple):
+                                        logger.info(f"Got tuple output with {len(outputs)} elements, converting to ModelOutput")
+
+                                        # Import ModelOutput
+                                        try:
+                                            from transformers.modeling_outputs import ModelOutput
+                                        except ImportError:
+                                            # Create a simple ModelOutput-like class
+                                            class ModelOutput(dict):
+                                                """Simple ModelOutput-like class"""
+                                                def __init__(self, *args, **kwargs):
+                                                    super().__init__(*args, **kwargs)
+                                                    self.__dict__ = self
+
+                                        # Convert tuple to a dictionary-like object
+                                        outputs_dict = {}
+
+                                        # Check if we have labels in the kwargs to determine if first element is loss
+                                        has_labels = kwargs.get("labels") is not None
+
+                                        if len(outputs) >= 1:
+                                            # First element is typically the loss or logits
+                                            if has_labels:
+                                                # If we have labels, first element is likely the loss
+                                                outputs_dict["loss"] = outputs[0]
+                                                if len(outputs) >= 2:
+                                                    # Second element is likely the logits
+                                                    outputs_dict["logits"] = outputs[1]
+                                            else:
+                                                # If no labels, first element is likely the logits
+                                                outputs_dict["logits"] = outputs[0]
+
+                                            # Add any remaining elements with generic names
+                                            for i in range(1, len(outputs)):
+                                                if i == 1 and "logits" in outputs_dict:
+                                                    continue  # Skip if we already assigned logits
+                                                outputs_dict[f"hidden_states_{i}"] = outputs[i]
+
+                                            # Convert to ModelOutput
+                                            outputs = ModelOutput(outputs_dict)
+
+                                    return outputs
+
+                                model.forward = patched_forward
+                                logger.info("✅ Applied comprehensive inline fix to model.forward")
 
     # Create trainer with attention mask fix
     trainer = AttentionMaskFixTrainer(

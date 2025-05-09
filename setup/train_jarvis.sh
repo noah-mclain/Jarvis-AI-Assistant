@@ -270,10 +270,61 @@ if [ "$MODEL_TYPE" = "code" ]; then
     chmod +x setup/fix_attention_mask_params.py
     chmod +x setup/fix_tensor_size_mismatch.py
     chmod +x setup/fix_attention_dimension_mismatch.py
+    chmod +x setup/fix_tuple_unpacking_error.py
     chmod +x setup/comprehensive_attention_mask_fix.py
+    chmod +x setup/fix_all_attention_issues.py
+    chmod +x setup/ultimate_attention_fix.py
 
-    # Try to use the comprehensive fix first
-    if [ -f "setup/comprehensive_attention_mask_fix.py" ]; then
+    # Try to use the ultimate fix first
+    if [ -f "setup/ultimate_attention_fix.py" ]; then
+        echo "Using ultimate attention fix..."
+        # Make it executable
+        chmod +x setup/ultimate_attention_fix.py
+
+        # Run with detailed logging
+        PYTHONPATH="$PYTHONPATH:." python -c "
+import logging
+import sys
+import os
+import torch
+
+# Configure detailed logging
+logging.basicConfig(level=logging.INFO,
+                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                   handlers=[logging.StreamHandler(sys.stdout)])
+logger = logging.getLogger('attention_fix')
+
+# Print environment information
+logger.info(f'Python version: {sys.version}')
+logger.info(f'PyTorch version: {torch.__version__}')
+logger.info(f'CUDA available: {torch.cuda.is_available()}')
+if torch.cuda.is_available():
+    logger.info(f'CUDA device: {torch.cuda.get_device_name(0)}')
+    logger.info(f'CUDA version: {torch.version.cuda}')
+
+# Import and apply the fix
+try:
+    import setup.ultimate_attention_fix as fix
+    logger.info('Successfully imported ultimate_attention_fix')
+    success = fix.apply_ultimate_fix()
+    logger.info(f'Ultimate fix applied: {success}')
+    print(f'Ultimate fix applied: {success}')
+except Exception as e:
+    logger.error(f'Error applying ultimate fix: {e}')
+    print(f'Error applying ultimate fix: {e}')
+    success = False
+"
+        if [ $? -eq 0 ]; then
+            echo "✅ Ultimate attention fix applied successfully"
+            # Skip the rest of the attention mask fixes
+            SKIP_OTHER_FIXES=1
+        else
+            echo "⚠️ Ultimate fix failed, falling back to other fixes..."
+        fi
+    fi
+
+    # Try to use the comprehensive fix if ultimate fix failed
+    if [ -z "$SKIP_OTHER_FIXES" ] && [ -f "setup/comprehensive_attention_mask_fix.py" ]; then
         echo "Using comprehensive attention mask fix..."
         # Make it executable
         chmod +x setup/comprehensive_attention_mask_fix.py

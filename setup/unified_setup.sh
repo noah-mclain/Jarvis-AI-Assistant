@@ -567,8 +567,23 @@ chmod +x setup/fix_transformers_attention_mask.py
 chmod +x setup/fix_attention_mask_params.py
 chmod +x setup/fix_tensor_size_mismatch.py
 chmod +x setup/fix_attention_dimension_mismatch.py
+chmod +x setup/fix_tuple_unpacking_error.py
+chmod +x setup/comprehensive_attention_mask_fix.py
+chmod +x setup/fix_all_attention_issues.py
+chmod +x setup/ultimate_attention_fix.py
 
-# Run the general fix script first
+# Run the ultimate fix script first (most comprehensive)
+echo "Applying ultimate fix for all attention-related issues..."
+python setup/ultimate_attention_fix.py
+
+# Run the all-in-one fix script as first fallback
+echo "Applying all-in-one attention mask and tuple unpacking fixes..."
+python setup/fix_all_attention_issues.py
+
+# Run individual fix scripts as additional fallbacks
+echo "Applying individual fixes as additional fallbacks..."
+
+# Run the general fix script
 echo "Applying general attention mask fixes..."
 python setup/fix_transformers_attention_mask.py
 
@@ -584,10 +599,18 @@ python setup/fix_tensor_size_mismatch.py
 echo "Applying attention dimension mismatch fixes..."
 python setup/fix_attention_dimension_mismatch.py
 
+# Run the tuple unpacking error fix script
+echo "Applying fix for 'too many values to unpack (expected 2)' error..."
+python setup/fix_tuple_unpacking_error.py
+
+# Run the comprehensive attention mask fix script
+echo "Applying comprehensive attention mask fix..."
+python setup/comprehensive_attention_mask_fix.py
+
 if [ $? -ne 0 ]; then
-    echo "⚠️ Warning: Attention mask fix script failed, but continuing anyway..."
+    echo "⚠️ Warning: Attention mask fix scripts failed, but continuing anyway..."
 else
-    echo "✅ Attention mask fix applied successfully"
+    echo "✅ Attention mask fixes applied successfully"
 fi
 
 # Apply fixes to key files
