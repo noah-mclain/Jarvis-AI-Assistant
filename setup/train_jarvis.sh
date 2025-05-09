@@ -1,6 +1,10 @@
 #!/bin/bash
 # Consolidated script for Jarvis AI Assistant
-# This script sets up the environment and runs the Jarvis AI Assistant
+# This script runs the Jarvis AI Assistant training process
+#
+# IMPORTANT: Before running this script for the first time, you should run:
+#   ./setup/consolidated_unified_setup.sh
+# to ensure all dependencies are properly installed.
 
 # Function to check and activate Python environment
 check_and_activate_python_env() {
@@ -195,7 +199,7 @@ create_directories()
 print('Environment setup complete')
 "
 
-# Check for required Python packages and install missing ones
+# Check for required Python packages without installing them
 echo "Checking for required Python packages..."
 python -c "
 import sys
@@ -203,13 +207,23 @@ import os
 required_packages = ['torch', 'transformers', 'datasets', 'bitsandbytes', 'numpy', 'pandas', 'huggingface-hub']
 missing_packages = []
 version_conflicts = []
+has_transformers_utils = True
 
 for package in required_packages:
     try:
         module = __import__(package)
         print(f'✓ {package} is installed')
 
-        # Check for known version conflicts
+        # Special check for transformers.utils
+        if package == 'transformers':
+            try:
+                import transformers.utils
+                print('✓ transformers.utils is available')
+            except ImportError:
+                print('✗ transformers.utils is NOT available')
+                has_transformers_utils = False
+
+        # Check for known version conflicts (just report, don't fix)
         if package == 'numpy':
             if not hasattr(module, '__version__') or module.__version__ != '1.26.4':
                 version_conflicts.append(('numpy', '1.26.4'))
@@ -223,31 +237,12 @@ for package in required_packages:
         missing_packages.append(package)
         print(f'✗ {package} is NOT installed')
 
-# Install missing packages
-if missing_packages:
-    print('\n⚠️ Some required packages are missing. Installing them now:')
-    for package in missing_packages:
-        if package == 'torch':
-            os.system('pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --extra-index-url https://download.pytorch.org/whl/cu121')
-        elif package == 'transformers':
-            os.system('pip install transformers==4.36.2')
-        elif package == 'datasets':
-            os.system('pip install datasets==2.14.5')
-        elif package == 'bitsandbytes':
-            os.system('pip install bitsandbytes==0.41.0')
-        elif package == 'numpy':
-            os.system('pip install numpy==1.26.4')
-        elif package == 'pandas':
-            os.system('pip install pandas')
-        elif package == 'huggingface-hub':
-            os.system('pip install huggingface-hub<1.0.0,>=0.14.0')
-
-# Fix version conflicts
-if version_conflicts:
-    print('\n⚠️ Some package versions need to be fixed:')
-    for package, version in version_conflicts:
-        print(f'Fixing {package} to version {version}')
-        os.system(f'pip install {package}=={version} --force-reinstall --no-deps')
+# Report missing packages and version conflicts
+if missing_packages or version_conflicts or not has_transformers_utils:
+    print('\n⚠️ Some required packages are missing or have version conflicts.')
+    print('Please run the consolidated setup script ONCE to fix these issues:')
+    print('./setup/consolidated_unified_setup.sh')
+    print('\nContinuing with training anyway, but some features may not work correctly.')
 
 print('\nContinuing with training...')
 "
@@ -312,18 +307,19 @@ if [ "$MODEL_TYPE" = "code" ]; then
     chmod +x setup/fix_all_attention_issues.py
     chmod +x setup/ultimate_attention_fix.py
 
-    # Install critical dependencies without causing conflicts
-    echo "Ensuring critical dependencies are available..."
-    pip install typing-extensions==4.13.2 --force-reinstall --no-deps
-    pip install wheel setuptools --upgrade --no-deps
-
-    # Fix numpy dependency conflict
-    echo "Fixing numpy dependency conflict..."
-    pip install numpy==1.26.4 --no-deps
-
-    # Fix huggingface-hub and pandas dependencies for datasets
-    echo "Fixing huggingface-hub and pandas dependencies..."
-    pip install huggingface-hub\<1.0.0,\>=0.14.0 pandas --no-deps
+    # Check if transformers.utils is available
+    echo "Checking if transformers.utils is available..."
+    python -c "
+try:
+    import transformers.utils
+    print('✅ transformers.utils is available')
+except ImportError as e:
+    print(f'❌ transformers.utils is NOT available: {e}')
+    print('Please run the consolidated setup script ONCE to fix this issue:')
+    print('./setup/consolidated_unified_setup.sh')
+    print('This will cause issues with attention mask fixes and model training')
+    print('Continuing anyway, but training will likely fail')
+"
 
     # Try to use the ultimate fix first
     if [ -f "setup/ultimate_attention_fix.py" ]; then

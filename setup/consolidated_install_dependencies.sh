@@ -108,8 +108,23 @@ pip install huggingface-hub==0.19.4  # Second install pulls in compatible depend
 pip install tokenizers==0.14.0 --no-deps
 pip install tokenizers==0.14.0
 
-pip install transformers==4.36.2 --no-deps
-pip install transformers==4.36.2  # Second install pulls in compatible dependencies
+# Install transformers with all dependencies to ensure transformers.utils is available
+echo "Installing transformers with all dependencies..."
+pip uninstall -y transformers  # Remove any existing installation
+pip install transformers==4.36.2  # Install with all dependencies
+
+# Verify transformers.utils is available
+python -c "
+try:
+    import transformers.utils
+    print('✅ transformers.utils is available')
+except ImportError as e:
+    print(f'❌ transformers.utils is NOT available: {e}')
+    print('Trying alternative installation method...')
+    import os
+    os.system('pip install -U pip')
+    os.system('pip install transformers==4.36.2 --force-reinstall')
+"
 
 pip install peft==0.6.0 --no-deps
 pip install peft==0.6.0
@@ -249,10 +264,30 @@ except Exception as e:
 try:
     import transformers
     print(f'Transformers version: {transformers.__version__}')
+
+    # Specifically check for transformers.utils
+    try:
+        import transformers.utils
+        print(f'✅ transformers.utils is available')
+    except ImportError as e:
+        print(f'❌ transformers.utils is NOT available: {e}')
+        print('Reinstalling transformers with all dependencies...')
+        import os
+        os.system('pip uninstall -y transformers')
+        os.system('pip install transformers==4.36.2')
+
+        # Verify again after reinstall
+        try:
+            import transformers.utils
+            print(f'✅ transformers.utils is now available after reinstall')
+        except ImportError as e:
+            print(f'❌ transformers.utils is STILL NOT available after reinstall: {e}')
+            print('This may cause issues with attention mask fixes and model training')
 except Exception as e:
     print(f'❌ Transformers error: {e}')
     # Install Transformers again as a fallback
     import os
+    os.system('pip uninstall -y transformers')
     os.system('pip install transformers==4.36.2')
 
 try:

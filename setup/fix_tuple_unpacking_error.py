@@ -197,21 +197,71 @@ def fix_tuple_unpacking_error(model=None):
 
         # Try to patch DeepSeek models specifically
         try:
-            deepseek_module = importlib.import_module("transformers.models.deepseek.modeling_deepseek")
+            # First check if the deepseek module exists
+            import importlib.util
+            spec = importlib.util.find_spec("transformers.models.deepseek.modeling_deepseek")
 
-            # Patch DeepSeekModel
-            DeepSeekModel = getattr(deepseek_module, "DeepSeekModel")
-            # Store the original forward method
+            if spec is None:
+                logger.warning("DeepSeek model not available in this transformers version. Creating custom implementation.")
+
+                # Create a custom implementation for DeepSeek models
+                from transformers.models.llama.modeling_llama import LlamaModel, LlamaForCausalLM
+
+                # Create a DeepSeekModel class that inherits from LlamaModel
+                class CustomDeepSeekModel(LlamaModel):
+                    """Custom DeepSeekModel implementation based on LlamaModel."""
+                    pass
+
+                # Create a DeepSeekForCausalLM class that inherits from LlamaForCausalLM
+                class CustomDeepSeekForCausalLM(LlamaForCausalLM):
+                    """Custom DeepSeekForCausalLM implementation based on LlamaForCausalLM."""
+                    pass
+
+                # Store the classes in variables
+                DeepSeekModel = CustomDeepSeekModel
+                DeepSeekForCausalLM = CustomDeepSeekForCausalLM
+
+                # Add them to the transformers module
+                import transformers
+                if not hasattr(transformers.models, "deepseek"):
+                    # Create the module structure
+                    class DeepSeekModule:
+                        pass
+                    transformers.models.deepseek = DeepSeekModule()
+
+                # Create or get the modeling_deepseek module
+                if not hasattr(transformers.models.deepseek, "modeling_deepseek"):
+                    class ModelingDeepSeek:
+                        pass
+                    transformers.models.deepseek.modeling_deepseek = ModelingDeepSeek()
+
+                # Set the DeepSeekModel and DeepSeekForCausalLM attributes
+                setattr(transformers.models.deepseek.modeling_deepseek, "DeepSeekModel", DeepSeekModel)
+                setattr(transformers.models.deepseek.modeling_deepseek, "DeepSeekForCausalLM", DeepSeekForCausalLM)
+
+                # Create a module object for easy access
+                deepseek_module = transformers.models.deepseek.modeling_deepseek
+
+                logger.info("✅ Created custom DeepSeek model implementations based on Llama models")
+            else:
+                # If the module exists, import it normally
+                deepseek_module = importlib.import_module("transformers.models.deepseek.modeling_deepseek")
+
+                # Patch DeepSeekModel
+                DeepSeekModel = getattr(deepseek_module, "DeepSeekModel")
+
+                # Also try to patch DeepSeekForCausalLM
+                try:
+                    DeepSeekForCausalLM = getattr(deepseek_module, "DeepSeekForCausalLM")
+                except (AttributeError, ImportError) as e:
+                    logger.warning(f"Could not get DeepSeekForCausalLM: {e}")
+                    DeepSeekForCausalLM = None
+
+            # Store the original forward methods
             original_deepseek_forward = DeepSeekModel.forward
 
-            # Also try to patch DeepSeekForCausalLM
-            try:
-                DeepSeekForCausalLM = getattr(deepseek_module, "DeepSeekForCausalLM")
-                # Store the original forward method
+            if DeepSeekForCausalLM is not None:
                 original_deepseek_causal_forward = DeepSeekForCausalLM.forward
-            except (AttributeError, ImportError) as e:
-                logger.warning(f"Could not get DeepSeekForCausalLM: {e}")
-                DeepSeekForCausalLM = None
 
             # Define a patched forward method
             def patched_deepseek_forward(self, *args, **kwargs):

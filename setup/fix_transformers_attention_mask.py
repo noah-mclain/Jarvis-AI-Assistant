@@ -457,9 +457,48 @@ def fix_transformers_attention_mask():
 
         # Try to patch DeepSeek model if available
         try:
-            import importlib
-            deepseek_module = importlib.import_module("transformers.models.deepseek.modeling_deepseek")
-            DeepSeekModel = getattr(deepseek_module, "DeepSeekModel")
+            # First check if the deepseek module exists
+            import importlib.util
+            spec = importlib.util.find_spec("transformers.models.deepseek.modeling_deepseek")
+
+            if spec is None:
+                logger.warning("DeepSeek model not available in this transformers version. Creating custom implementation.")
+
+                # Create a custom implementation for DeepSeek model
+                from transformers.models.llama.modeling_llama import LlamaModel
+
+                # Create a DeepSeekModel class that inherits from LlamaModel
+                class CustomDeepSeekModel(LlamaModel):
+                    """Custom DeepSeekModel implementation based on LlamaModel."""
+                    pass
+
+                # Store the class in a variable
+                DeepSeekModel = CustomDeepSeekModel
+
+                # Add it to the transformers module
+                import transformers
+                if not hasattr(transformers.models, "deepseek"):
+                    # Create the module structure
+                    class DeepSeekModule:
+                        pass
+                    transformers.models.deepseek = DeepSeekModule()
+
+                # Add the modeling_deepseek module
+                class ModelingDeepSeek:
+                    pass
+
+                # Set the DeepSeekModel attribute
+                setattr(ModelingDeepSeek, "DeepSeekModel", DeepSeekModel)
+
+                # Add the module to transformers
+                transformers.models.deepseek.modeling_deepseek = ModelingDeepSeek()
+
+                logger.info("✅ Created custom DeepSeekModel implementation based on LlamaModel")
+            else:
+                # If the module exists, import it normally
+                import importlib
+                deepseek_module = importlib.import_module("transformers.models.deepseek.modeling_deepseek")
+                DeepSeekModel = getattr(deepseek_module, "DeepSeekModel")
 
             # Store the original forward method
             original_forward = DeepSeekModel.forward

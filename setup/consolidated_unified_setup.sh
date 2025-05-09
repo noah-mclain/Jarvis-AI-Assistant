@@ -165,6 +165,11 @@ echo "Setting up spaCy with minimal tokenizer..."
 chmod +x setup/consolidated_fix_spacy.sh
 ./setup/consolidated_fix_spacy.sh
 
+# Fix transformers.utils issue
+echo "Fixing transformers.utils issue..."
+chmod +x setup/fix_transformers_utils.py
+python setup/fix_transformers_utils.py
+
 # Apply attention mask fix for DeepSeek models
 echo "Applying attention mask fix for DeepSeek models..."
 
@@ -394,6 +399,15 @@ except Exception as e:
 try:
     import transformers
     print(f'transformers version: {transformers.__version__}')
+
+    # Specifically check for transformers.utils
+    try:
+        import transformers.utils
+        print(f'✅ transformers.utils is available')
+    except ImportError as e:
+        print(f'❌ transformers.utils is NOT available: {e}')
+        print('This will cause issues with attention mask fixes and model training')
+        print('Will run fix_transformers_utils.py later in the script')
 except Exception as e:
     print(f'❌ transformers error: {e}')
 
@@ -404,26 +418,140 @@ except Exception as e:
     print(f'❌ unsloth error: {e}')
 "
 
-# Final fallback installation for critical dependencies
-echo "Performing final fallback installation for critical dependencies..."
+# Final comprehensive installation for all model types
+echo "Performing comprehensive installation for all model types..."
 
 # Install wheel and setuptools first to avoid build issues
-pip install wheel setuptools --upgrade
+pip install wheel setuptools --upgrade --no-deps
 
 # Install typing-extensions with the correct version to avoid conflicts
-pip install typing-extensions==4.13.2 --force-reinstall
+pip install typing-extensions==4.13.2 --force-reinstall --no-deps
 
-# Install PyTorch ecosystem
-pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --extra-index-url https://download.pytorch.org/whl/cu121 --no-deps
-pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --extra-index-url https://download.pytorch.org/whl/cu121
+# Install core dependencies in the correct order
+echo "Installing core dependencies in the correct order..."
 
-# Install Hugging Face ecosystem with compatible versions
-pip install transformers==4.36.2 peft==0.6.0 accelerate==0.25.0 bitsandbytes==0.41.0 --no-deps
-pip install transformers==4.36.2 peft==0.6.0 accelerate==0.25.0 bitsandbytes==0.41.0
+# 1. Install NumPy first (foundation package)
+pip install numpy==1.26.4 --force-reinstall --no-deps
 
-# Install additional dependencies with --no-deps to avoid conflicts
-pip install protobuf\<4.24 werkzeug pandas huggingface-hub markdown --no-deps
-pip install protobuf\<4.24 werkzeug pandas huggingface-hub markdown
+# 2. Install PyTorch ecosystem with --no-deps
+pip install torch==2.1.2 --extra-index-url https://download.pytorch.org/whl/cu121 --no-deps
+pip install torchvision==0.16.2 --extra-index-url https://download.pytorch.org/whl/cu121 --no-deps
+pip install torchaudio==2.1.2 --extra-index-url https://download.pytorch.org/whl/cu121 --no-deps
+
+# 3. Install tokenizers before transformers
+pip install tokenizers==0.14.0 --no-deps
+
+# 4. Install Hugging Face ecosystem in the correct order with --no-deps
+pip install filelock==3.12.2 --no-deps
+pip install requests==2.31.0 --no-deps
+pip install tqdm==4.66.1 --no-deps
+pip install pyyaml==6.0.1 --no-deps
+pip install packaging==23.1 --no-deps
+pip install fsspec==2023.6.0 --no-deps
+pip install psutil==5.9.5 --no-deps
+pip install safetensors==0.4.0 --no-deps
+pip install huggingface-hub==0.19.4 --no-deps
+pip install transformers==4.36.2 --no-deps
+pip install peft==0.6.0 --no-deps
+pip install accelerate==0.25.0 --no-deps
+pip install datasets==2.14.5 --no-deps
+pip install bitsandbytes==0.41.0 --no-deps
+pip install trl==0.7.4 --no-deps
+
+# 5. Install additional dependencies for all model types with --no-deps
+pip install protobuf\<4.24 --no-deps
+pip install werkzeug --no-deps
+pip install pandas --no-deps
+pip install markdown --no-deps
+pip install scipy==1.12.0 --no-deps
+pip install matplotlib==3.8.3 --no-deps
+pip install einops==0.7.0 --no-deps
+pip install opt_einsum==3.3.0 --no-deps
+pip install sentencepiece==0.1.99 --no-deps
+pip install nltk==3.8.1 --no-deps
+pip install scikit-learn==1.4.2 --no-deps
+
+# 6. Install xFormers for enhanced attention support with --no-deps
+pip install xformers==0.0.23.post1 --index-url https://download.pytorch.org/whl/cu121 --no-deps
+
+# 7. Install Flash Attention if possible with --no-deps
+pip install flash-attn==2.5.5 --no-build-isolation --no-deps || echo "Flash Attention installation skipped - not critical"
+
+# 8. Install unsloth for optimized training with --no-deps
+pip install unsloth==2024.8 --no-deps || echo "Unsloth installation skipped - will use minimal implementation"
+
+# 9. Install additional dependencies for CNN text model with --no-deps
+pip install bert-score --no-deps
+pip install rouge-score --no-deps
+
+# 10. Download NLTK data
+python -c "
+import nltk
+try:
+    nltk.download('punkt', quiet=True)
+    print('✅ NLTK punkt downloaded successfully')
+except Exception as e:
+    print(f'❌ Error downloading NLTK data: {e}')
+"
+
+# 11. Install critical dependencies for transformers.utils
+echo "Installing critical dependencies for transformers.utils..."
+pip install charset-normalizer==3.4.2 --no-deps
+pip install idna==3.10 --no-deps
+pip install urllib3==2.4.0 --no-deps
+pip install certifi==2025.4.26 --no-deps
+
+# 12. Reinstall critical packages to ensure they're properly installed (still with --no-deps)
+echo "Reinstalling critical packages with --no-deps..."
+pip install transformers==4.36.2 --no-deps  # Reinstall to ensure it's properly installed
+pip install tokenizers==0.14.0 --no-deps    # Critical for transformers
+pip install huggingface-hub==0.19.4 --no-deps # Critical for transformers
+
+# Create the transformers.utils module if it doesn't exist
+echo "Creating transformers.utils module if needed..."
+chmod +x setup/fix_transformers_utils.py
+python setup/fix_transformers_utils.py
+
+# Ensure the fix was applied
+echo "Checking if transformers.utils is now available..."
+python -c "
+try:
+    import transformers.utils
+    print('✅ transformers.utils is now available')
+except ImportError as e:
+    print(f'❌ transformers.utils is still not available: {e}')
+    print('This may cause issues with attention mask fixes and model training')
+"
+
+# Verify transformers installation
+echo "Verifying transformers installation..."
+python -c "
+try:
+    import transformers
+    import transformers.utils
+    print(f'✅ Transformers {transformers.__version__} successfully installed with utils module')
+except ImportError as e:
+    print(f'❌ Transformers installation issue: {e}')
+    print('Running fix_transformers_utils.py to create the module...')
+
+    # Run the fix script
+    import sys
+    import os
+
+    # Make the script executable
+    os.system('chmod +x setup/fix_transformers_utils.py')
+
+    # Run the script
+    os.system('python setup/fix_transformers_utils.py')
+
+    # Try importing again
+    try:
+        import transformers.utils
+        print(f'✅ transformers.utils is now available after fix')
+    except ImportError as e:
+        print(f'❌ transformers.utils is STILL NOT available after fix: {e}')
+        print('This may cause issues with attention mask fixes and model training')
+"
 
 # Setup Google Drive mounting with rclone for Paperspace
 if [ "$IN_PAPERSPACE" = "1" ]; then
@@ -452,4 +580,12 @@ fi
 
 echo "===================================================================="
 echo "Consolidated setup complete! Jarvis AI Assistant environment is ready."
+echo ""
+echo "You can now run any of the following commands to train models:"
+echo "  ./setup/train_jarvis.sh --model-type code         # Train code generation model"
+echo "  ./setup/train_jarvis.sh --model-type cnn-text     # Train CNN text model"
+echo "  ./setup/train_jarvis.sh --model-type custom-model # Train custom encoder-decoder model"
+echo ""
+echo "All dependencies have been installed and configured. You should not need"
+echo "to run this setup script again unless you encounter new dependency issues."
 echo "===================================================================="

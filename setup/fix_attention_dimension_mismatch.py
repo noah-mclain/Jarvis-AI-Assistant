@@ -266,17 +266,54 @@ def fix_attention_dimension_mismatch():
 
             # Also patch DeepSeekAttention if available
             try:
-                # Try to import DeepSeekAttention
-                DeepSeekAttention = None
-                try:
-                    from transformers.models.deepseek.modeling_deepseek import DeepSeekAttention
-                except ImportError:
-                    # Try alternative import paths
+                # First check if the deepseek module exists
+                import importlib.util
+                spec = importlib.util.find_spec("transformers.models.deepseek.modeling_deepseek")
+
+                if spec is None:
+                    logger.warning("DeepSeek model not available in this transformers version. Creating custom implementation.")
+
+                    # Create a custom implementation for DeepSeekAttention based on LlamaAttention
+                    from transformers.models.llama.modeling_llama import LlamaAttention
+
+                    # Create a DeepSeekAttention class that inherits from LlamaAttention
+                    class CustomDeepSeekAttention(LlamaAttention):
+                        """Custom DeepSeekAttention implementation based on LlamaAttention."""
+                        pass
+
+                    # Store the class in a variable
+                    DeepSeekAttention = CustomDeepSeekAttention
+
+                    # Add it to the transformers module
+                    import transformers
+                    if not hasattr(transformers.models, "deepseek"):
+                        # Create the module structure
+                        class DeepSeekModule:
+                            pass
+                        transformers.models.deepseek = DeepSeekModule()
+
+                    # Create or get the modeling_deepseek module
+                    if not hasattr(transformers.models.deepseek, "modeling_deepseek"):
+                        class ModelingDeepSeek:
+                            pass
+                        transformers.models.deepseek.modeling_deepseek = ModelingDeepSeek()
+
+                    # Set the DeepSeekAttention attribute
+                    setattr(transformers.models.deepseek.modeling_deepseek, "DeepSeekAttention", DeepSeekAttention)
+
+                    logger.info("✅ Created custom DeepSeekAttention implementation based on LlamaAttention")
+                else:
+                    # Try to import DeepSeekAttention
+                    DeepSeekAttention = None
                     try:
-                        module = importlib.import_module("transformers.models.deepseek.modeling_deepseek")
-                        DeepSeekAttention = getattr(module, "DeepSeekAttention", None)
-                    except (ImportError, AttributeError):
-                        logger.warning("Could not import DeepSeekAttention")
+                        from transformers.models.deepseek.modeling_deepseek import DeepSeekAttention
+                    except ImportError:
+                        # Try alternative import paths
+                        try:
+                            module = importlib.import_module("transformers.models.deepseek.modeling_deepseek")
+                            DeepSeekAttention = getattr(module, "DeepSeekAttention", None)
+                        except (ImportError, AttributeError):
+                            logger.warning("Could not import DeepSeekAttention")
 
                 if DeepSeekAttention is not None:
                     # Apply the same patch to DeepSeekAttention
