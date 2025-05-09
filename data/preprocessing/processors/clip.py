@@ -2,7 +2,7 @@
 
 import torch
 from transformers import CLIPProcessor, CLIPModel
-from .. import config
+from configs.preprocessing import config
 
 class CLIPFeatureExtractor:
     def __init__(self):

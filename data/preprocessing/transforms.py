@@ -1,7 +1,7 @@
 """Image transformation pipeline."""
 
 import torchvision.transforms as T
-from . import config
+from configs.preprocessing import config
 
 def get_transform_pipeline():
     """Create the image transformation pipeline."""

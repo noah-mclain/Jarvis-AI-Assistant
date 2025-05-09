@@ -3,7 +3,7 @@
 import io
 import requests
 from PIL import Image
-from .. import config
+from configs.preprocessing import config
 
 def fetch_image(url, timeout=config.TIMEOUT):
     """Fetch image from URL with timeout."""
