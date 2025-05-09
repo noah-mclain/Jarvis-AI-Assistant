@@ -259,7 +259,7 @@ def fix_custom_unsloth(custom_unsloth_path):
         filtered_kwargs_str = '\n'.join(filtered_kwargs)
 
         # Add a comment explaining the change
-        comment = f\"{indent}# device_map is handled by FastLanguageModel, so we don't pass it here\n\"
+        comment = f\"{indent}# device_map is handled by FastLanguageModel, so we don't pass it here\n\"'
 
         # Return the fixed code
         return f"{comment}{indent}model = AutoModelForCausalLM.from_pretrained(\n{indent}    {model_name},\n{filtered_kwargs_str})"

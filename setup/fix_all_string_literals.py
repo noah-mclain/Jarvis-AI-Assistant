@@ -95,13 +95,13 @@ def fix_file(file_path):
             # Fix unterminated single quotes
             if single_quotes % 2 != 0 and not line.strip().startswith('#'):
                 # This line has an unterminated single quote
-                fixed_line = line + "'"
+                fixed_line = line + "'"'
                 logger.info(f"Fixed unterminated single quote in {file_path}, line: {line}")
                 fixed_lines.append(fixed_line)
             # Fix unterminated double quotes
             elif double_quotes % 2 != 0 and not line.strip().startswith('#'):
                 # This line has an unterminated double quote
-                fixed_line = line + '"'
+                fixed_line = line + '"'"
                 logger.info(f"Fixed unterminated double quote in {file_path}, line: {line}")
                 fixed_lines.append(fixed_line)
             else:
@@ -112,8 +112,8 @@ def fix_file(file_path):
 
         # Fix 4: Fix specific issues with f-strings
         # Replace problematic patterns like f'string{var}" with f'string{var}'
-        content = re.sub(r"f'([^']*)'\"", r"f'\1', content)
-        content = re.sub(r"f\"([^\"]*)\"'", r"f\"\1\"", content)
+        content = re.sub(r"f'([^']*)'\"", r"f'\1', content)'
+        content = re.sub(r"f\"([^\"]*)\"'", r"f\"\1\"", content)'
 
         # Write the fixed content back to the file if changes were made
         if content != original_content:

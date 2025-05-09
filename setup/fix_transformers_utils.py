@@ -183,7 +183,7 @@ def is_xformers_available():
         return True
     except ImportError:
         return False
-""")"
+""")""
     
     return os.path.exists(utils_path)
 

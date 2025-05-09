@@ -61,7 +61,7 @@ _import_structure = {
 
 import sys
 sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
-""")"
+""")""
     logger.info(f"Created file: {init_path}")
     
     # Create configuration_deepseek.py
@@ -75,7 +75,7 @@ class DeepSeekConfig(PretrainedConfig):
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-""")"
+""")""
     logger.info(f"Created file: {config_path}")
     
     # Create modeling_deepseek.py
@@ -143,7 +143,7 @@ class DeepSeekForSequenceClassification(DeepSeekPreTrainedModel):
             hidden_states=None,
             attentions=None,
         )
-""")"
+""")""
     logger.info(f"Created file: {modeling_path}")
     
     return True
@@ -244,7 +244,7 @@ class DeepSeekForSequenceClassification(DeepSeekPreTrainedModel):
             hidden_states=None,
             attentions=None,
         )
-""")"
+""")""
     logger.info(f"Created dummy module: {dummy_path}")
     
     return True

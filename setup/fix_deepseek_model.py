@@ -94,7 +94,7 @@ else:
     import sys
 
     sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
-""")"
+""")""
     logger.info(f"Created file: {init_path}")
     
     # Create configuration_deepseek.py
@@ -154,7 +154,7 @@ class DeepSeekConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-""")"
+""")""
     logger.info(f"Created file: {config_path}")
     
     # Create modeling_deepseek.py

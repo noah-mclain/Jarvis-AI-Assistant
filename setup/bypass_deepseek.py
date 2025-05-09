@@ -184,7 +184,7 @@ class DeepSeekPreTrainedModel:
 
 class DeepSeekAttention:
     pass
-""")"
+""")""
     
     # Add the current directory to sys.path
     sys.path.insert(0, os.getcwd())

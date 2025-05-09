@@ -1188,22 +1188,7 @@ def train_with_unsloth(args):
             unsloth.models.BaseAdapter.get_model_and_tokenizer = patched_get_model_and_tokenizer
             logger.info("✅ Successfully patched unsloth.models.BaseAdapter.get_model_and_tokenizer")
 
-            # Also patch the from_pretrained method
-            original_from_pretrained = FastLanguageModel.from_pretrained
-
-            @staticmethod
-            def patched_from_pretrained(*args, **kwargs):
-                """Patched version that ensures trust_remote_code is set correctly"""
-                # Make sure trust_remote_code is included in kwargs
-                if 'trust_remote_code' not in kwargs:
-                    kwargs['trust_remote_code'] = True
-
-                logger.info(f"Calling FastLanguageModel.from_pretrained with trust_remote_code={kwargs.get('trust_remote_code')}")
-                return original_from_pretrained(*args, **kwargs)
-
-            # Apply the patch
-            FastLanguageModel.from_pretrained = patched_from_pretrained
-            logger.info("✅ Successfully patched FastLanguageModel.from_pretrained")
+            # We don't need to patch the from_pretrained method anymore since we're using kwargs
 
         except Exception as patch_error:
             logger.warning(f"Failed to patch unsloth library: {patch_error}")
@@ -1211,12 +1196,14 @@ def train_with_unsloth(args):
 
         # First, try to load with explicit trust_remote_code
         logger.info("Loading model with explicit trust_remote_code=True...")
-        model, tokenizer = FastLanguageModel.from_pretrained(
-            model_name=args.model_name,
-            load_in_4bit=args.load_in_4bit,
-            load_in_8bit=args.load_in_8bit,
-            trust_remote_code=True  # Explicitly set trust_remote_code
-        )
+        # Use a dictionary for kwargs to avoid duplicate parameter issues
+        model_kwargs = {
+            "model_name": args.model_name,
+            "load_in_4bit": args.load_in_4bit,
+            "load_in_8bit": args.load_in_8bit,
+            "trust_remote_code": True  # Explicitly set trust_remote_code
+        }
+        model, tokenizer = FastLanguageModel.from_pretrained(**model_kwargs)
         logger.info(f"Successfully loaded model: {args.model_name}")
     except Exception as e:
         logger.error(f"Error loading model: {e}")
@@ -1279,13 +1266,21 @@ def train_with_unsloth(args):
 
                 logger.info("Loading with standard transformers...")
                 tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
-                model = AutoModelForCausalLM.from_pretrained(
-                    args.model_name,
-                    device_map="auto",
-                    trust_remote_code=True,
-                    load_in_4bit=args.load_in_4bit,
-                    load_in_8bit=args.load_in_8bit
-                )
+
+                # Use a dictionary for kwargs to avoid duplicate parameter issues
+                model_kwargs = {
+                    "pretrained_model_name_or_path": args.model_name,
+                    "device_map": "auto",
+                    "trust_remote_code": True
+                }
+
+                # Only add quantization parameters if they're True
+                if args.load_in_4bit:
+                    model_kwargs["load_in_4bit"] = True
+                elif args.load_in_8bit:
+                    model_kwargs["load_in_8bit"] = True
+
+                model = AutoModelForCausalLM.from_pretrained(**model_kwargs)
                 logger.info(f"Successfully loaded model with standard transformers: {args.model_name}")
             except Exception as std_error:
                 logger.error(f"Failed to load with standard transformers: {std_error}")
@@ -1294,12 +1289,16 @@ def train_with_unsloth(args):
                 try:
                     logger.info("Trying with 8-bit quantization...")
                     tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
-                    model = AutoModelForCausalLM.from_pretrained(
-                        args.model_name,
-                        device_map="auto",
-                        trust_remote_code=True,
-                        load_in_8bit=True
-                    )
+
+                    # Use a dictionary for kwargs to avoid duplicate parameter issues
+                    model_kwargs = {
+                        "pretrained_model_name_or_path": args.model_name,
+                        "device_map": "auto",
+                        "trust_remote_code": True,
+                        "load_in_8bit": True
+                    }
+
+                    model = AutoModelForCausalLM.from_pretrained(**model_kwargs)
                     logger.info(f"Successfully loaded model with 8-bit quantization: {args.model_name}")
                 except Exception as bit8_error:
                     logger.error(f"Failed to load with 8-bit quantization: {bit8_error}")
@@ -1315,12 +1314,16 @@ def train_with_unsloth(args):
 
                 logger.info("Loading with direct transformers import...")
                 tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
-                model = AutoModelForCausalLM.from_pretrained(
-                    args.model_name,
-                    device_map="auto",
-                    trust_remote_code=True,
-                    load_in_8bit=True  # Fall back to 8-bit
-                )
+
+                # Use a dictionary for kwargs to avoid duplicate parameter issues
+                model_kwargs = {
+                    "pretrained_model_name_or_path": args.model_name,
+                    "device_map": "auto",
+                    "trust_remote_code": True,
+                    "load_in_8bit": True  # Fall back to 8-bit
+                }
+
+                model = AutoModelForCausalLM.from_pretrained(**model_kwargs)
                 logger.info(f"Successfully loaded model with direct transformers import: {args.model_name}")
             except Exception as e2:
                 logger.error(f"Fatal error loading model on retry: {e2}")
@@ -3211,29 +3214,77 @@ def train_with_unsloth(args):
     except Exception as e:
         logger.warning(f"⚠️ Error applying direct fix to model instance: {e}, trying other fixes")
 
-    # Try to use the ultimate fix first
+    # Apply the TensorBoard callback fix first
     try:
-        # First try the new version of the fix
-        try:
-            from setup.ultimate_attention_fix_new import apply_ultimate_fix
-            apply_ultimate_fix()
-            logger.info("✅ Successfully applied new ultimate attention fix")
-        except ImportError:
-            # Fall back to the original version
-            from setup.ultimate_attention_fix import apply_ultimate_fix
-            apply_ultimate_fix()
-            logger.info("✅ Successfully applied original ultimate attention fix")
+        from setup.fix_tensorboard_callback import fix_tensorboard_callback, install_tensorboard
+        # Try to install TensorBoard first
+        install_success = install_tensorboard()
+        if install_success:
+            logger.info("✅ Successfully installed TensorBoard")
+        else:
+            logger.warning("⚠️ Failed to install TensorBoard, will use fallback")
+
+        # Apply the fix regardless of whether TensorBoard was installed
+        fix_success = fix_tensorboard_callback()
+        if fix_success:
+            logger.info("✅ Successfully applied TensorBoard callback fix")
+        else:
+            logger.warning("⚠️ Failed to apply TensorBoard callback fix")
     except ImportError:
         try:
-            # Try src directory
-            try:
-                from src.setup.ultimate_attention_fix_new import apply_ultimate_fix
-                apply_ultimate_fix()
-                logger.info("✅ Successfully applied new ultimate attention fix from src")
-            except ImportError:
-                from src.setup.ultimate_attention_fix import apply_ultimate_fix
-                apply_ultimate_fix()
-                logger.info("✅ Successfully applied original ultimate attention fix from src")
+            from src.setup.fix_tensorboard_callback import fix_tensorboard_callback, install_tensorboard
+            # Try to install TensorBoard first
+            install_success = install_tensorboard()
+            if install_success:
+                logger.info("✅ Successfully installed TensorBoard")
+            else:
+                logger.warning("⚠️ Failed to install TensorBoard, will use fallback")
+
+            # Apply the fix regardless of whether TensorBoard was installed
+            fix_success = fix_tensorboard_callback()
+            if fix_success:
+                logger.info("✅ Successfully applied TensorBoard callback fix from src")
+            else:
+                logger.warning("⚠️ Failed to apply TensorBoard callback fix")
+        except ImportError:
+            logger.warning("⚠️ Could not import fix_tensorboard_callback module")
+
+    # Apply the fix for _prepare_4d_causal_attention_mask_for_sdpa
+    try:
+        from setup.fix_prepare_4d_function import fix_prepare_4d_function
+        fix_prepare_4d_function()
+        logger.info("✅ Successfully applied fix for _prepare_4d_causal_attention_mask_for_sdpa")
+    except ImportError:
+        try:
+            from src.setup.fix_prepare_4d_function import fix_prepare_4d_function
+            fix_prepare_4d_function()
+            logger.info("✅ Successfully applied fix for _prepare_4d_causal_attention_mask_for_sdpa from src")
+        except ImportError:
+            logger.warning("⚠️ Could not import fix_prepare_4d_function module")
+
+    # Apply comprehensive attention mask fix
+    try:
+        from setup.comprehensive_attention_mask_fix import apply_comprehensive_fix
+        apply_comprehensive_fix()
+        logger.info("✅ Successfully applied comprehensive attention mask fix")
+    except ImportError:
+        try:
+            from src.setup.comprehensive_attention_mask_fix import apply_comprehensive_fix
+            apply_comprehensive_fix()
+            logger.info("✅ Successfully applied comprehensive attention mask fix from src")
+        except ImportError:
+            logger.warning("⚠️ Could not import comprehensive_attention_mask_fix module")
+
+    # Try to use the ultimate fix as a fallback
+    try:
+        from setup.ultimate_attention_fix import apply_ultimate_fix
+        apply_ultimate_fix()
+        logger.info("✅ Successfully applied ultimate attention fix")
+    except ImportError:
+        try:
+            from src.setup.ultimate_attention_fix import apply_ultimate_fix
+            apply_ultimate_fix()
+            logger.info("✅ Successfully applied ultimate attention fix from src")
         except ImportError:
             logger.warning("⚠️ Could not import ultimate_attention_fix module, trying other fixes")
 

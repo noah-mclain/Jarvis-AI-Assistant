@@ -212,6 +212,118 @@ def apply_comprehensive_fix():
         else:
             logger.warning("⚠️ Failed to apply dtype mismatch fix")
 
+        # Fix 1.5: Patch _prepare_4d_causal_attention_mask_for_sdpa in LlamaModel
+        try:
+            # Try to import the function from LlamaModel
+            try:
+                from transformers.models.llama.modeling_llama import _prepare_4d_causal_attention_mask_for_sdpa as llama_prepare_4d
+
+                # Store the original function
+                original_llama_prepare_4d = llama_prepare_4d
+
+                # Define a patched function with a flexible signature
+                def patched_llama_prepare_4d(*args, **kwargs):
+                    """
+                    Patched version of _prepare_4d_causal_attention_mask_for_sdpa in LlamaModel.
+                    This handles the specific signature used in the LlamaModel implementation.
+                    """
+                    # Extract parameters from args or kwargs
+                    attention_mask = None
+                    input_shape = None
+                    inputs_embeds = None
+                    past_key_values_length = 0
+                    sliding_window = None
+                    dtype = None
+
+                    # Extract from args
+                    if len(args) > 0:
+                        attention_mask = args[0]
+                    if len(args) > 1:
+                        input_shape = args[1]
+                    if len(args) > 2:
+                        inputs_embeds = args[2]
+                    if len(args) > 3:
+                        past_key_values_length = args[3]
+                    if len(args) > 4:
+                        sliding_window = args[4]
+                    if len(args) > 5:
+                        dtype = args[5]
+
+                    # Extract from kwargs
+                    if 'attention_mask' in kwargs:
+                        attention_mask = kwargs['attention_mask']
+                    if 'input_shape' in kwargs:
+                        input_shape = kwargs['input_shape']
+                    if 'inputs_embeds' in kwargs:
+                        inputs_embeds = kwargs['inputs_embeds']
+                    if 'past_key_values_length' in kwargs:
+                        past_key_values_length = kwargs['past_key_values_length']
+                    if 'sliding_window' in kwargs:
+                        sliding_window = kwargs['sliding_window']
+                    if 'dtype' in kwargs:
+                        dtype = kwargs['dtype']
+
+                    # Fix attention_mask shape if needed
+                    if attention_mask is not None and attention_mask.dim() > 2:
+                        # Get the batch size and sequence length
+                        batch_size = attention_mask.size(0)
+                        seq_length = attention_mask.size(-1)
+
+                        # Reshape to 2D [batch_size, seq_length]
+                        try:
+                            attention_mask = attention_mask.view(batch_size, seq_length)
+                            logger.info(f"Reshaped attention mask from >2D to 2D in LlamaModel: {attention_mask.shape}")
+                        except Exception as e:
+                            logger.warning(f"Could not reshape attention mask: {e}")
+                            # Create a new mask if reshaping fails
+                            attention_mask = torch.ones((batch_size, seq_length), device=inputs_embeds.device)
+                            logger.info(f"Created new attention mask with shape: {attention_mask.shape}")
+
+                        # Update args or kwargs with the fixed mask
+                        if len(args) > 0:
+                            args_list = list(args)
+                            args_list[0] = attention_mask
+                            args = tuple(args_list)
+                        elif 'attention_mask' in kwargs:
+                            kwargs['attention_mask'] = attention_mask
+
+                    # Get the signature of the original function
+                    sig = inspect.signature(original_llama_prepare_4d)
+                    param_names = list(sig.parameters.keys())
+
+                    # Determine the expected signature based on the number of parameters
+                    if len(param_names) <= 4:
+                        # v4.36.0 signature
+                        logger.info("Using v4.36.0 signature (4 parameters) for LlamaModel")
+                        return original_llama_prepare_4d(
+                            attention_mask, input_shape, inputs_embeds, past_key_values_length
+                        )
+                    elif len(param_names) == 5:
+                        # v4.37.0 signature
+                        logger.info("Using v4.37.0 signature (5 parameters) for LlamaModel")
+                        return original_llama_prepare_4d(
+                            attention_mask, input_shape, inputs_embeds, past_key_values_length, sliding_window
+                        )
+                    else:
+                        # v4.38.0+ signature
+                        logger.info("Using v4.38.0+ signature (6 parameters) for LlamaModel")
+                        # If dtype is None, use inputs_embeds.dtype
+                        if dtype is None:
+                            dtype = inputs_embeds.dtype
+
+                        return original_llama_prepare_4d(
+                            attention_mask, input_shape, inputs_embeds, past_key_values_length, sliding_window, dtype
+                        )
+
+                # Apply the patch
+                import transformers.models.llama.modeling_llama
+                transformers.models.llama.modeling_llama._prepare_4d_causal_attention_mask_for_sdpa = patched_llama_prepare_4d
+                logger.info("✅ Successfully patched LlamaModel _prepare_4d_causal_attention_mask_for_sdpa")
+            except (ImportError, AttributeError) as e:
+                logger.warning(f"⚠️ Could not patch LlamaModel _prepare_4d_causal_attention_mask_for_sdpa: {e}")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not patch LlamaModel _prepare_4d_causal_attention_mask_for_sdpa: {e}")
+
         # Fix 2: Apply direct fix for attention mask shape issues
         try:
             from transformers.models.llama.modeling_llama import LlamaAttention

@@ -206,6 +206,21 @@ install_package "werkzeug" ""
 install_package "pandas" "==2.2.0"
 install_package "huggingface_hub" "==0.19.4"
 
+# 7. Install TensorBoard for training visualization
+echo "Installing TensorBoard..."
+pip install tensorboard==2.15.2 --no-deps
+pip install tensorboard==2.15.2
+python -c "
+try:
+    import tensorboard
+    print(f'✅ TensorBoard version: {tensorboard.__version__}')
+except ImportError as e:
+    print(f'❌ TensorBoard error: {e}')
+    print('Installing TensorBoard with pip...')
+    import os
+    os.system('pip install tensorboard==2.15.2')
+"
+
 # Verify installations
 echo "Verifying installations..."
 

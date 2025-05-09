@@ -110,7 +110,7 @@ from . import gpt2
 from . import llama
 from . import mistral
 from . import t5
-""")"
+""")""
     
     logger.info(f"Created minimal {init_path}")
     

@@ -619,6 +619,7 @@ pip install sentencepiece==0.1.99 --no-deps
 pip install nltk==3.8.1 --no-deps
 pip install joblib==1.3.2 --no-deps  # Required by scikit-learn
 pip install scikit-learn==1.4.2 --no-deps
+pip install tensorboard==2.15.2 --no-deps  # Required for training visualization
 
 # Verify joblib and scikit-learn installation
 python -c "

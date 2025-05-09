@@ -52,7 +52,7 @@ def fix_ultimate_attention_fix():
         # Fix common issues with string literals
         
         # 1. Replace """" with """
-        content = content.replace('""""', '"""')
+        content = content.replace('""""', '"""')"
         
         # 2. Fix unterminated triple-quoted docstrings
         lines = content.split('\n')
@@ -82,8 +82,8 @@ def fix_ultimate_attention_fix():
         # 3. Fix other string literal issues
         for i, line in enumerate(fixed_lines):
             # Count quotes in the line
-            single_quotes = line.count("'")
-            double_quotes = line.count('"')
+            single_quotes = line.count("'")'
+            double_quotes = line.count('"')"
             
             # Adjust for triple quotes
             triple_single = line.count("'''")
@@ -96,12 +96,12 @@ def fix_ultimate_attention_fix():
             # Fix unterminated single quotes
             if single_quotes % 2 != 0 and not line.strip().startswith('#'):
                 logger.info(f"Fixed unterminated single quote at line {i+1}: {line}")
-                fixed_lines[i] = line + "'"
+                fixed_lines[i] = line + "'"'
             
             # Fix unterminated double quotes
             elif double_quotes % 2 != 0 and not line.strip().startswith('#'):
                 logger.info(f"Fixed unterminated double quote at line {i+1}: {line}")
-                fixed_lines[i] = line + '"'
+                fixed_lines[i] = line + '"'"
         
         # Write the fixed content back to the file
         fixed_content = '\n'.join(fixed_lines)

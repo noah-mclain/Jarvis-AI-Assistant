@@ -65,7 +65,7 @@ def top_k_top_p_filtering(
     filter_value: float = -float("Inf"),
     min_tokens_to_keep: int = 1,
 ) -> torch.Tensor:
-    \"\"\"
+    \"\"\""
     Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
 
     Args:
@@ -76,7 +76,7 @@ def top_k_top_p_filtering(
         min_tokens_to_keep: Minimum number of tokens to keep per batch example in the output.
 
     From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
-    \"\"\"
+    \"\"\""
     if top_k > 0:
         logits = TopKLogitsWarper(top_k=top_k, filter_value=filter_value, min_tokens_to_keep=min_tokens_to_keep)(
             None, logits

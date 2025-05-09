@@ -1,119 +1,161 @@
 #!/usr/bin/env python3
 """
 Fix unterminated string literals in Python files.
+
 This script scans Python files for unterminated string literals and fixes them.
+It specifically targets common issues like:
+1. Missing closing quotes
+2. Unescaped quotes within strings
+3. Trailing single quotes at the end of strings
+
+Usage:
+    python fix_unterminated_strings.py [file_or_directory]
 """
 
 import os
 import sys
 import re
-import tokenize
-from io import BytesIO
+import logging
 from pathlib import Path
 
-def find_unterminated_strings(file_path):
-    """Find unterminated string literals in a Python file."""
-    with open(file_path, 'r', encoding='utf-8') as f:
-        content = f.read()
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger(__name__)
 
-    # Check for unterminated strings using regex
-    lines = content.split('\n')
+def find_unterminated_strings(content):
+    """
+    Find unterminated string literals in the content.
+
+    Args:
+        content: The content to scan for unterminated strings
+
+    Returns:
+        A list of tuples (line_number, line_content, fixed_line)
+    """
     issues = []
+    lines = content.split('\n')
 
     for i, line in enumerate(lines):
-        # Check for single quotes
-        single_quotes = line.count("'")'
-        if single_quotes % 2 != 0 and not line.strip().startswith('#'):
-            issues.append((i+1, line))
+        line_number = i + 1
 
-        # Check for double quotes
+        # Skip comment lines
+        if line.strip().startswith('#'):
+            continue
+
+        # Check for unbalanced quotes
+        single_quotes = line.count("'")'
         double_quotes = line.count('"')"
-        if double_quotes % 2 != 0 and not line.strip().startswith('#'):
-            issues.append((i+1, line))
+
+        # Check for triple quotes
+        triple_single = line.count("'''")
+        triple_double = line.count('"""')
+
+        # Adjust counts for triple quotes
+        single_quotes -= triple_single * 3
+        double_quotes -= triple_double * 3
+
+        # Check if we have an odd number of quotes (indicating unterminated string)
+        if single_quotes % 2 == 1:
+            # Try to fix by adding a closing quote
+            fixed_line = line.rstrip() + "'"'
+            issues.append((line_number, line, fixed_line))
+        elif double_quotes % 2 == 1:
+            # Try to fix by adding a closing quote
+            fixed_line = line.rstrip() + '"'"
+            issues.append((line_number, line, fixed_line))
 
     return issues
 
-def fix_unterminated_strings(file_path):
-    """Fix unterminated string literals in a Python file."""
-    issues = find_unterminated_strings(file_path)
+def fix_file(file_path):
+    """
+    Fix unterminated strings in a file.
 
-    if not issues:
-        return False
+    Args:
+        file_path: Path to the file to fix
 
-    print(f"Found {len(issues)} potential unterminated strings in {file_path}")
+    Returns:
+        True if the file was fixed, False otherwise
+    """
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
 
-    with open(file_path, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
+        # Find unterminated strings
+        issues = find_unterminated_strings(content)
 
-    fixed = False
+        if not issues:
+            logger.info(f"No unterminated strings found in {file_path}")
+            return False
 
-    for line_num, line_content in issues:
-        print(f"Line {line_num}: {line_content}")
+        # Fix the issues
+        lines = content.split('\n')
+        for line_number, line, fixed_line in issues:
+            logger.info(f"Fixing line {line_number} in {file_path}")
+            logger.info(f"  Original: {line}")
+            logger.info(f"  Fixed:    {fixed_line}")
+            lines[line_number - 1] = fixed_line
 
-        # Try to fix the line
-        fixed_line = line_content
-
-        # Check for print statements with unterminated strings
-        if "print('" in line_content and not line_content.endswith("')"):
-            fixed_line = line_content + "')"'
-            print(f"Fixed to: {fixed_line}")
-            lines[line_num-1] = fixed_line + '\n'
-            fixed = True
-
-        # Check for other unterminated strings
-        elif "'" in line_content:'
-            # Count single quotes
-            if line_content.count("'") % 2 != 0:'
-                fixed_line = line_content + "'"'
-                print(f"Fixed to: {fixed_line}")
-                lines[line_num-1] = fixed_line + '\n'
-                fixed = True
-
-        # Check for double quotes
-        elif '"' in line_content:"
-            # Count double quotes
-            if line_content.count('"') % 2 != 0:"
-                fixed_line = line_content + '"'"
-                print(f"Fixed to: {fixed_line}")
-                lines[line_num-1] = fixed_line + '\n'
-                fixed = True
-
-    if fixed:
         # Write the fixed content back to the file
+        fixed_content = '\n'.join(lines)
         with open(file_path, 'w', encoding='utf-8') as f:
-            f.writelines(lines)
+            f.write(fixed_content)
 
-        print(f"Fixed unterminated strings in {file_path}")
+        logger.info(f"Fixed {len(issues)} issues in {file_path}")
         return True
-
-    return False
-
-def main():
-    """Main function to fix unterminated string literals in Python files."""
-    # Find all Python files in the setup directory
-    setup_dir = Path("setup")
-    if not setup_dir.exists():
-        print(f"Directory not found: {setup_dir}")
+    except Exception as e:
+        logger.error(f"Error fixing {file_path}: {e}")
         return False
 
-    python_files = list(setup_dir.glob("**/*.py"))
-    print(f"Found {len(python_files)} Python files in {setup_dir}")
+def scan_directory(directory):
+    """
+    Scan a directory for Python files and fix unterminated strings.
 
-    fixed_files = []
+    Args:
+        directory: Directory to scan
+
+    Returns:
+        Number of files fixed
+    """
+    fixed_count = 0
+    directory_path = Path(directory)
+
+    # Find all Python files in the directory
+    python_files = list(directory_path.glob("**/*.py"))
+    logger.info(f"Found {len(python_files)} Python files in {directory}")
 
     for file_path in python_files:
-        if fix_unterminated_strings(file_path):
-            fixed_files.append(file_path)
+        if fix_file(file_path):
+            fixed_count += 1
 
-    if fixed_files:
-        print(f"Fixed unterminated strings in {len(fixed_files)} files:")
-        for file_path in fixed_files:
-            print(f"  - {file_path}")
-        return True
+    return fixed_count
+
+def main():
+    """Main entry point"""
+    if len(sys.argv) > 1:
+        path = sys.argv[1]
     else:
-        print("No unterminated strings found in Python files.")
-        return False
+        # Default to the setup directory
+        path = 'setup'
+
+    if os.path.isfile(path):
+        # Fix a single file
+        if fix_file(path):
+            logger.info(f"Fixed unterminated strings in {path}")
+        else:
+            logger.info(f"No unterminated strings found in {path}")
+    elif os.path.isdir(path):
+        # Scan a directory
+        fixed_count = scan_directory(path)
+        logger.info(f"Fixed unterminated strings in {fixed_count} files")
+    else:
+        logger.error(f"Path not found: {path}")
+        return 1
+
+    return 0
 
 if __name__ == "__main__":
-    success = main()
-    sys.exit(0 if success else 1)
+    sys.exit(main())

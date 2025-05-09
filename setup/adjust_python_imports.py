@@ -55,7 +55,7 @@ if "{custom_unsloth_path}" not in sys.path:
         content = re.sub(r'(import\s+sys.*?\n)', r'\1' + path_insertion, content, count=1, flags=re.DOTALL)
     else:
         # Add at top of file (after docstring if exists)
-        if content.startswith('"""') or content.startswith("'''"):'"'
+        if content.startswith('"""') or content.startswith("'''"):'"'"
             # Find end of docstring
             match = re.search(r'^(""".*?"""|\'\'\'.*?\'\'\')', content, re.DOTALL)
             if match:

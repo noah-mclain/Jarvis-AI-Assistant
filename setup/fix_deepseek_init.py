@@ -180,7 +180,7 @@ else:
     import sys
 
     sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
-''''
+'''''
     with open(init_path, "w") as f:
         f.write(init_content)
     logger.info(f"Created file: {init_path}")
@@ -241,7 +241,7 @@ class DeepSeekConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-''''
+'''''
     with open(config_path, "w") as f:
         f.write(config_content)
     logger.info(f"Created file: {config_path}")
@@ -340,7 +340,7 @@ class DeepSeekForSequenceClassification(DeepSeekPreTrainedModel):
             hidden_states=None,
             attentions=None,
         )
-''')'
+''')''
     
     logger.info(f"Created file: {modeling_path}")
     

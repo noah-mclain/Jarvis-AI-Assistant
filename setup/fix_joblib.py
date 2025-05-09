@@ -106,7 +106,7 @@ def fix_joblib():
 import joblib
 
 from joblib import *
-""")"
+""")""
                 logger.info(f"Created {joblib_py}")
         except Exception as e2:
             logger.error(f"Failed to create symlink: {e2}")

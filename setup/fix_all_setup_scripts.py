@@ -52,7 +52,7 @@ def fix_file(file_path):
             f.write(content)
         
         # Fix 1: Replace """" with """
-        content = content.replace('""""', '"""')
+        content = content.replace('""""', '"""')"
         
         # Fix 2: Fix unterminated triple-quoted docstrings
         lines = content.split('\n')
@@ -92,8 +92,8 @@ def fix_file(file_path):
                 continue
             
             # Count quotes in the line
-            single_quotes = line.count("'")
-            double_quotes = line.count('"')
+            single_quotes = line.count("'")'
+            double_quotes = line.count('"')"
             
             # Adjust for triple quotes
             triple_single = line.count("'''")
@@ -106,12 +106,12 @@ def fix_file(file_path):
             # Fix unterminated single quotes
             if single_quotes % 2 != 0:
                 logger.info(f"Fixed unterminated single quote in {file_path}, line {i+1}: {line}")
-                fixed_lines[i] = line + "'"
+                fixed_lines[i] = line + "'"'
             
             # Fix unterminated double quotes
             elif double_quotes % 2 != 0:
                 logger.info(f"Fixed unterminated double quote in {file_path}, line {i+1}: {line}")
-                fixed_lines[i] = line + '"'
+                fixed_lines[i] = line + '"'"
         
         # Fix 4: Fix indentation issues
         # This is a simple fix that just ensures consistent indentation
@@ -169,9 +169,9 @@ def fix_file(file_path):
                     
                     # Ensure proper string termination
                     if "'" in line and line.count("'") % 2 != 0:
-                        line += "'"
+                        line += "'"'
                     if '"' in line and line.count('"') % 2 != 0:
-                        line += '"'
+                        line += '"'"
                     
                     fixed_lines.append(line)
                 
