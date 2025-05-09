@@ -1289,14 +1289,83 @@ def train_with_unsloth(args):
                         # Log tensor shapes and devices
                         logger.info(f"Input tensor {k}: shape={v.shape}, device={v.device}")
 
-                # Check if attention_mask needs fixing
-                if "attention_mask" in inputs and inputs["attention_mask"].dim() != 2:
-                    logger.warning(f"Fixing attention_mask dimension from {inputs['attention_mask'].dim()} to 2D")
-                    # Reshape to 2D [batch_size, seq_length]
-                    batch_size = inputs["attention_mask"].size(0)
-                    seq_length = inputs["attention_mask"].size(-1)
-                    inputs["attention_mask"] = inputs["attention_mask"].view(batch_size, seq_length).to(device)
-                    logger.info(f"Fixed attention_mask shape: {inputs['attention_mask'].shape}, device: {inputs['attention_mask'].device}")
+                # Handle attention mask properly - DO NOT reshape 4D masks to 2D
+                if "attention_mask" in inputs:
+                    if inputs["attention_mask"].dim() == 4:
+                        # Keep 4D mask as-is, just ensure it's on the right device
+                        if inputs["attention_mask"].device != device:
+                            inputs["attention_mask"] = inputs["attention_mask"].to(device)
+                        logger.info(f"Using 4D attention mask with shape: {inputs['attention_mask'].shape}")
+                    elif inputs["attention_mask"].dim() == 2:
+                        # Convert 2D mask to 4D causal mask
+                        batch_size, seq_length = inputs["attention_mask"].shape
+
+                        # First, expand to [batch_size, 1, 1, seq_length]
+                        attention_mask_4d = inputs["attention_mask"].unsqueeze(1).unsqueeze(2)
+
+                        # Then, expand to [batch_size, 1, seq_length, seq_length]
+                        attention_mask_4d = attention_mask_4d.expand(-1, 1, seq_length, -1)
+
+                        # Create a causal mask
+                        causal_mask = torch.triu(
+                            torch.ones((seq_length, seq_length), device=device, dtype=torch.bool),
+                            diagonal=1
+                        )
+                        causal_mask = causal_mask.unsqueeze(0).unsqueeze(1)  # [1, 1, seq_len, seq_len]
+                        causal_mask = causal_mask.expand(batch_size, 1, seq_length, seq_length)
+
+                        # Combine with the attention mask
+                        combined_mask = causal_mask | ~attention_mask_4d.bool()
+
+                        # Convert to the model's dtype if available
+                        model_dtype = getattr(model, "dtype", None)
+                        if model_dtype is not None:
+                            combined_mask = combined_mask.to(dtype=model_dtype)
+
+                        # Replace the attention mask
+                        inputs["attention_mask"] = ~combined_mask
+                        logger.info(f"Converted 2D attention mask to 4D: {inputs['attention_mask'].shape}")
+                    else:
+                        logger.warning(f"Unexpected attention_mask dimension: {inputs['attention_mask'].dim()}")
+                        # Create a proper 4D causal mask
+                        batch_size, seq_length = inputs["input_ids"].shape
+
+                        # Create a causal mask
+                        causal_mask = torch.triu(
+                            torch.ones((seq_length, seq_length), device=device, dtype=torch.bool),
+                            diagonal=1
+                        )
+                        causal_mask = causal_mask.unsqueeze(0).unsqueeze(1)  # [1, 1, seq_len, seq_len]
+                        causal_mask = causal_mask.expand(batch_size, 1, seq_length, seq_length)
+
+                        # Convert to the model's dtype if available
+                        model_dtype = getattr(model, "dtype", None)
+                        if model_dtype is not None:
+                            causal_mask = causal_mask.to(dtype=model_dtype)
+
+                        # Replace the attention mask
+                        inputs["attention_mask"] = ~causal_mask
+                        logger.info(f"Created new 4D causal attention mask: {inputs['attention_mask'].shape}")
+                else:
+                    # Create a proper 4D causal mask if no attention mask is provided
+                    batch_size, seq_length = inputs["input_ids"].shape
+
+                    # Create a causal mask
+                    causal_mask = torch.triu(
+                        torch.ones((seq_length, seq_length), device=device, dtype=torch.bool),
+                        diagonal=1
+                    )
+                    causal_mask = causal_mask.unsqueeze(0).unsqueeze(1)  # [1, 1, seq_len, seq_len]
+                    causal_mask = causal_mask.expand(batch_size, 1, seq_length, seq_length)
+
+                    # Convert to the model's dtype if available
+                    model_dtype = getattr(model, "dtype", None)
+                    if model_dtype is not None:
+                        causal_mask = causal_mask.to(dtype=model_dtype)
+
+                    # Add the attention mask
+                    inputs["attention_mask"] = ~causal_mask
+                    logger.info(f"Created new 4D causal attention mask: {inputs['attention_mask'].shape}")
 
                 # Verify all tensors are on the same device
                 devices = set(v.device for k, v in inputs.items() if isinstance(v, torch.Tensor))
@@ -1499,6 +1568,13 @@ def train_with_unsloth(args):
 
                     # Forward pass without attention mask
                     logger.info("Performing forward pass without attention mask")
+
+                    # CRITICAL FIX: Ensure input_ids remain as torch.long
+                    if input_ids.dtype != torch.long:
+                        logger.warning(f"Simplified computation - input_ids have incorrect dtype: {input_ids.dtype}. Converting to torch.long")
+                        input_ids = input_ids.to(dtype=torch.long)
+
+                    # Forward pass with correct dtype
                     outputs = model(input_ids=input_ids)
 
                     # Compute the loss manually
@@ -1884,7 +1960,19 @@ def train_with_unsloth(args):
                         v = v.to(device)
 
                     # Handle dtype for non-label tensors
-                    if k != "labels" and model_dtype is not None and v.dtype != model_dtype:
+                    # CRITICAL FIX: Do not convert input_ids to float16/bfloat16
+                    if k == "input_ids":
+                        # Ensure input_ids are always torch.long
+                        if v.dtype != torch.long:
+                            logger.warning(f"Converting input_ids from {v.dtype} to torch.long")
+                            v = v.to(dtype=torch.long)
+                    elif k == "labels":
+                        # Ensure labels are always torch.long
+                        if v.dtype != torch.long:
+                            logger.warning(f"Converting labels from {v.dtype} to torch.long")
+                            v = v.to(dtype=torch.long)
+                    # For other tensors, convert to model's dtype if needed
+                    elif model_dtype is not None and v.dtype != model_dtype:
                         logger.info(f"Converting {k} from {v.dtype} to {model_dtype}")
                         v = v.to(dtype=model_dtype)
 
@@ -1893,9 +1981,16 @@ def train_with_unsloth(args):
                     new_kwargs[k] = v
 
             # Ensure specific inputs are handled correctly
-            if "input_ids" in new_kwargs and new_kwargs["input_ids"].device != device:
-                logger.info(f"Explicitly moving input_ids from {new_kwargs['input_ids'].device} to {device}")
-                new_kwargs["input_ids"] = new_kwargs["input_ids"].to(device)
+            if "input_ids" in new_kwargs:
+                # CRITICAL FIX: Ensure input_ids remain as torch.long
+                if new_kwargs["input_ids"].dtype != torch.long:
+                    logger.warning(f"Converting input_ids from {new_kwargs['input_ids'].dtype} to torch.long")
+                    new_kwargs["input_ids"] = new_kwargs["input_ids"].to(dtype=torch.long)
+
+                # Also ensure it's on the correct device
+                if new_kwargs["input_ids"].device != device:
+                    logger.info(f"Explicitly moving input_ids from {new_kwargs['input_ids'].device} to {device}")
+                    new_kwargs["input_ids"] = new_kwargs["input_ids"].to(device)
 
             # Handle attention mask specially
             if "attention_mask" in new_kwargs:
@@ -1978,9 +2073,19 @@ def train_with_unsloth(args):
                 try:
                     logger.info("Trying direct forward call with explicit arguments")
                     # Extract the key arguments
-                    input_ids = new_kwargs.get("input_ids", None)
-                    attention_mask = new_kwargs.get("attention_mask", None)
-                    labels = new_kwargs.get("labels", None)
+                    input_ids = new_kwargs.get("input_ids")
+                    attention_mask = new_kwargs.get("attention_mask")
+                    labels = new_kwargs.get("labels")
+
+                    # CRITICAL FIX: Ensure input_ids remain as torch.long
+                    if input_ids is not None and input_ids.dtype != torch.long:
+                        logger.warning(f"Converting input_ids from {input_ids.dtype} to torch.long in direct forward call")
+                        input_ids = input_ids.to(dtype=torch.long)
+
+                    # Ensure labels are torch.long if present
+                    if labels is not None and labels.dtype != torch.long:
+                        logger.warning(f"Converting labels from {labels.dtype} to torch.long in direct forward call")
+                        labels = labels.to(dtype=torch.long)
 
                     # If we have an attention mask issue, try to fix it or create a new one
                     if "attention mask" in str(e).lower() and input_ids is not None:
@@ -2019,6 +2124,16 @@ def train_with_unsloth(args):
                     # Last resort: try without attention mask
                     try:
                         logger.info("Trying forward call without attention mask")
+
+                        # CRITICAL FIX: Double-check input_ids and labels are torch.long
+                        if input_ids is not None and input_ids.dtype != torch.long:
+                            logger.warning(f"Converting input_ids from {input_ids.dtype} to torch.long in fallback forward call")
+                            input_ids = input_ids.to(dtype=torch.long)
+
+                        if labels is not None and labels.dtype != torch.long:
+                            logger.warning(f"Converting labels from {labels.dtype} to torch.long in fallback forward call")
+                            labels = labels.to(dtype=torch.long)
+
                         # Use automatic mixed precision with the model's dtype
                         with torch.cuda.amp.autocast(dtype=model_dtype):
                             outputs = original_forward(
@@ -2051,8 +2166,13 @@ def train_with_unsloth(args):
         original_prepare_inputs = model.prepare_inputs_for_generation
 
         def device_aware_prepare_inputs(input_ids, **kwargs):
-            """Ensure all inputs are on the correct device"""
+            """Ensure all inputs are on the correct device and have the correct dtype"""
             device = model.device
+
+            # CRITICAL FIX: Ensure input_ids remain as torch.long
+            if input_ids.dtype != torch.long:
+                logger.warning(f"Converting input_ids from {input_ids.dtype} to torch.long in prepare_inputs_for_generation")
+                input_ids = input_ids.to(dtype=torch.long)
 
             # Ensure input_ids is on the correct device
             if input_ids.device != device:
