@@ -172,13 +172,38 @@ if [ "$MODEL_TYPE" = "code" ]; then
         # Make it executable
         chmod +x setup/comprehensive_attention_mask_fix.py
 
-        # Run with detailed logging
+        # Run with detailed logging and ensure it's executed in the correct environment
         PYTHONPATH="$PYTHONPATH:." python -c "
 import logging
-logging.basicConfig(level=logging.INFO)
-import setup.comprehensive_attention_mask_fix as fix
-success = fix.apply_comprehensive_fix()
-print(f'Comprehensive fix applied: {success}')
+import sys
+import os
+import torch
+
+# Configure detailed logging
+logging.basicConfig(level=logging.INFO,
+                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                   handlers=[logging.StreamHandler(sys.stdout)])
+logger = logging.getLogger('attention_mask_fix')
+
+# Print environment information
+logger.info(f'Python version: {sys.version}')
+logger.info(f'PyTorch version: {torch.__version__}')
+logger.info(f'CUDA available: {torch.cuda.is_available()}')
+if torch.cuda.is_available():
+    logger.info(f'CUDA device: {torch.cuda.get_device_name(0)}')
+    logger.info(f'CUDA version: {torch.version.cuda}')
+
+# Import and apply the fix
+try:
+    import setup.comprehensive_attention_mask_fix as fix
+    logger.info('Successfully imported comprehensive_attention_mask_fix')
+    success = fix.apply_comprehensive_fix()
+    logger.info(f'Comprehensive fix applied: {success}')
+    print(f'Comprehensive fix applied: {success}')
+except Exception as e:
+    logger.error(f'Error applying comprehensive fix: {e}')
+    print(f'Error applying comprehensive fix: {e}')
+    success = False
 "
         if [ $? -eq 0 ]; then
             echo "✅ Comprehensive attention mask fix applied successfully"

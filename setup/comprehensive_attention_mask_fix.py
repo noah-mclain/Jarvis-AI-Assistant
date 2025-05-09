@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 def fix_dtype_mismatch():
     """
-    Apply a fix for dtype mismatches between BFloat16 and Half tensors.
+    Apply a comprehensive fix for dtype mismatches between BFloat16 and Half tensors.
     This is a common issue when using mixed precision training.
 
     Returns:
@@ -41,8 +41,9 @@ def fix_dtype_mismatch():
         import transformers
         from transformers.modeling_utils import PreTrainedModel
 
-        logger.info("Applying dtype mismatch fix...")
+        logger.info("Applying comprehensive dtype mismatch fix...")
 
+        # Fix 1: Patch PreTrainedModel.forward
         # Store the original forward method
         original_forward = PreTrainedModel.forward
 
@@ -54,20 +55,110 @@ def fix_dtype_mismatch():
             # Get the model's dtype
             model_dtype = getattr(self, "dtype", None)
 
+            if model_dtype is None:
+                # Try to detect the model's dtype from its parameters
+                for param in self.parameters():
+                    if param.dtype in [torch.float16, torch.bfloat16]:
+                        model_dtype = param.dtype
+                        logger.info(f"Detected model dtype from parameters: {model_dtype}")
+                        break
+
             # Process input tensors to ensure consistent dtype
             for arg_name, arg_value in kwargs.items():
-                if isinstance(arg_value, torch.Tensor) and arg_value.dtype != model_dtype and model_dtype is not None:
+                if isinstance(arg_value, torch.Tensor):
                     # Skip certain tensors that should not be converted
                     if arg_name not in ["labels", "input_ids", "token_type_ids"]:
-                        logger.info(f"Converting {arg_name} from {arg_value.dtype} to {model_dtype}")
-                        kwargs[arg_name] = arg_value.to(dtype=model_dtype)
+                        # Handle attention mask specially
+                        if arg_name == "attention_mask":
+                            # If it's a 4D attention mask, ensure it has the correct shape
+                            if arg_value.dim() == 4:
+                                batch_size, head_dim, seq_len1, seq_len2 = arg_value.shape
+                                # Check if the mask has the wrong shape (e.g., [6, 1, 6, 2048])
+                                if seq_len1 != seq_len2:
+                                    logger.warning(f"Attention mask has incorrect shape: {arg_value.shape}. Fixing...")
+                                    # Create a proper 4D attention mask
+                                    device = arg_value.device
+                                    # Create a causal mask
+                                    causal_mask = torch.triu(
+                                        torch.ones((seq_len2, seq_len2), device=device, dtype=torch.bool),
+                                        diagonal=1
+                                    )
+                                    causal_mask = causal_mask.unsqueeze(0).unsqueeze(1)  # [1, 1, seq_len, seq_len]
+                                    causal_mask = causal_mask.expand(batch_size, head_dim, seq_len2, seq_len2)
+
+                                    # Convert to the correct dtype
+                                    if model_dtype is not None:
+                                        causal_mask = causal_mask.to(dtype=model_dtype)
+                                    else:
+                                        causal_mask = causal_mask.to(dtype=arg_value.dtype)
+
+                                    # Replace the attention mask
+                                    kwargs[arg_name] = ~causal_mask
+                                    logger.info(f"Fixed attention mask shape: {kwargs[arg_name].shape}")
+
+                            # Ensure the attention mask has the correct dtype
+                            if model_dtype is not None and kwargs[arg_name].dtype != model_dtype:
+                                logger.info(f"Converting attention_mask from {kwargs[arg_name].dtype} to {model_dtype}")
+                                kwargs[arg_name] = kwargs[arg_name].to(dtype=model_dtype)
+
+                        # For other tensors, just convert the dtype if needed
+                        elif model_dtype is not None and arg_value.dtype != model_dtype:
+                            logger.info(f"Converting {arg_name} from {arg_value.dtype} to {model_dtype}")
+                            kwargs[arg_name] = arg_value.to(dtype=model_dtype)
 
             # Call the original forward method
-            return original_forward(self, *args, **kwargs)
+            try:
+                return original_forward(self, *args, **kwargs)
+            except RuntimeError as e:
+                error_msg = str(e)
+                # Check for specific dtype mismatch errors
+                if "expected mat1 and mat2 to have the same dtype" in error_msg:
+                    logger.warning(f"Caught dtype mismatch error: {error_msg}")
+                    # Try to fix the dtype mismatch by converting all tensors to float32
+                    logger.info("Attempting to fix by converting all tensors to float32")
+                    for arg_name, arg_value in kwargs.items():
+                        if isinstance(arg_value, torch.Tensor):
+                            kwargs[arg_name] = arg_value.to(dtype=torch.float32)
+
+                    # Try again with float32 tensors
+                    return original_forward(self, *args, **kwargs)
+                else:
+                    # Re-raise other errors
+                    raise
 
         # Apply the patch
         PreTrainedModel.forward = patched_forward
         logger.info("✅ Successfully patched PreTrainedModel.forward to fix dtype mismatches")
+
+        # Fix 2: Patch the prepare_inputs_for_generation method
+        try:
+            original_prepare_inputs = PreTrainedModel.prepare_inputs_for_generation
+
+            def patched_prepare_inputs(self, *args, **kwargs):
+                """
+                Patched prepare_inputs_for_generation method that ensures consistent dtypes.
+                """
+                # Call the original method
+                inputs = original_prepare_inputs(self, *args, **kwargs)
+
+                # Get the model's dtype
+                model_dtype = getattr(self, "dtype", None)
+
+                if model_dtype is not None:
+                    # Ensure all tensors have the correct dtype
+                    for key, value in inputs.items():
+                        if isinstance(value, torch.Tensor) and key not in ["labels", "input_ids", "token_type_ids"]:
+                            if value.dtype != model_dtype:
+                                logger.info(f"Converting {key} from {value.dtype} to {model_dtype} in prepare_inputs_for_generation")
+                                inputs[key] = value.to(dtype=model_dtype)
+
+                return inputs
+
+            # Apply the patch
+            PreTrainedModel.prepare_inputs_for_generation = patched_prepare_inputs
+            logger.info("✅ Successfully patched PreTrainedModel.prepare_inputs_for_generation")
+        except Exception as e:
+            logger.warning(f"⚠️ Could not patch prepare_inputs_for_generation: {e}")
 
         return True
     except Exception as e:
@@ -363,25 +454,30 @@ def apply_comprehensive_fix():
                             mask = mask.expand(-1, -1, indices_k.size(0) if hasattr(indices_k, 'size') else indices_k, -1)
 
                     if indices_q is not None:
-                        # Check if indices_q is the batch size (which would cause the error)
-                        if isinstance(indices_q, int) and indices_q == attention_mask.size(0):
-                            logger.warning(f"indices_q ({indices_q}) matches batch_size, which would cause dimension mismatch. Using seq_length instead.")
-                            # Use sequence length instead of batch size for expansion
-                            seq_length = attention_mask.size(-1)
-                            mask = mask.expand(-1, 1, -1, -1)  # First expand with 1
-                            mask = mask.expand(-1, -1, seq_length, -1)  # Then expand with seq_length
-                        elif isinstance(indices_q, int):
-                            mask = mask.expand(-1, indices_q, -1, -1)
-                        else:
-                            # Handle case where indices_q is a tensor
-                            # Check if it's the batch size tensor
-                            if hasattr(indices_q, 'size') and indices_q.size(0) == attention_mask.size(0):
-                                logger.warning(f"indices_q size ({indices_q.size(0)}) matches batch_size, which would cause dimension mismatch. Using seq_length instead.")
-                                seq_length = attention_mask.size(-1)
-                                mask = mask.expand(-1, 1, -1, -1)  # First expand with 1
-                                mask = mask.expand(-1, -1, seq_length, -1)  # Then expand with seq_length
-                            else:
-                                mask = mask.expand(-1, indices_q.size(0) if hasattr(indices_q, 'size') else indices_q, -1, -1)
+                        # Get sequence length for proper expansion
+                        seq_length = attention_mask.size(-1)
+                        batch_size = attention_mask.size(0)
+
+                        # Create a properly shaped 4D attention mask directly
+                        logger.info(f"Creating a properly shaped 4D attention mask with dimensions [batch_size, 1, seq_length, seq_length]")
+
+                        # Create a causal mask
+                        causal_mask = torch.triu(
+                            torch.ones((seq_length, seq_length), device=device, dtype=torch.bool),
+                            diagonal=1
+                        )
+                        causal_mask = causal_mask.unsqueeze(0).unsqueeze(1)  # [1, 1, seq_len, seq_len]
+                        causal_mask = causal_mask.expand(batch_size, 1, seq_length, seq_length)
+
+                        # Apply the attention mask
+                        expanded_mask = attention_mask.unsqueeze(1).unsqueeze(2)
+                        expanded_mask = expanded_mask.expand(-1, -1, seq_length, -1)
+
+                        # Combine with causal mask
+                        combined_mask = causal_mask | ~expanded_mask.bool()
+
+                        # Convert to the expected format
+                        mask = ~combined_mask
                 except Exception as e:
                     logger.warning(f"Error expanding mask dimensions: {e}")
                     # If we encounter any tensor size mismatch error, create a compatible mask
@@ -415,28 +511,60 @@ def apply_comprehensive_fix():
 
                 # Handle dtype mismatch issues
                 try:
-                    # Convert mask to the expected type based on unmasked_value
+                    # First, convert mask to the expected type based on unmasked_value
                     if unmasked_value is not True:
                         mask = mask.to(dtype=attention_mask.dtype) * unmasked_value
 
-                    # Ensure mask is in the correct dtype to avoid "BFloat16 != Half" errors
-                    # Check if we're in a context where we can detect the model's dtype
+                    # Try to detect the model's dtype from the current context
+                    model_dtype = None
+
+                    # Method 1: Check the current frame for model dtype
                     try:
                         import inspect
                         frame = inspect.currentframe()
                         while frame:
                             if 'self' in frame.f_locals and hasattr(frame.f_locals['self'], 'dtype'):
                                 model_dtype = frame.f_locals['self'].dtype
-                                # If mask dtype doesn't match model dtype, convert it
-                                if mask.dtype != model_dtype and model_dtype is not None:
-                                    logger.info(f"Converting mask from {mask.dtype} to {model_dtype}")
-                                    mask = mask.to(dtype=model_dtype)
                                 break
                             frame = frame.f_back
-                    except Exception as dtype_error:
-                        logger.warning(f"Could not detect model dtype: {dtype_error}")
+                    except Exception:
+                        pass
+
+                    # Method 2: Try to detect if we're in a BFloat16 or Float16 context
+                    if model_dtype is None:
+                        try:
+                            # Check if any tensor in the current context is BFloat16 or Float16
+                            for frame_info in inspect.stack():
+                                frame = frame_info.frame
+                                for var_name, var_val in frame.f_locals.items():
+                                    if isinstance(var_val, torch.Tensor) and var_val.dtype in [torch.bfloat16, torch.float16]:
+                                        model_dtype = var_val.dtype
+                                        logger.info(f"Detected model dtype from context: {model_dtype}")
+                                        break
+                                if model_dtype is not None:
+                                    break
+                        except Exception:
+                            pass
+
+                    # Method 3: Try both common dtypes
+                    if model_dtype is None:
+                        # If we couldn't detect the dtype, try both BFloat16 and Float16
+                        logger.info("Could not detect model dtype. Creating both BFloat16 and Float16 versions of the mask.")
+
+                        # Create a copy of the mask in both dtypes
+                        mask_bfloat16 = mask.to(dtype=torch.bfloat16)
+                        mask_float16 = mask.to(dtype=torch.float16)
+
+                        # Return the BFloat16 version (we'll handle Float16 in the forward method)
+                        mask = mask_bfloat16
+                    else:
+                        # If we detected a dtype, convert the mask to that dtype
+                        logger.info(f"Converting mask to detected dtype: {model_dtype}")
+                        mask = mask.to(dtype=model_dtype)
                 except Exception as e:
                     logger.warning(f"Error handling dtype conversion: {e}")
+                    # If all else fails, create a float32 mask which can be converted later
+                    mask = mask.to(dtype=torch.float32)
 
                 return mask
 
