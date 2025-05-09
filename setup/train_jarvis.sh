@@ -195,25 +195,61 @@ create_directories()
 print('Environment setup complete')
 "
 
-# Check for required Python packages
+# Check for required Python packages and install missing ones
 echo "Checking for required Python packages..."
 python -c "
 import sys
-required_packages = ['torch', 'transformers', 'datasets', 'bitsandbytes']
+import os
+required_packages = ['torch', 'transformers', 'datasets', 'bitsandbytes', 'numpy', 'pandas', 'huggingface-hub']
 missing_packages = []
+version_conflicts = []
 
 for package in required_packages:
     try:
-        __import__(package)
+        module = __import__(package)
         print(f'✓ {package} is installed')
+
+        # Check for known version conflicts
+        if package == 'numpy':
+            if not hasattr(module, '__version__') or module.__version__ != '1.26.4':
+                version_conflicts.append(('numpy', '1.26.4'))
+        elif package == 'huggingface-hub':
+            if not hasattr(module, '__version__') or not (float(module.__version__.split('.')[0]) < 1.0 and float(module.__version__.split('.')[1]) >= 14.0):
+                version_conflicts.append(('huggingface-hub', '<1.0.0,>=0.14.0'))
+        elif package == 'typing-extensions':
+            if not hasattr(module, '__version__') or module.__version__ != '4.13.2':
+                version_conflicts.append(('typing-extensions', '4.13.2'))
     except ImportError:
         missing_packages.append(package)
         print(f'✗ {package} is NOT installed')
 
+# Install missing packages
 if missing_packages:
-    print('\n⚠️ Some required packages are missing. Please install them with:')
-    print(f'pip install {\" \".join(missing_packages)}')
-    print('\nContinuing anyway, but training may fail...')
+    print('\n⚠️ Some required packages are missing. Installing them now:')
+    for package in missing_packages:
+        if package == 'torch':
+            os.system('pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --extra-index-url https://download.pytorch.org/whl/cu121')
+        elif package == 'transformers':
+            os.system('pip install transformers==4.36.2')
+        elif package == 'datasets':
+            os.system('pip install datasets==2.14.5')
+        elif package == 'bitsandbytes':
+            os.system('pip install bitsandbytes==0.41.0')
+        elif package == 'numpy':
+            os.system('pip install numpy==1.26.4')
+        elif package == 'pandas':
+            os.system('pip install pandas')
+        elif package == 'huggingface-hub':
+            os.system('pip install huggingface-hub<1.0.0,>=0.14.0')
+
+# Fix version conflicts
+if version_conflicts:
+    print('\n⚠️ Some package versions need to be fixed:')
+    for package, version in version_conflicts:
+        print(f'Fixing {package} to version {version}')
+        os.system(f'pip install {package}=={version} --force-reinstall --no-deps')
+
+print('\nContinuing with training...')
 "
 
 # Clear CUDA cache
@@ -265,23 +301,29 @@ fi
 if [ "$MODEL_TYPE" = "code" ]; then
     echo "Applying attention mask fix for DeepSeek model..."
 
-    # Use the consolidated setup script which includes all attention mask fixes
-    if [ -f "setup/consolidated_unified_setup.sh" ]; then
-        echo "Using consolidated setup script for attention mask fixes..."
-        chmod +x setup/consolidated_unified_setup.sh
-        ./setup/consolidated_unified_setup.sh
-    else
-        # Fallback to individual scripts if consolidated script is not available
-        echo "Falling back to individual attention mask fix scripts..."
-        chmod +x setup/fix_transformers_attention_mask.py
-        chmod +x setup/fix_attention_mask_params.py
-        chmod +x setup/fix_tensor_size_mismatch.py
-        chmod +x setup/fix_attention_dimension_mismatch.py
-        chmod +x setup/fix_tuple_unpacking_error.py
-        chmod +x setup/comprehensive_attention_mask_fix.py
-        chmod +x setup/fix_all_attention_issues.py
-        chmod +x setup/ultimate_attention_fix.py
-    fi
+    # Apply individual attention mask fix scripts directly
+    echo "Applying individual attention mask fix scripts..."
+    chmod +x setup/fix_transformers_attention_mask.py
+    chmod +x setup/fix_attention_mask_params.py
+    chmod +x setup/fix_tensor_size_mismatch.py
+    chmod +x setup/fix_attention_dimension_mismatch.py
+    chmod +x setup/fix_tuple_unpacking_error.py
+    chmod +x setup/comprehensive_attention_mask_fix.py
+    chmod +x setup/fix_all_attention_issues.py
+    chmod +x setup/ultimate_attention_fix.py
+
+    # Install critical dependencies without causing conflicts
+    echo "Ensuring critical dependencies are available..."
+    pip install typing-extensions==4.13.2 --force-reinstall --no-deps
+    pip install wheel setuptools --upgrade --no-deps
+
+    # Fix numpy dependency conflict
+    echo "Fixing numpy dependency conflict..."
+    pip install numpy==1.26.4 --no-deps
+
+    # Fix huggingface-hub and pandas dependencies for datasets
+    echo "Fixing huggingface-hub and pandas dependencies..."
+    pip install huggingface-hub\<1.0.0,\>=0.14.0 pandas --no-deps
 
     # Try to use the ultimate fix first
     if [ -f "setup/ultimate_attention_fix.py" ]; then
