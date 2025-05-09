@@ -189,8 +189,30 @@ def train_cnn_text_model(gpu_type, vram_size, use_improved_preprocessor=False):
                     # Try to load the dataset to verify it has valid batches
                     data = torch.load(path)
                     if 'batches' in data and data['batches']:
-                        available_datasets.append(dataset_name)
-                        print(f'Dataset {dataset_name} has {len(data["batches"])} valid batches')
+                        # Validate batch tensor types
+                        valid_batches = True
+                        for batch in data['batches']:
+                            if isinstance(batch, tuple) and len(batch) == 2:
+                                input_batch, target_batch = batch
+                                # Check if tensors have the correct dtype
+                                if hasattr(input_batch, 'dtype') and input_batch.dtype != torch.long:
+                                    print(f'Warning: Input batch in {dataset_name} has incorrect dtype: {input_batch.dtype}')
+                                    # We'll fix this in train_from_multiple_datasets
+                                if hasattr(target_batch, 'dtype') and target_batch.dtype != torch.long:
+                                    print(f'Warning: Target batch in {dataset_name} has incorrect dtype: {target_batch.dtype}')
+                                    # We'll fix this in train_from_multiple_datasets
+                            else:
+                                valid_batches = False
+                                print(f'Warning: Invalid batch format in {dataset_name}')
+                                break
+
+                        if valid_batches:
+                            available_datasets.append(dataset_name)
+                            print(f'Dataset {dataset_name} has {len(data["batches"])} valid batches')
+                        else:
+                            print(f'Warning: Invalid batch format in {dataset_name}')
+                            print(f'Will re-preprocess {dataset_name} dataset')
+                            datasets_to_reprocess.append(dataset_name)
                     else:
                         print(f'Warning: No batches found in preprocessed data: {path}')
                         print(f'Will re-preprocess {dataset_name} dataset')

@@ -385,8 +385,16 @@ def create_batches(sequences: List[torch.Tensor], batch_size: int):
     for seq in sequences:
         # Keep tensors on CPU until needed
         if len(current_batch) >= batch_size:
-            # Use pin_memory for faster GPU transfer
-            batch_tensor = torch.stack(current_batch).pin_memory()
+            # Create tensor on CPU first
+            batch_tensor = torch.stack(current_batch)
+
+            # Only pin memory if we're on CPU and will be moving to CUDA later
+            if batch_tensor.device.type == 'cpu' and torch.cuda.is_available():
+                try:
+                    batch_tensor = batch_tensor.pin_memory()
+                except Exception as e:
+                    print(f"Warning: Could not pin memory: {e}. Continuing without pinning.")
+
             batches.append(batch_tensor)
             current_batch = []
             # Clear memory aggressively
@@ -396,7 +404,16 @@ def create_batches(sequences: List[torch.Tensor], batch_size: int):
 
     # Handle the last batch if it exists
     if current_batch:
-        batch_tensor = torch.stack(current_batch).pin_memory()
+        # Create tensor on CPU first
+        batch_tensor = torch.stack(current_batch)
+
+        # Only pin memory if we're on CPU and will be moving to CUDA later
+        if batch_tensor.device.type == 'cpu' and torch.cuda.is_available():
+            try:
+                batch_tensor = batch_tensor.pin_memory()
+            except Exception as e:
+                print(f"Warning: Could not pin memory: {e}. Continuing without pinning.")
+
         batches.append(batch_tensor)
 
     return batches
@@ -722,23 +739,41 @@ class ImprovedPreprocessor:
         batches = []
         current_batch = []
 
+        # Check if we're already on CUDA
+        device = 'cpu'  # Always start on CPU
+
         for seq in sequences:
             current_batch.append(seq)
             if len(current_batch) >= params["batch_size"]:
-                # Keep on CPU with pinned memory
-                inputs = torch.tensor([s[0] for s in current_batch],
-                                    dtype=torch.long).pin_memory()
-                targets = torch.tensor([s[1] for s in current_batch],
-                                     dtype=torch.long).pin_memory()
+                # Create tensors on CPU first
+                inputs = torch.tensor([s[0] for s in current_batch], dtype=torch.long, device=device)
+                targets = torch.tensor([s[1] for s in current_batch], dtype=torch.long, device=device)
+
+                # Only pin memory if we're on CPU and will be moving to CUDA later
+                if device == 'cpu' and torch.cuda.is_available():
+                    try:
+                        inputs = inputs.pin_memory()
+                        targets = targets.pin_memory()
+                    except Exception as e:
+                        print(f"Warning: Could not pin memory: {e}. Continuing without pinning.")
+
                 batches.append((inputs, targets))
                 current_batch = []
 
         # Handle remaining sequences
         if current_batch:
-            inputs = torch.tensor([s[0] for s in current_batch],
-                                dtype=torch.long).pin_memory()
-            targets = torch.tensor([s[1] for s in current_batch],
-                                 dtype=torch.long).pin_memory()
+            # Create tensors on CPU first
+            inputs = torch.tensor([s[0] for s in current_batch], dtype=torch.long, device=device)
+            targets = torch.tensor([s[1] for s in current_batch], dtype=torch.long, device=device)
+
+            # Only pin memory if we're on CPU and will be moving to CUDA later
+            if device == 'cpu' and torch.cuda.is_available():
+                try:
+                    inputs = inputs.pin_memory()
+                    targets = targets.pin_memory()
+                except Exception as e:
+                    print(f"Warning: Could not pin memory: {e}. Continuing without pinning.")
+
             batches.append((inputs, targets))
 
         print(f"Created {len(batches)} {dataset_name} batches (size {params['batch_size']})")

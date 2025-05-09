@@ -436,8 +436,28 @@ class TextGenerator(nn.Module):
         if 'batches' not in data or not data['batches']:
             raise ValueError(f"No valid batches found in preprocessed data: {dataset_name}")
 
-        print(f"Training on {len(data['batches'])} batches from preprocessed {dataset_name} dataset")
-        return self.train(data['batches'], epochs=epochs)
+        # Validate and convert batch tensors to correct dtype
+        validated_batches = []
+        for batch in data['batches']:
+            if isinstance(batch, tuple) and len(batch) == 2:
+                input_batch, target_batch = batch
+
+                # Check and convert input_batch dtype if needed
+                if hasattr(input_batch, 'dtype') and input_batch.dtype != torch.long:
+                    print(f"Converting input batch from {input_batch.dtype} to torch.long in {dataset_name}")
+                    input_batch = input_batch.to(torch.long)
+
+                # Check and convert target_batch dtype if needed
+                if hasattr(target_batch, 'dtype') and target_batch.dtype != torch.long:
+                    print(f"Converting target batch from {target_batch.dtype} to torch.long in {dataset_name}")
+                    target_batch = target_batch.to(torch.long)
+
+                validated_batches.append((input_batch, target_batch))
+            else:
+                print(f"Warning: Skipping invalid batch format in {dataset_name}")
+
+        print(f"Training on {len(validated_batches)} validated batches from preprocessed {dataset_name} dataset")
+        return self.train(validated_batches, epochs=epochs)
 
     def train_from_multiple_datasets(self, dataset_names=None, epochs=5, dataset_paths=None):
         """
@@ -483,9 +503,29 @@ class TextGenerator(nn.Module):
                     data = processor.load_preprocessed_data(dataset_name, path)
 
                     if 'batches' in data and data['batches']:
-                        all_batches.extend(data['batches'])
+                        # Ensure all batches have the correct dtype (LongTensor)
+                        validated_batches = []
+                        for batch in data['batches']:
+                            if isinstance(batch, tuple) and len(batch) == 2:
+                                input_batch, target_batch = batch
+
+                                # Check and convert input_batch dtype if needed
+                                if hasattr(input_batch, 'dtype') and input_batch.dtype != torch.long:
+                                    print(f"Converting input batch from {input_batch.dtype} to torch.long in {dataset_name}")
+                                    input_batch = input_batch.to(torch.long)
+
+                                # Check and convert target_batch dtype if needed
+                                if hasattr(target_batch, 'dtype') and target_batch.dtype != torch.long:
+                                    print(f"Converting target batch from {target_batch.dtype} to torch.long in {dataset_name}")
+                                    target_batch = target_batch.to(torch.long)
+
+                                validated_batches.append((input_batch, target_batch))
+                            else:
+                                print(f"Warning: Skipping invalid batch format in {dataset_name}")
+
+                        all_batches.extend(validated_batches)
                         loaded_datasets.append(dataset_name)
-                        print(f"Added {len(data['batches'])} batches from {dataset_name}")
+                        print(f"Added {len(validated_batches)} validated batches from {dataset_name}")
                     else:
                         print(f"Warning: No batches found in preprocessed data: {path}")
                         print(f"Will re-preprocess {dataset_name} dataset")
@@ -1205,16 +1245,39 @@ class CNNTextGenerator(TextGenerator):
         Returns:
             Transformer model outputs with logits
         """
+        # Ensure input_ids is of type Long
+        if input_ids.dtype != torch.long:
+            print(f"Warning in forward(): input_ids has incorrect dtype: {input_ids.dtype}. Converting to torch.long.")
+            input_ids = input_ids.long()
+
         # Get embeddings from base model
-        if hasattr(self.base_model, "transformer") and hasattr(self.base_model.transformer, "wte"):
-            # GPT-2 style models
-            embeddings = self.base_model.transformer.wte(input_ids)
-        elif hasattr(self.base_model, "get_input_embeddings"):
-            # Generic approach for most models
-            embedding_layer = self.base_model.get_input_embeddings()
-            embeddings = embedding_layer(input_ids)
-        else:
-            raise ValueError("Could not get embeddings from model")
+        try:
+            if hasattr(self.base_model, "transformer") and hasattr(self.base_model.transformer, "wte"):
+                # GPT-2 style models
+                embeddings = self.base_model.transformer.wte(input_ids)
+            elif hasattr(self.base_model, "get_input_embeddings"):
+                # Generic approach for most models
+                embedding_layer = self.base_model.get_input_embeddings()
+                embeddings = embedding_layer(input_ids)
+            else:
+                raise ValueError("Could not get embeddings from model")
+        except RuntimeError as e:
+            if "expected scalar type Long" in str(e):
+                # Last resort fix for dtype issues
+                print(f"Runtime error with embeddings: {e}. Forcing input_ids to Long type.")
+                input_ids = input_ids.long()
+
+                # Try again with corrected dtype
+                if hasattr(self.base_model, "transformer") and hasattr(self.base_model.transformer, "wte"):
+                    embeddings = self.base_model.transformer.wte(input_ids)
+                elif hasattr(self.base_model, "get_input_embeddings"):
+                    embedding_layer = self.base_model.get_input_embeddings()
+                    embeddings = embedding_layer(input_ids)
+                else:
+                    raise ValueError("Could not get embeddings from model")
+            else:
+                # Re-raise if it's not a dtype issue
+                raise
 
         # Apply enhanced CNN layers for feature extraction with transformer-like residual connections
         # First, transpose for CNN (batch_size, hidden_size, seq_len)
@@ -1361,9 +1424,24 @@ class CNNTextGenerator(TextGenerator):
                     self.logger.warning("Skipping invalid batch")
                     continue
                 try:
-                    # Move data to device
-                    input_batch = input_batch.to(self.device)
-                    target_batch = target_batch.to(self.device)
+                    # Ensure input_batch is of type Long before moving to device
+                    if input_batch.dtype != torch.long:
+                        print(f"Warning: Input batch has incorrect dtype: {input_batch.dtype}. Converting to torch.long.")
+                        input_batch = input_batch.to(torch.long)
+
+                    # Ensure target_batch is of type Long before moving to device
+                    if target_batch.dtype != torch.long:
+                        print(f"Warning: Target batch has incorrect dtype: {target_batch.dtype}. Converting to torch.long.")
+                        target_batch = target_batch.to(torch.long)
+
+                    # Move data to device, ensuring they remain LongTensors
+                    input_batch = input_batch.to(self.device, dtype=torch.long)
+                    target_batch = target_batch.to(self.device, dtype=torch.long)
+
+                    # Verify tensor types after moving to device
+                    if input_batch.dtype != torch.long:
+                        print(f"Error: Input batch still has incorrect dtype after conversion: {input_batch.dtype}. Forcing to torch.long.")
+                        input_batch = input_batch.long()
 
                     # Forward pass through hybrid model
                     outputs = self.forward(input_batch)
