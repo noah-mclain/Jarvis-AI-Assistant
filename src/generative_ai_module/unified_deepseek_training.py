@@ -1048,15 +1048,54 @@ def train_with_unsloth(args):
 
     # Add robust error handling for model loading
     try:
-        # Note: FastLanguageModel.from_pretrained already sets trust_remote_code=True internally
-        # and also sets device_map="auto" by default, so we don't need to pass these parameters
-        # to avoid duplicate parameter errors
-        # Don't pass max_seq_length directly to avoid TypeError with LlamaForCausalLM
+        # Patch the unsloth library to handle trust_remote_code correctly
+        try:
+            import unsloth.models
+
+            # Check if we need to patch the adapter's get_model_and_tokenizer method
+            original_get_model_and_tokenizer = unsloth.models.BaseAdapter.get_model_and_tokenizer
+
+            def patched_get_model_and_tokenizer(self, *args, **kwargs):
+                """Patched version that ensures trust_remote_code is set correctly"""
+                # Make sure trust_remote_code is included in kwargs
+                if 'trust_remote_code' not in kwargs:
+                    kwargs['trust_remote_code'] = True
+
+                logger.info(f"Calling get_model_and_tokenizer with trust_remote_code={kwargs.get('trust_remote_code')}")
+                return original_get_model_and_tokenizer(self, *args, **kwargs)
+
+            # Apply the patch
+            unsloth.models.BaseAdapter.get_model_and_tokenizer = patched_get_model_and_tokenizer
+            logger.info("✅ Successfully patched unsloth.models.BaseAdapter.get_model_and_tokenizer")
+
+            # Also patch the from_pretrained method
+            original_from_pretrained = FastLanguageModel.from_pretrained
+
+            @staticmethod
+            def patched_from_pretrained(*args, **kwargs):
+                """Patched version that ensures trust_remote_code is set correctly"""
+                # Make sure trust_remote_code is included in kwargs
+                if 'trust_remote_code' not in kwargs:
+                    kwargs['trust_remote_code'] = True
+
+                logger.info(f"Calling FastLanguageModel.from_pretrained with trust_remote_code={kwargs.get('trust_remote_code')}")
+                return original_from_pretrained(*args, **kwargs)
+
+            # Apply the patch
+            FastLanguageModel.from_pretrained = patched_from_pretrained
+            logger.info("✅ Successfully patched FastLanguageModel.from_pretrained")
+
+        except Exception as patch_error:
+            logger.warning(f"Failed to patch unsloth library: {patch_error}")
+            logger.warning("Will try to load model without patching")
+
+        # First, try to load with explicit trust_remote_code
+        logger.info("Loading model with explicit trust_remote_code=True...")
         model, tokenizer = FastLanguageModel.from_pretrained(
             model_name=args.model_name,
             load_in_4bit=args.load_in_4bit,
-            load_in_8bit=args.load_in_8bit
-            # Don't set device_map here as it's already set by FastLanguageModel internally
+            load_in_8bit=args.load_in_8bit,
+            trust_remote_code=True  # Explicitly set trust_remote_code
         )
         logger.info(f"Successfully loaded model: {args.model_name}")
     except Exception as e:
@@ -1070,26 +1109,75 @@ def train_with_unsloth(args):
 
             try:
                 import subprocess
-                subprocess.check_call([sys.executable, "-m", "pip", "install", "bitsandbytes>=0.42.0"])
+                # Try to install the latest available version
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "bitsandbytes", "--upgrade"])
                 logger.info("✅ Successfully upgraded bitsandbytes")
 
-                # Try loading again
-                logger.info("Retrying model loading after bitsandbytes upgrade...")
+                # Import to check version
+                import importlib
+                import bitsandbytes as bnb
+                importlib.reload(bnb)
+                bnb_version = getattr(bnb, "__version__", "unknown")
+                logger.info(f"Upgraded bitsandbytes to version: {bnb_version}")
+
+                # Try loading again with 8-bit quantization instead
+                logger.info("Retrying model loading with 8-bit quantization...")
                 model, tokenizer = FastLanguageModel.from_pretrained(
                     model_name=args.model_name,
+                    load_in_4bit=False,
+                    load_in_8bit=True,
+                    trust_remote_code=True
+                )
+                logger.info(f"Successfully loaded model with 8-bit quantization: {args.model_name}")
+            except Exception as upgrade_error:
+                logger.error(f"Failed to upgrade bitsandbytes: {upgrade_error}")
+                logger.warning("Falling back to standard loading without quantization")
+
+                # Try with standard loading without quantization
+                try:
+                    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+                    logger.info("Loading with standard transformers without quantization...")
+                    tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
+                    model = AutoModelForCausalLM.from_pretrained(
+                        args.model_name,
+                        device_map="auto",
+                        trust_remote_code=True
+                    )
+                    logger.info(f"Successfully loaded model with standard transformers: {args.model_name}")
+                except Exception as std_error:
+                    logger.error(f"Failed to load with standard transformers: {std_error}")
+                    # Continue to next fallback
+
+        # Check if this is a trust_remote_code error
+        elif "trust_remote_code" in error_str:
+            logger.warning("Detected trust_remote_code error")
+
+            # Try with standard transformers
+            try:
+                from transformers import AutoModelForCausalLM, AutoTokenizer
+
+                logger.info("Loading with standard transformers...")
+                tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
+                model = AutoModelForCausalLM.from_pretrained(
+                    args.model_name,
+                    device_map="auto",
+                    trust_remote_code=True,
                     load_in_4bit=args.load_in_4bit,
                     load_in_8bit=args.load_in_8bit
                 )
-                logger.info(f"Successfully loaded model after bitsandbytes upgrade: {args.model_name}")
-            except Exception as upgrade_error:
-                logger.error(f"Failed to upgrade bitsandbytes: {upgrade_error}")
-                logger.warning("Falling back to 8-bit quantization instead of 4-bit")
+                logger.info(f"Successfully loaded model with standard transformers: {args.model_name}")
+            except Exception as std_error:
+                logger.error(f"Failed to load with standard transformers: {std_error}")
 
-                # Try with 8-bit quantization instead
+                # Try with 8-bit quantization
                 try:
-                    model, tokenizer = FastLanguageModel.from_pretrained(
-                        model_name=args.model_name,
-                        load_in_4bit=False,
+                    logger.info("Trying with 8-bit quantization...")
+                    tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
+                    model = AutoModelForCausalLM.from_pretrained(
+                        args.model_name,
+                        device_map="auto",
+                        trust_remote_code=True,
                         load_in_8bit=True
                     )
                     logger.info(f"Successfully loaded model with 8-bit quantization: {args.model_name}")
@@ -1101,15 +1189,19 @@ def train_with_unsloth(args):
         if 'model' not in locals() or model is None:
             try:
                 logger.info("Retrying model loading with additional parameters...")
-                model, tokenizer = FastLanguageModel.from_pretrained(
-                    model_name=args.model_name,
-                    load_in_4bit=args.load_in_4bit,
-                    load_in_8bit=args.load_in_8bit,
-                    trust_remote_code=True,  # Explicitly set trust_remote_code
-                    device_map="auto",       # Explicitly set device_map
-                    use_cache=False if args.gradient_checkpointing else True  # Disable KV cache if using gradient checkpointing
+
+                # Try to import directly from transformers
+                from transformers import AutoModelForCausalLM, AutoTokenizer
+
+                logger.info("Loading with direct transformers import...")
+                tokenizer = AutoTokenizer.from_pretrained(args.model_name, trust_remote_code=True)
+                model = AutoModelForCausalLM.from_pretrained(
+                    args.model_name,
+                    device_map="auto",
+                    trust_remote_code=True,
+                    load_in_8bit=True  # Fall back to 8-bit
                 )
-                logger.info(f"Successfully loaded model on retry: {args.model_name}")
+                logger.info(f"Successfully loaded model with direct transformers import: {args.model_name}")
             except Exception as e2:
                 logger.error(f"Fatal error loading model on retry: {e2}")
                 raise RuntimeError(f"Could not load model {args.model_name}. Original error: {e}, Retry error: {e2}")

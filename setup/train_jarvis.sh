@@ -328,9 +328,19 @@ if [ -z "$MODEL_TYPE" ]; then
     exit 1
 fi
 
-# Apply attention mask fix for DeepSeek models
+# Apply fixes for DeepSeek models
 if [ "$MODEL_TYPE" = "code" ]; then
-    echo "Applying attention mask fix for DeepSeek model..."
+    echo "Applying fixes for DeepSeek model..."
+
+    # Fix bitsandbytes version for 4-bit quantization
+    echo "Checking bitsandbytes version for 4-bit quantization compatibility..."
+    chmod +x setup/fix_bitsandbytes_version.py
+    python setup/fix_bitsandbytes_version.py
+
+    # Fix unsloth trust_remote_code issue
+    echo "Fixing unsloth trust_remote_code issue..."
+    chmod +x setup/fix_unsloth_trust_remote_code.py
+    python setup/fix_unsloth_trust_remote_code.py
 
     # Apply individual attention mask fix scripts directly
     echo "Applying individual attention mask fix scripts..."

@@ -253,8 +253,21 @@ echo "Fixing transformers.utils issue..."
 chmod +x setup/fix_transformers_utils.py
 python setup/fix_transformers_utils.py
 
-# Apply attention mask fix for DeepSeek models
-echo "Applying attention mask fix for DeepSeek models..."
+# Apply fixes for DeepSeek models
+echo "Applying fixes for DeepSeek models..."
+
+# Fix bitsandbytes version for 4-bit quantization
+echo "Checking bitsandbytes version for 4-bit quantization compatibility..."
+chmod +x setup/fix_bitsandbytes_version.py
+python setup/fix_bitsandbytes_version.py
+
+# Fix unsloth trust_remote_code issue
+echo "Fixing unsloth trust_remote_code issue..."
+chmod +x setup/fix_unsloth_trust_remote_code.py
+python setup/fix_unsloth_trust_remote_code.py
+
+# Apply attention mask fixes
+echo "Applying attention mask fixes..."
 
 # Make the scripts executable
 chmod +x setup/fix_transformers_attention_mask.py
@@ -575,7 +588,7 @@ pip install transformers==4.36.2 --no-deps
 pip install peft==0.6.0 --no-deps
 pip install accelerate==0.25.0 --no-deps
 pip install datasets==2.14.5 --no-deps
-pip install bitsandbytes==0.42.0 --no-deps  # Using 0.42.0 for better compatibility with 4-bit quantization
+pip install bitsandbytes==0.43.2 --no-deps  # Install the latest available version for best compatibility with 4-bit quantization
 pip install trl==0.7.4 --no-deps
 
 # 5. Install additional dependencies for all model types with --no-deps
@@ -617,7 +630,7 @@ except ImportError:
 # Fix bitsandbytes installation
 echo "Fixing bitsandbytes installation..."
 pip uninstall -y bitsandbytes
-pip install bitsandbytes==0.42.0 --no-deps  # Using 0.42.0 for better compatibility with 4-bit quantization
+pip install bitsandbytes --no-deps  # Install the latest available version for best compatibility with 4-bit quantization
 
 # Create a version attribute for bitsandbytes if it doesn't exist
 python -c "
@@ -640,9 +653,21 @@ try:
 
             # Add version if not already there
             if '__version__' not in content:
+                # Get the installed version from pip
+                import subprocess
+                try:
+                    pip_output = subprocess.check_output([sys.executable, '-m', 'pip', 'show', 'bitsandbytes']).decode('utf-8')
+                    version_line = [line for line in pip_output.split('\\n') if line.startswith('Version:')]
+                    if version_line:
+                        version = version_line[0].split(':', 1)[1].strip()
+                    else:
+                        version = "0.42.0"  # Default if not found
+                except Exception:
+                    version = "0.42.0"  # Default if command fails
+
                 with open(init_path, 'a') as f:
-                    f.write('\n\n# Added by setup script\n__version__ = \"0.42.0\"\n')
-                print('✅ Added __version__ attribute to bitsandbytes')
+                    f.write(f'\\n\\n# Added by setup script\\n__version__ = \"{version}\"\\n')
+                print(f'✅ Added __version__ attribute to bitsandbytes: {version}')
 
                 # Reload the module to apply changes
                 import importlib
