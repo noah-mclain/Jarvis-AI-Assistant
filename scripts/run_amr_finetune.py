@@ -21,7 +21,7 @@ def main():
         "--mode", "dreambooth",
         "--image_dir", image_dir,
         "--class_name", "person",
-        "--identifier", "Amr",
+        "--identifier", "meAmr",
         "--output_dir", output_dir,
         "--learning_rate", "2e-7",
         "--epochs", "50",
