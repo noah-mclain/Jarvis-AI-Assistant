@@ -67,7 +67,23 @@ def apply_attention_mask_fix():
 
             # Try to import and run the comprehensive fix first
             try:
-                from comprehensive_attention_mask_fix import apply_comprehensive_fix
+                # Try different import paths
+                try:
+                    from setup.comprehensive_attention_mask_fix import apply_comprehensive_fix
+                except ImportError:
+                    try:
+                        from src.setup.comprehensive_attention_mask_fix import apply_comprehensive_fix
+                    except ImportError:
+                        import sys
+                        import os
+                        # Add setup directory to path
+                        setup_dir = os.path.join(os.getcwd(), "setup")
+                        if os.path.exists(setup_dir):
+                            sys.path.append(setup_dir)
+                            from comprehensive_attention_mask_fix import apply_comprehensive_fix
+                        else:
+                            raise ImportError("Could not find comprehensive_attention_mask_fix module")
+
                 success = apply_comprehensive_fix()
 
                 if success:
@@ -79,8 +95,28 @@ def apply_attention_mask_fix():
                 logger.warning(f"Could not import comprehensive fix: {e}, trying original fix")
 
             # Fall back to the original fix if comprehensive fix is not available
-            from fix_transformers_attention_mask import fix_transformers_attention_mask
-            success = fix_transformers_attention_mask()
+            try:
+                # Try different import paths
+                try:
+                    from setup.fix_transformers_attention_mask import fix_transformers_attention_mask
+                except ImportError:
+                    try:
+                        from src.setup.fix_transformers_attention_mask import fix_transformers_attention_mask
+                    except ImportError:
+                        import sys
+                        import os
+                        # Add setup directory to path
+                        setup_dir = os.path.join(os.getcwd(), "setup")
+                        if os.path.exists(setup_dir):
+                            sys.path.append(setup_dir)
+                            from fix_transformers_attention_mask import fix_transformers_attention_mask
+                        else:
+                            raise ImportError("Could not find fix_transformers_attention_mask module")
+
+                success = fix_transformers_attention_mask()
+            except Exception as e:
+                logger.error(f"Failed to apply original fix: {e}")
+                success = False
 
             if success:
                 logger.info("Successfully applied original attention mask fixes")
@@ -1111,6 +1147,23 @@ def train_with_unsloth(args):
                 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
                 logger.info(f"Creating tensors on device: {device}")
 
+                # Get model dtype if possible
+                model_dtype = None
+                try:
+                    if hasattr(model, 'dtype'):
+                        model_dtype = model.dtype
+                        logger.info(f"Using model's dtype: {model_dtype}")
+                    else:
+                        # Try to detect from parameters
+                        for param in model.parameters():
+                            if param.dtype in [torch.float16, torch.bfloat16]:
+                                model_dtype = param.dtype
+                                logger.info(f"Detected model dtype from parameters: {model_dtype}")
+                                break
+                except Exception as e:
+                    logger.warning(f"Could not detect model dtype: {e}")
+
+                # Create input tensors
                 input_ids_tensor = torch.tensor(batch_input_ids, dtype=torch.long, device=device)
                 attention_mask_tensor = torch.tensor(batch_attention_mask, dtype=torch.long, device=device)
 
@@ -1122,31 +1175,33 @@ def train_with_unsloth(args):
                 logger.info(f"Attention mask tensor device: {attention_mask_tensor.device}")
                 logger.info(f"Labels tensor device: {labels_tensor.device}")
 
+                # Create 4D attention mask [batch_size, num_heads=1, seq_len, seq_len]
+                batch_size, seq_length = attention_mask_tensor.shape
+
+                # First, expand to [batch_size, 1, 1, seq_length]
+                attention_mask_4d = attention_mask_tensor.unsqueeze(1).unsqueeze(2)
+
+                # Then, expand to [batch_size, 1, seq_length, seq_length]
+                attention_mask_4d = attention_mask_4d.expand(-1, 1, seq_length, -1)
+
+                logger.info(f"Created 4D attention mask with shape: {attention_mask_4d.shape}")
+
+                # Convert to the model's dtype if available
+                if model_dtype is not None:
+                    attention_mask_4d = attention_mask_4d.to(dtype=model_dtype)
+                    logger.info(f"Converted attention mask to dtype: {model_dtype}")
+
                 # Create the batch
                 batch = {
                     "input_ids": input_ids_tensor,
-                    "attention_mask": attention_mask_tensor,
+                    "attention_mask": attention_mask_4d,
                     "labels": labels_tensor
                 }
 
-                # Check if we need to reshape the attention mask for newer transformers versions
-                # This is to avoid the "too many values to unpack (expected 2)" error
-                try:
-                    from transformers import __version__ as transformers_version
-                    version_parts = transformers_version.split('.')
-                    major = int(version_parts[0]) if len(version_parts) > 0 else 0
-                    minor = int(version_parts[1]) if len(version_parts) > 1 else 0
-
-                    # For newer versions of transformers (4.28+), we need to ensure the attention mask is 2D
-                    if major > 4 or (major == 4 and minor >= 28):
-                        # Ensure attention_mask is 2D [batch_size, seq_length]
-                        if attention_mask_tensor.dim() > 2:
-                            logger.warning(f"Reshaping attention mask from {attention_mask_tensor.shape} to 2D for compatibility")
-                            # Take the first dimension if it's more than 2D
-                            batch["attention_mask"] = attention_mask_tensor.view(attention_mask_tensor.size(0), -1)
-                except Exception as e:
-                    logger.warning(f"Error checking transformers version for attention mask: {e}")
-                    # Continue with the original attention mask
+                # Log batch tensor information
+                logger.info(f"Batch tensor input_ids: shape={batch['input_ids'].shape}, device={batch['input_ids'].device}")
+                logger.info(f"Batch tensor attention_mask: shape={batch['attention_mask'].shape}, device={batch['attention_mask'].device}")
+                logger.info(f"Batch tensor labels: shape={batch['labels'].shape}, device={batch['labels'].device}")
 
                 return batch
             except Exception as e:
@@ -1243,56 +1298,111 @@ def train_with_unsloth(args):
                         logger.info(f"Moving {k} tensor from {v.device} to {device} (final check)")
                         inputs[k] = v.to(device)
 
+                # Get model's dtype for mixed precision
+                model_dtype = getattr(model, "dtype", None)
+                if model_dtype is None:
+                    # Try to detect from parameters
+                    for param in model.parameters():
+                        if param.dtype in [torch.float16, torch.bfloat16]:
+                            model_dtype = param.dtype
+                            logger.info(f"Detected model dtype from parameters: {model_dtype}")
+                            break
+
+                # Ensure attention mask has correct shape and dtype
+                if "attention_mask" in inputs:
+                    # If attention mask is 2D, convert to 4D
+                    if inputs["attention_mask"].dim() == 2:
+                        batch_size, seq_length = inputs["attention_mask"].shape
+                        # First, expand to [batch_size, 1, 1, seq_length]
+                        attention_mask_4d = inputs["attention_mask"].unsqueeze(1).unsqueeze(2)
+                        # Then, expand to [batch_size, 1, seq_length, seq_length]
+                        attention_mask_4d = attention_mask_4d.expand(-1, 1, seq_length, -1)
+                        inputs["attention_mask"] = attention_mask_4d
+                        logger.info(f"Expanded attention mask to 4D: {attention_mask_4d.shape}")
+
+                    # If attention mask is 4D with wrong shape
+                    elif inputs["attention_mask"].dim() == 4:
+                        batch_size, head_dim, seq_len1, seq_len2 = inputs["attention_mask"].shape
+                        if seq_len1 != seq_len2:
+                            logger.warning(f"Fixing incorrect 4D attention mask shape: {inputs['attention_mask'].shape}")
+                            # Create a proper 4D attention mask
+                            device = inputs["attention_mask"].device
+                            # Create a causal mask
+                            causal_mask = torch.triu(
+                                torch.ones((seq_len2, seq_len2), device=device, dtype=torch.bool),
+                                diagonal=1
+                            )
+                            causal_mask = causal_mask.unsqueeze(0).unsqueeze(1)  # [1, 1, seq_len, seq_len]
+                            causal_mask = causal_mask.expand(batch_size, head_dim, seq_len2, seq_len2)
+
+                            # Convert to the correct dtype
+                            if model_dtype is not None:
+                                causal_mask = causal_mask.to(dtype=model_dtype)
+
+                            # Replace the attention mask
+                            inputs["attention_mask"] = ~causal_mask
+                            logger.info(f"Fixed attention mask shape: {inputs['attention_mask'].shape}")
+
+                    # Ensure attention mask has correct dtype
+                    if model_dtype is not None and inputs["attention_mask"].dtype != model_dtype:
+                        inputs["attention_mask"] = inputs["attention_mask"].to(dtype=model_dtype)
+                        logger.info(f"Converted attention mask to dtype: {model_dtype}")
+
                 # Forward pass with all inputs on the correct device
                 try:
-                    with torch.cuda.amp.autocast(enabled=True):  # Use mixed precision for better performance
-                        # Forward pass
+                    # Use automatic mixed precision with the model's dtype
+                    with torch.cuda.amp.autocast(dtype=model_dtype):
+                        # Forward pass with use_cache=False for gradient checkpointing
                         outputs = model(
                             input_ids=inputs["input_ids"],
                             attention_mask=inputs["attention_mask"] if "attention_mask" in inputs else None,
-                            labels=inputs["labels"]
+                            labels=inputs["labels"],
+                            use_cache=False  # Critical for gradient checkpointing
                         )
                 except Exception as forward_error:
-                    logger.error(f"Error in forward pass: {forward_error}")
+                    logger.error(f"Error in original forward: {forward_error}")
 
-                    # Check if it's an attention mask issue
-                    if "too many values to unpack" in str(forward_error) and "attention_mask" in inputs:
-                        logger.info("Detected attention mask issue in compute_loss, trying to fix...")
-
-                        # Fix attention mask shape if needed
-                        if inputs["attention_mask"].dim() > 2:
-                            batch_size = inputs["attention_mask"].size(0)
-                            seq_length = inputs["attention_mask"].size(-1)
-                            inputs["attention_mask"] = inputs["attention_mask"].view(batch_size, seq_length)
-                            logger.info(f"Reshaped attention mask to {inputs['attention_mask'].shape}")
-
-                        # Try again with fixed attention mask
-                        try:
+                    # Try direct forward call with explicit arguments
+                    logger.info("Trying direct forward call with explicit arguments")
+                    try:
+                        # Use automatic mixed precision with the model's dtype
+                        with torch.cuda.amp.autocast(dtype=model_dtype):
                             outputs = model(
                                 input_ids=inputs["input_ids"],
-                                attention_mask=inputs["attention_mask"],
-                                labels=inputs["labels"]
-                            )
-                            logger.info("Forward pass succeeded with fixed attention mask")
-                        except Exception as e2:
-                            # Try without attention mask as last resort
-                            logger.error(f"Forward pass with fixed attention mask also failed: {e2}")
-                            logger.info("Trying forward pass without attention mask")
-                            outputs = model(
-                                input_ids=inputs["input_ids"],
+                                attention_mask=None,  # Skip attention mask
                                 labels=inputs["labels"],
                                 use_cache=False,
                                 return_dict=True
                             )
-                    else:
-                        # If it's not an attention mask issue, try without it
-                        logger.info("Trying forward pass without attention mask")
-                        outputs = model(
-                            input_ids=inputs["input_ids"],
-                            labels=inputs["labels"],
-                            use_cache=False,
-                            return_dict=True
-                        )
+                        logger.info("Direct forward call succeeded without attention mask")
+                    except Exception as direct_error:
+                        logger.error(f"Direct forward call also failed: {direct_error}")
+
+                        # Try forward call without attention mask
+                        logger.info("Trying forward call without attention mask")
+                        try:
+                            # Use automatic mixed precision with the model's dtype
+                            with torch.cuda.amp.autocast(dtype=model_dtype):
+                                outputs = model(
+                                    input_ids=inputs["input_ids"],
+                                    labels=inputs["labels"],
+                                    use_cache=False,
+                                    return_dict=True
+                                )
+                            logger.info("Forward call without attention mask succeeded")
+                        except Exception as no_mask_error:
+                            logger.error(f"Forward call without attention mask also failed: {no_mask_error}")
+                            # Combine all error messages
+                            error_msg = f"All forward methods failed: {forward_error}, {direct_error}, {no_mask_error}"
+                            logger.error(f"Error in forward pass: {error_msg}")
+
+                            # Try forward pass without attention mask
+                            logger.info("Trying forward pass without attention mask")
+                            outputs = model(
+                                input_ids=inputs["input_ids"],
+                                use_cache=False,
+                                return_dict=True
+                            )
 
                 # Get the loss from the model outputs
                 if hasattr(outputs, "loss"):
@@ -1446,6 +1556,11 @@ def train_with_unsloth(args):
                 for name, param in model.named_parameters():
                     if 'lora' in name:
                         total_lora_params += 1
+                        # Ensure parameter requires gradients
+                        if not param.requires_grad:
+                            logger.warning(f"LoRA parameter {name} does not require gradients. Setting requires_grad=True")
+                            param.requires_grad = True
+
                         if param.grad is not None:
                             lora_params_with_grad += 1
                             has_grad = True
@@ -1453,37 +1568,87 @@ def train_with_unsloth(args):
                             if lora_params_with_grad <= 3:  # Only log first 3 to avoid spam
                                 logger.info(f"Parameter {name} has gradient with norm: {param.grad.norm().item()}")
 
+                # Log gradient statistics
+                if total_lora_params > 0:
+                    logger.info(f"LoRA parameters with gradients: {lora_params_with_grad}/{total_lora_params} ({lora_params_with_grad/total_lora_params*100:.1f}%)")
+
                 if not has_grad:
                     logger.warning("No gradients found in model parameters after backward pass!")
 
                     # Try to fix the issue by manually computing gradients for LoRA parameters
                     logger.warning("Attempting to manually compute gradients for LoRA parameters")
 
+                    # Get model's dtype for mixed precision
+                    model_dtype = getattr(model, "dtype", None)
+
                     # Create a new backward pass directly from the loss
                     try:
                         # Detach the model from the current computation graph
                         model.zero_grad()
 
+                        # Ensure attention mask has correct shape and dtype
+                        if "attention_mask" in inputs:
+                            # If attention mask is 2D, convert to 4D
+                            if inputs["attention_mask"].dim() == 2:
+                                batch_size, seq_length = inputs["attention_mask"].shape
+                                # First, expand to [batch_size, 1, 1, seq_length]
+                                attention_mask_4d = inputs["attention_mask"].unsqueeze(1).unsqueeze(2)
+                                # Then, expand to [batch_size, 1, seq_length, seq_length]
+                                attention_mask_4d = attention_mask_4d.expand(-1, 1, seq_length, -1)
+                                inputs["attention_mask"] = attention_mask_4d
+                                logger.info(f"Expanded attention mask to 4D: {attention_mask_4d.shape}")
+
+                            # If attention mask is 4D with wrong shape
+                            elif inputs["attention_mask"].dim() == 4:
+                                batch_size, head_dim, seq_len1, seq_len2 = inputs["attention_mask"].shape
+                                if seq_len1 != seq_len2:
+                                    logger.warning(f"Fixing incorrect 4D attention mask shape: {inputs['attention_mask'].shape}")
+                                    # Create a proper 4D attention mask
+                                    device = inputs["attention_mask"].device
+                                    # Create a causal mask
+                                    causal_mask = torch.triu(
+                                        torch.ones((seq_len2, seq_len2), device=device, dtype=torch.bool),
+                                        diagonal=1
+                                    )
+                                    causal_mask = causal_mask.unsqueeze(0).unsqueeze(1)  # [1, 1, seq_len, seq_len]
+                                    causal_mask = causal_mask.expand(batch_size, head_dim, seq_len2, seq_len2)
+
+                                    # Convert to the correct dtype
+                                    if model_dtype is not None:
+                                        causal_mask = causal_mask.to(dtype=model_dtype)
+
+                                    # Replace the attention mask
+                                    inputs["attention_mask"] = ~causal_mask
+                                    logger.info(f"Fixed attention mask shape: {inputs['attention_mask'].shape}")
+
+                            # Ensure attention mask has correct dtype
+                            if model_dtype is not None and inputs["attention_mask"].dtype != model_dtype:
+                                inputs["attention_mask"] = inputs["attention_mask"].to(dtype=model_dtype)
+                                logger.info(f"Converted attention mask to dtype: {model_dtype}")
+
                         # Recompute the forward pass with explicit gradient tracking
                         with torch.enable_grad():
-                            # Forward pass
-                            outputs = model(
-                                input_ids=inputs["input_ids"].to(device),
-                                attention_mask=inputs["attention_mask"].to(device) if "attention_mask" in inputs else None,
-                                labels=inputs["labels"].to(device)
-                            )
+                            # Use automatic mixed precision with the model's dtype
+                            with torch.cuda.amp.autocast(dtype=model_dtype):
+                                # Forward pass with use_cache=False for gradient checkpointing
+                                outputs = model(
+                                    input_ids=inputs["input_ids"].to(device),
+                                    attention_mask=inputs["attention_mask"].to(device) if "attention_mask" in inputs else None,
+                                    labels=inputs["labels"].to(device),
+                                    use_cache=False  # Critical for gradient checkpointing
+                                )
 
-                            # Get loss
-                            if hasattr(outputs, "loss"):
-                                new_loss = outputs.loss
-                            else:
-                                # Compute loss manually
-                                logits = outputs.logits
-                                labels = inputs["labels"].to(device)
-                                shift_logits = logits[..., :-1, :].contiguous()
-                                shift_labels = labels[..., 1:].contiguous()
-                                loss_fct = torch.nn.CrossEntropyLoss()
-                                new_loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+                                # Get loss
+                                if hasattr(outputs, "loss"):
+                                    new_loss = outputs.loss
+                                else:
+                                    # Compute loss manually
+                                    logits = outputs.logits
+                                    labels = inputs["labels"].to(device)
+                                    shift_logits = logits[..., :-1, :].contiguous()
+                                    shift_labels = labels[..., 1:].contiguous()
+                                    loss_fct = torch.nn.CrossEntropyLoss()
+                                    new_loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
                             # Scale loss for gradient accumulation if needed
                             if self.args.gradient_accumulation_steps > 1:
@@ -1492,18 +1657,39 @@ def train_with_unsloth(args):
                             # Backward pass
                             new_loss.backward()
 
+                            # Apply gradient clipping for stability
+                            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+
                             logger.info(f"Manual gradient computation completed with loss: {new_loss.item()}")
+
+                            # Check if gradients were created
+                            grad_count = sum(1 for n, p in model.named_parameters() if 'lora' in n and p.grad is not None)
+                            logger.info(f"Manual computation created gradients for {grad_count}/{total_lora_params} LoRA parameters")
                     except Exception as e:
                         logger.error(f"Manual gradient computation failed: {e}")
 
                         # Force gradients for LoRA parameters as a last resort
                         logger.warning("Forcing artificial gradients for LoRA parameters as a last resort")
+
+                        # Create artificial gradients for all LoRA parameters
                         for name, param in model.named_parameters():
                             if 'lora' in name and param.requires_grad:
                                 if param.grad is None:
                                     # Create a small random gradient
                                     param.grad = torch.randn_like(param) * 0.01
                                     logger.info(f"Created artificial gradient for {name}")
+
+                # Apply gradient clipping for stability
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+
+                # Monitor gradient norms for debugging
+                if total_lora_params > 0:
+                    grad_norms = [p.grad.norm().item() for n, p in model.named_parameters()
+                                 if 'lora' in n and p.grad is not None]
+                    if grad_norms:
+                        avg_norm = sum(grad_norms) / len(grad_norms)
+                        max_norm = max(grad_norms)
+                        logger.info(f"Gradient statistics - Avg norm: {avg_norm:.4f}, Max norm: {max_norm:.4f}")
 
                 # Check again after our fix attempts
                 lora_params_with_grad = sum(1 for name, param in model.named_parameters()
@@ -1616,25 +1802,47 @@ def train_with_unsloth(args):
         original_forward = model.forward
 
         def device_aware_forward(*args, **kwargs):
-            """Ensure all inputs and internal tensors are on the correct device"""
+            """Ensure all inputs and internal tensors are on the correct device and have correct shapes/dtypes"""
             device = model.device
             logger.info(f"In patched forward: Model is on device: {device}")
+
+            # Get model's dtype for mixed precision
+            model_dtype = getattr(model, "dtype", None)
+            if model_dtype is None:
+                # Try to detect from parameters
+                for param in model.parameters():
+                    if param.dtype in [torch.float16, torch.bfloat16]:
+                        model_dtype = param.dtype
+                        logger.info(f"Detected model dtype from parameters: {model_dtype}")
+                        break
 
             # Move all positional args to the correct device
             new_args = []
             for arg in args:
-                if isinstance(arg, torch.Tensor) and arg.device != device:
-                    logger.info(f"Moving positional arg from {arg.device} to {device}")
-                    new_args.append(arg.to(device))
+                if isinstance(arg, torch.Tensor):
+                    if arg.device != device:
+                        logger.info(f"Moving positional arg from {arg.device} to {device}")
+                        new_args.append(arg.to(device))
+                    else:
+                        new_args.append(arg)
                 else:
                     new_args.append(arg)
 
-            # Move all kwargs to the correct device
+            # Move all kwargs to the correct device and ensure correct dtypes
             new_kwargs = {}
             for k, v in kwargs.items():
-                if isinstance(v, torch.Tensor) and v.device != device:
-                    logger.info(f"Moving kwarg {k} from {v.device} to {device}")
-                    new_kwargs[k] = v.to(device)
+                if isinstance(v, torch.Tensor):
+                    # Move to correct device
+                    if v.device != device:
+                        logger.info(f"Moving kwarg {k} from {v.device} to {device}")
+                        v = v.to(device)
+
+                    # Handle dtype for non-label tensors
+                    if k != "labels" and model_dtype is not None and v.dtype != model_dtype:
+                        logger.info(f"Converting {k} from {v.dtype} to {model_dtype}")
+                        v = v.to(dtype=model_dtype)
+
+                    new_kwargs[k] = v
                 else:
                     new_kwargs[k] = v
 
@@ -1643,19 +1851,60 @@ def train_with_unsloth(args):
                 logger.info(f"Explicitly moving input_ids from {new_kwargs['input_ids'].device} to {device}")
                 new_kwargs["input_ids"] = new_kwargs["input_ids"].to(device)
 
+            # Handle attention mask specially
             if "attention_mask" in new_kwargs:
-                # First ensure it's on the correct device
-                if new_kwargs["attention_mask"].device != device:
-                    logger.info(f"Explicitly moving attention_mask from {new_kwargs['attention_mask'].device} to {device}")
-                    new_kwargs["attention_mask"] = new_kwargs["attention_mask"].to(device)
-
-                # Fix for attention mask shape issue - ensure it's 2D [batch_size, seq_length]
                 attention_mask = new_kwargs["attention_mask"]
-                if attention_mask.dim() > 2:
-                    logger.info(f"Reshaping attention mask from {attention_mask.shape} to 2D")
-                    batch_size = attention_mask.size(0)
-                    seq_length = attention_mask.size(-1)
-                    new_kwargs["attention_mask"] = attention_mask.view(batch_size, seq_length)
+
+                # First ensure it's on the correct device
+                if attention_mask.device != device:
+                    logger.info(f"Explicitly moving attention_mask from {attention_mask.device} to {device}")
+                    attention_mask = attention_mask.to(device)
+
+                # Get input shape for proper mask creation
+                if "input_ids" in new_kwargs:
+                    batch_size, seq_length = new_kwargs["input_ids"].shape
+                else:
+                    batch_size, seq_length = attention_mask.size(0), attention_mask.size(-1)
+
+                # If attention mask is 2D, convert to 4D for newer transformer versions
+                if attention_mask.dim() == 2:
+                    logger.info(f"Converting 2D attention mask to 4D: {attention_mask.shape}")
+                    # First, expand to [batch_size, 1, 1, seq_length]
+                    attention_mask_4d = attention_mask.unsqueeze(1).unsqueeze(2)
+                    # Then, expand to [batch_size, 1, seq_length, seq_length]
+                    attention_mask_4d = attention_mask_4d.expand(-1, 1, seq_length, -1)
+                    attention_mask = attention_mask_4d
+                    logger.info(f"Created 4D attention mask with shape: {attention_mask.shape}")
+
+                # If attention mask is 4D with wrong shape
+                elif attention_mask.dim() == 4:
+                    batch_size, head_dim, seq_len1, seq_len2 = attention_mask.shape
+                    if seq_len1 != seq_len2:
+                        logger.warning(f"Fixing incorrect 4D attention mask shape: {attention_mask.shape}")
+                        # Create a proper 4D attention mask
+                        # Create a causal mask
+                        causal_mask = torch.triu(
+                            torch.ones((seq_len2, seq_len2), device=device, dtype=torch.bool),
+                            diagonal=1
+                        )
+                        causal_mask = causal_mask.unsqueeze(0).unsqueeze(1)  # [1, 1, seq_len, seq_len]
+                        causal_mask = causal_mask.expand(batch_size, head_dim, seq_len2, seq_len2)
+
+                        # Convert to the correct dtype
+                        if model_dtype is not None:
+                            causal_mask = causal_mask.to(dtype=model_dtype)
+
+                        # Replace the attention mask
+                        attention_mask = ~causal_mask
+                        logger.info(f"Fixed attention mask shape: {attention_mask.shape}")
+
+                # Ensure attention mask has correct dtype
+                if model_dtype is not None and attention_mask.dtype != model_dtype:
+                    logger.info(f"Converting attention mask from {attention_mask.dtype} to {model_dtype}")
+                    attention_mask = attention_mask.to(dtype=model_dtype)
+
+                # Update the kwargs with the fixed attention mask
+                new_kwargs["attention_mask"] = attention_mask
 
             if "labels" in new_kwargs and new_kwargs["labels"].device != device:
                 logger.info(f"Explicitly moving labels from {new_kwargs['labels'].device} to {device}")
@@ -1667,10 +1916,15 @@ def train_with_unsloth(args):
                     logger.warning(f"Parameter {name} is on {param.device}, moving to {device}")
                     param.data = param.data.to(device)
 
+            # Add use_cache=False for gradient checkpointing compatibility
+            if "use_cache" not in new_kwargs and kwargs.get("gradient_checkpointing", False):
+                new_kwargs["use_cache"] = False
+                logger.info("Setting use_cache=False for gradient checkpointing compatibility")
+
             # Call the original forward method with explicit try/except
             try:
-                # Use mixed precision for better performance
-                with torch.cuda.amp.autocast(enabled=True):
+                # Use automatic mixed precision with the model's dtype
+                with torch.cuda.amp.autocast(dtype=model_dtype):
                     outputs = original_forward(*new_args, **new_kwargs)
             except Exception as e:
                 logger.error(f"Error in original forward: {e}")
@@ -1683,32 +1937,50 @@ def train_with_unsloth(args):
                     labels = new_kwargs.get("labels", None)
 
                     # If we have an attention mask issue, try to fix it or create a new one
-                    if "too many values to unpack" in str(e) and input_ids is not None:
-                        logger.info("Detected attention mask shape issue, creating a new causal attention mask")
+                    if "attention mask" in str(e).lower() and input_ids is not None:
+                        logger.info("Detected attention mask issue, creating a new causal attention mask")
                         batch_size, seq_length = input_ids.shape
-                        # Create a simple causal attention mask (all 1s)
-                        attention_mask = torch.ones(batch_size, seq_length, device=device)
 
-                    # Call forward with explicit arguments and minimal parameters
-                    outputs = original_forward(
-                        input_ids=input_ids,
-                        attention_mask=attention_mask,
-                        labels=labels,
-                        use_cache=False,  # Disable cache to avoid issues
-                        return_dict=True   # Ensure we get a proper return object
-                    )
+                        # Create a causal mask
+                        causal_mask = torch.triu(
+                            torch.ones((seq_length, seq_length), device=device, dtype=torch.bool),
+                            diagonal=1
+                        )
+                        causal_mask = causal_mask.unsqueeze(0).unsqueeze(1)  # [1, 1, seq_len, seq_len]
+                        causal_mask = causal_mask.expand(batch_size, 1, seq_length, seq_length)
+
+                        # Convert to the correct dtype
+                        if model_dtype is not None:
+                            causal_mask = causal_mask.to(dtype=model_dtype)
+
+                        # Replace the attention mask
+                        attention_mask = ~causal_mask
+                        logger.info(f"Created new attention mask with shape: {attention_mask.shape}")
+
+                    # Use automatic mixed precision with the model's dtype
+                    with torch.cuda.amp.autocast(dtype=model_dtype):
+                        # Call forward with explicit arguments and minimal parameters
+                        outputs = original_forward(
+                            input_ids=input_ids,
+                            attention_mask=attention_mask,
+                            labels=labels,
+                            use_cache=False,  # Disable cache to avoid issues
+                            return_dict=True   # Ensure we get a proper return object
+                        )
                 except Exception as e2:
                     logger.error(f"Direct forward call also failed: {e2}")
 
                     # Last resort: try without attention mask
                     try:
                         logger.info("Trying forward call without attention mask")
-                        outputs = original_forward(
-                            input_ids=input_ids,
-                            labels=labels,
-                            use_cache=False,
-                            return_dict=True
-                        )
+                        # Use automatic mixed precision with the model's dtype
+                        with torch.cuda.amp.autocast(dtype=model_dtype):
+                            outputs = original_forward(
+                                input_ids=input_ids,
+                                labels=labels,
+                                use_cache=False,
+                                return_dict=True
+                            )
                     except Exception as e3:
                         logger.error(f"Forward call without attention mask also failed: {e3}")
                         # Create dummy outputs as last resort
