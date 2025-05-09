@@ -857,7 +857,7 @@ try:
 
     # Create and train the text generator with optimized parameters for GPU
     model = create_cnn_text_generator(
-        model_name='google/flan-ul2-20b',
+        model_name='google/flan-ul2',
         force_gpu=True,
         gpu_type='$GPU_TYPE',
         vram_size=$VRAM_SIZE,
@@ -893,7 +893,7 @@ try:
     )
 
     # Save the model
-    output_dir = 'notebooks/Jarvis_AI_Assistant/models/flan-ul2-20b-finetuned'
+    output_dir = 'notebooks/Jarvis_AI_Assistant/models/flan-ul2-finetuned'
     os.makedirs(output_dir, exist_ok=True)
     model.save_model(f'{output_dir}/model.pt')
 
@@ -984,7 +984,7 @@ try:
 
     # Create and train the CNN-enhanced text generator with optimized parameters for GPU
     model = create_cnn_text_generator(
-        model_name='google/flan-ul2-20b',
+        model_name='google/flan-ul2',
         force_gpu=True,
         gpu_type='$GPU_TYPE',
         vram_size=$VRAM_SIZE,
@@ -1021,7 +1021,7 @@ try:
     )
 
     # Save the model
-    output_dir = 'notebooks/Jarvis_AI_Assistant/models/cnn-flan-ul2-20b-finetuned'
+    output_dir = 'notebooks/Jarvis_AI_Assistant/models/cnn-flan-ul2-finetuned'
     os.makedirs(output_dir, exist_ok=True)
     model.save_model(f'{output_dir}/model.pt')
 
@@ -1078,8 +1078,8 @@ import torch
 # Define expected model directories based on model type
 model_dirs = {
     'code': '/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-6.7b-finetuned',
-    'text': '/notebooks/Jarvis_AI_Assistant/models/flan-ul2-20b-finetuned',
-    'cnn-text': '/notebooks/Jarvis_AI_Assistant/models/cnn-flan-ul2-20b-finetuned'
+    'text': '/notebooks/Jarvis_AI_Assistant/models/flan-ul2-finetuned',
+    'cnn-text': '/notebooks/Jarvis_AI_Assistant/models/cnn-flan-ul2-finetuned'
 }
 
 # Check if the model directory exists

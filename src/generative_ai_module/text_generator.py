@@ -493,7 +493,7 @@ class CNNTextGenerator(TextGenerator):
     """
 
     def __init__(self,
-                model_name_or_path="google/flan-ul2-20b",
+                model_name_or_path="google/flan-ul2",
                 cnn_layers=3,  # Increased for A6000 GPU
                 cnn_kernel_sizes=None,
                 cnn_dropout=0.1,
@@ -1201,7 +1201,7 @@ class CNNTextGenerator(TextGenerator):
         print(f"Model saved to {path}")
         print(f"Tokenizer saved to {tokenizer_path}")
 
-def create_cnn_text_generator(model_name="google/flan-ul2-20b", force_gpu=True, cnn_layers=3,
+def create_cnn_text_generator(model_name="google/flan-ul2", force_gpu=True, cnn_layers=3,
                              gpu_type="A6000", vram_size=48,
                              load_in_4bit=True, load_in_8bit=False,
                              quantization_config=None, use_flash_attention_2=True,
