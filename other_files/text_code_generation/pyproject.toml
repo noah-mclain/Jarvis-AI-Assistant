@@ -1,0 +1,70 @@
+[tool.poetry]
+name = "jarvis-ai-assistant"
+version = "0.1.0"
+description = "Jarvis AI assistant"
+authors = ["noah-mclain <nadam.30032415@gmail.com>"]
+license = "GPL"
+readme = "README.md"
+packages = [{include = "src", from = "."}]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.13"
+
+# Core CUDA Stack (A100-optimized) --------------------------------------------
+torch = {version = "2.1.2", source = "pytorch"}
+torchvision = {version = "0.16.2", source = "pytorch"}
+torchaudio = {version = "2.1.2", source = "pytorch"}
+# Using a more stable xformers version that's compatible with PyTorch 2.1.2
+xformers = {version = "0.0.23.post1", source = "pytorch"} 
+triton = "2.1.0"
+# Using a version of bitsandbytes known to work well with the rest of the stack
+bitsandbytes = "0.41.1"
+# Using a more stable flash-attn version that's compatible with PyTorch 2.1.2
+flash-attn = "2.3.4"
+
+# Hugging Face Ecosystem ------------------------------------------------------
+transformers = "4.36.2"
+accelerate = "0.30.0"  # Updated for better A100 compatibility
+peft = "0.7.0"  # Updated for compatibility with newer transformers
+trl = "0.7.10"
+datasets = "2.19.0"
+huggingface-hub = "0.19.4"
+safetensors = "0.4.1"
+
+# Unsloth & Optimization ------------------------------------------------------
+# Installing unsloth via PyPI instead of git for better stability
+unsloth = "2025.4.4"
+einops = "0.7.0"      # Required for efficient tensor operations
+
+# NLP & Utilities -------------------------------------------------------------
+spacy = "3.7.4"
+nltk = "3.8.1"
+tqdm = "4.66.2"
+pandas = "2.2.2"
+scikit-learn = "1.4.2"
+numpy = "1.26.4"
+pydantic = "1.10.13"
+
+# Storage & Cloud Integration -------------------------------------------------
+boto3 = "1.34.86"
+gdown = "5.1.0"
+fsspec = "2024.3.1"
+psutil = "5.9.8"
+
+# Development Tools -----------------------------------------------------------
+jupyterlab = "4.4.1"
+tensorboard = "2.16.2"
+packaging = "23.2"
+ninja = "1.11.1"      # Speeds up custom CUDA extension builds
+
+[[tool.poetry.source]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu121"
+priority = "explicit"
+
+[tool.poetry.dependencies."en-core-web-sm"]
+url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0.tar.gz"
+
+[build-system]
+requires = ["poetry-core>=2.0.0", "setuptools", "ninja", "cmake"]
+build-backend = "poetry.core.masonry.api"

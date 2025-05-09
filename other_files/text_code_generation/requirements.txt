@@ -1,0 +1,68 @@
+
+# Core foundation packages - must be installed first
+numpy==1.26.4
+--extra-index-url https://download.pytorch.org/whl/cu121
+torch==2.1.2+cu121
+torchvision==0.16.2+cu121
+torchaudio==2.1.2+cu121
+
+# Core scientific packages
+scipy==1.12.0
+matplotlib==3.8.3
+pandas==2.2.0
+
+# Utilities
+filelock==3.12.2
+requests==2.31.0
+tqdm==4.66.1
+pyyaml==6.0.1
+typing-extensions==4.8.0
+packaging==23.1
+fsspec==2023.6.0
+psutil==5.9.5
+ninja==1.11.1
+markdown
+protobuf<4.24
+werkzeug
+
+# Hugging Face ecosystem (order-sensitive)
+safetensors==0.4.0
+huggingface-hub==0.19.4
+tokenizers==0.14.0
+transformers==4.36.2
+peft==0.6.0
+accelerate==0.25.0
+datasets==2.14.5
+trl==0.7.4
+einops==0.7.0
+
+# Optimization libraries
+bitsandbytes==0.41.0
+triton==2.1.0
+--extra-index-url https://download.pytorch.org/whl/cu121
+xformers==0.0.23.post1
+opt_einsum==3.3.0  # Optimized einsum operations for attention
+
+# Unsloth dependencies
+sentencepiece==0.1.99
+unsloth==2024.8
+
+# NLP & Utilities
+spacy==3.7.4
+nltk==3.8.1
+scikit-learn==1.4.2
+pydantic==1.10.13
+
+# Storage & Cloud Integration
+boto3==1.34.86
+gdown==5.1.0
+
+# Development Tools
+jupyterlab==3.6.5  # Keep lower version for compatibility
+tensorboard==2.15.1
+
+# Additional dependencies (A100/NLP)
+flash-attn==2.5.5
+
+# Spacy model (direct URL)
+https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0.tar.gz
