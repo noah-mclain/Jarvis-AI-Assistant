@@ -575,7 +575,7 @@ pip install transformers==4.36.2 --no-deps
 pip install peft==0.6.0 --no-deps
 pip install accelerate==0.25.0 --no-deps
 pip install datasets==2.14.5 --no-deps
-pip install bitsandbytes==0.41.1 --no-deps  # Using 0.41.1 instead of 0.41.0 for better compatibility
+pip install bitsandbytes==0.42.0 --no-deps  # Using 0.42.0 for better compatibility with 4-bit quantization
 pip install trl==0.7.4 --no-deps
 
 # 5. Install additional dependencies for all model types with --no-deps
@@ -617,7 +617,7 @@ except ImportError:
 # Fix bitsandbytes installation
 echo "Fixing bitsandbytes installation..."
 pip uninstall -y bitsandbytes
-pip install bitsandbytes==0.41.1 --no-deps
+pip install bitsandbytes==0.42.0 --no-deps  # Using 0.42.0 for better compatibility with 4-bit quantization
 
 # Create a version attribute for bitsandbytes if it doesn't exist
 python -c "
@@ -641,7 +641,7 @@ try:
             # Add version if not already there
             if '__version__' not in content:
                 with open(init_path, 'a') as f:
-                    f.write('\n\n# Added by setup script\n__version__ = \"0.41.1\"\n')
+                    f.write('\n\n# Added by setup script\n__version__ = \"0.42.0\"\n')
                 print('✅ Added __version__ attribute to bitsandbytes')
 
                 # Reload the module to apply changes

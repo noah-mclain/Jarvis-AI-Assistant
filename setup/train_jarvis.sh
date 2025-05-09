@@ -214,6 +214,7 @@ required_packages = ['torch', 'transformers', 'datasets', 'bitsandbytes', 'numpy
 missing_packages = []
 version_conflicts = []
 has_transformers_utils = True
+bitsandbytes_version_ok = False
 
 for package in required_packages:
     try:
@@ -228,6 +229,27 @@ for package in required_packages:
             except ImportError:
                 print('✗ transformers.utils is NOT available')
                 has_transformers_utils = False
+
+        # Special check for bitsandbytes version for 4-bit quantization
+        if package == 'bitsandbytes':
+            if hasattr(module, '__version__'):
+                version = module.__version__
+                print(f'  bitsandbytes version: {version}')
+                # Parse version
+                try:
+                    major, minor, patch = map(int, version.split('.'))
+                    # Check if version is >= 0.42.0 for 4-bit quantization
+                    if (major > 0) or (major == 0 and minor >= 42):
+                        print('✓ bitsandbytes version is compatible with 4-bit quantization')
+                        bitsandbytes_version_ok = True
+                    else:
+                        print('✗ bitsandbytes version is too old for 4-bit quantization')
+                        print('  Minimum required: 0.42.0 for 4-bit quantization')
+                        version_conflicts.append(('bitsandbytes', '>=0.42.0'))
+                except ValueError:
+                    print(f'  Could not parse bitsandbytes version: {version}')
+            else:
+                print('  bitsandbytes version attribute not found')
 
         # Check for known version conflicts (just report, don't fix)
         if package == 'numpy':
@@ -249,6 +271,14 @@ if missing_packages or version_conflicts or not has_transformers_utils:
     print('Please run the consolidated setup script ONCE to fix these issues:')
     print('./setup/consolidated_unified_setup.sh')
     print('\nContinuing with training anyway, but some features may not work correctly.')
+
+# Special warning for bitsandbytes version
+if not bitsandbytes_version_ok:
+    print('\n⚠️ WARNING: Your bitsandbytes version may not support 4-bit quantization.')
+    print('This can cause errors like: "Calling `to()` is not supported for `4-bit` quantized models"')
+    print('Consider upgrading bitsandbytes to version 0.42.0 or higher:')
+    print('pip install bitsandbytes>=0.42.0')
+    print('\nContinuing with training, but 4-bit quantization may fail.')
 
 print('\nContinuing with training...')
 "

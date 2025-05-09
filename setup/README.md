@@ -7,6 +7,7 @@ This directory contains the consolidated setup scripts for Jarvis AI Assistant. 
 ### 1. `consolidated_unified_setup.sh`
 
 This is the main setup script that handles the entire setup process. It:
+
 - Detects the environment (Colab, Paperspace, or standard)
 - Sets up the Python environment
 - Cleans up any existing installations
@@ -18,6 +19,7 @@ This is the main setup script that handles the entire setup process. It:
 - Creates import fixes
 
 Usage:
+
 ```bash
 ./setup/consolidated_unified_setup.sh
 ```
@@ -25,6 +27,7 @@ Usage:
 ### 2. `consolidated_install_dependencies.sh`
 
 This script handles the installation of all dependencies with specific compatible versions. It:
+
 - Installs NumPy 1.26.4 (foundation package)
 - Installs PyTorch 2.1.2 with CUDA 12.1
 - Installs core scientific packages
@@ -36,6 +39,7 @@ This script handles the installation of all dependencies with specific compatibl
 - Installs Flash Attention 2.5.5
 
 Usage:
+
 ```bash
 ./setup/consolidated_install_dependencies.sh
 ```
@@ -43,12 +47,14 @@ Usage:
 ### 3. `consolidated_fix_unsloth.sh`
 
 This script sets up a minimal Unsloth implementation that works without dependency conflicts. It:
+
 - Creates a custom minimal Unsloth implementation
 - Applies the fixed Unsloth to Python files
 - Adds the custom Unsloth to PYTHONPATH
 - Verifies the minimal Unsloth functionality
 
 Usage:
+
 ```bash
 ./setup/consolidated_fix_unsloth.sh
 ```
@@ -56,12 +62,14 @@ Usage:
 ### 4. `consolidated_fix_spacy.sh`
 
 This script sets up spaCy with a minimal tokenizer that works in Paperspace environments. It:
+
 - Detects if running in Paperspace
 - Creates a minimal spaCy tokenizer
 - Installs spaCy with specific compatible versions
 - Tests the installation and minimal tokenizer
 
 Usage:
+
 ```bash
 ./setup/consolidated_fix_spacy.sh
 ```
@@ -69,6 +77,7 @@ Usage:
 ### 5. `train_jarvis.sh`
 
 This is the main training script for Jarvis AI Assistant. It:
+
 - Activates the Python environment and Unsloth
 - Parses command line arguments
 - Sets up the environment and creates directories
@@ -79,11 +88,14 @@ This is the main training script for Jarvis AI Assistant. It:
 - Runs the training process
 
 Usage:
+
 ```bash
 ./setup/train_jarvis.sh --gpu-type A6000 --vram 50 --model-type code
 ```
 
-## Attention Mask Fix Scripts
+## Fix Scripts
+
+### Attention Mask Fix Scripts
 
 The following scripts are used to fix attention mask issues in DeepSeek models:
 
@@ -96,11 +108,42 @@ The following scripts are used to fix attention mask issues in DeepSeek models:
 - `fix_all_attention_issues.py`: All-in-one fix script
 - `ultimate_attention_fix.py`: Ultimate fix for all attention-related issues
 
-These scripts are called by the main setup script and don't need to be run individually.
+### Other Fix Scripts
+
+- `fix_transformers_utils.py`: Fixes missing transformers.utils module
+- `fix_deepseek_model.py`: Fixes issues with DeepSeek model in transformers
+- `fix_bitsandbytes_version.py`: Fixes bitsandbytes version issues for 4-bit quantization
+
+#### bitsandbytes Version Fix
+
+The `fix_bitsandbytes_version.py` script addresses an issue with 4-bit quantization in older versions of bitsandbytes.
+
+When using 4-bit quantization with older versions of bitsandbytes (< 0.42.0), you may encounter the following error:
+
+```bash
+Calling `to()` is not supported for `4-bit` quantized models with the installed version of bitsandbytes. The current device is `cuda:0`. If you intended to move the model, please install bitsandbytes >= 0.43.2.
+```
+
+The script:
+
+1. Checks the current bitsandbytes version
+2. Upgrades to a compatible version (0.42.0 or newer) if needed
+3. Adds a `__version__` attribute if it's missing
+
+You can run the script directly:
+
+```bash
+python setup/fix_bitsandbytes_version.py
+```
+
+Or it will be automatically run by the training script if needed.
+
+These scripts are called by the main setup script and don't need to be run individually in most cases.
 
 ## Setup Process
 
 1. Run the main setup script:
+
    ```bash
    ./setup/consolidated_unified_setup.sh
    ```

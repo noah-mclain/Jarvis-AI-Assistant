@@ -1002,6 +1002,50 @@ def train_with_unsloth(args):
     elif args.load_in_8bit:
         print("Loading model in 8-bit quantization")
 
+    # Check bitsandbytes version for 4-bit quantization compatibility
+    if args.load_in_4bit:
+        try:
+            import bitsandbytes as bnb
+            bnb_version = getattr(bnb, "__version__", "unknown")
+            logger.info(f"Using bitsandbytes version: {bnb_version}")
+
+            # Check if version is compatible with 4-bit quantization
+            if bnb_version != "unknown":
+                try:
+                    major, minor, patch = map(int, bnb_version.split('.')[0:3])
+                    if (major > 0) or (major == 0 and minor >= 42):
+                        logger.info("✅ bitsandbytes version is compatible with 4-bit quantization")
+                    else:
+                        logger.warning(f"⚠️ bitsandbytes version {bnb_version} may not support 4-bit quantization with to() method")
+                        logger.warning("This can cause errors like: 'Calling `to()` is not supported for `4-bit` quantized models'")
+                        logger.warning("Attempting to fix bitsandbytes version...")
+
+                        # Try to run the fix script
+                        import subprocess
+                        import os
+                        fix_script = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                                                "setup", "fix_bitsandbytes_version.py")
+                        if os.path.exists(fix_script):
+                            logger.info(f"Running bitsandbytes fix script: {fix_script}")
+                            try:
+                                subprocess.check_call([sys.executable, fix_script])
+                                logger.info("✅ Successfully fixed bitsandbytes version")
+
+                                # Reload bitsandbytes
+                                import importlib
+                                importlib.reload(bnb)
+                                bnb_version = getattr(bnb, "__version__", "unknown")
+                                logger.info(f"Updated bitsandbytes version: {bnb_version}")
+                            except subprocess.CalledProcessError as e:
+                                logger.warning(f"⚠️ Failed to fix bitsandbytes version: {e}")
+                                logger.warning("Continuing with current version, but 4-bit quantization may fail")
+                        else:
+                            logger.warning(f"⚠️ Could not find bitsandbytes fix script at {fix_script}")
+                except ValueError:
+                    logger.warning(f"Could not parse bitsandbytes version: {bnb_version}")
+        except ImportError:
+            logger.warning("Could not import bitsandbytes to check version")
+
     # Add robust error handling for model loading
     try:
         # Note: FastLanguageModel.from_pretrained already sets trust_remote_code=True internally
@@ -1017,21 +1061,58 @@ def train_with_unsloth(args):
         logger.info(f"Successfully loaded model: {args.model_name}")
     except Exception as e:
         logger.error(f"Error loading model: {e}")
+
+        # Check if this is a bitsandbytes version error
+        error_str = str(e)
+        if "Calling `to()` is not supported for `4-bit` quantized models" in error_str and args.load_in_4bit:
+            logger.warning("Detected bitsandbytes version compatibility issue with 4-bit quantization")
+            logger.warning("Attempting to fix by upgrading bitsandbytes...")
+
+            try:
+                import subprocess
+                subprocess.check_call([sys.executable, "-m", "pip", "install", "bitsandbytes>=0.42.0"])
+                logger.info("✅ Successfully upgraded bitsandbytes")
+
+                # Try loading again
+                logger.info("Retrying model loading after bitsandbytes upgrade...")
+                model, tokenizer = FastLanguageModel.from_pretrained(
+                    model_name=args.model_name,
+                    load_in_4bit=args.load_in_4bit,
+                    load_in_8bit=args.load_in_8bit
+                )
+                logger.info(f"Successfully loaded model after bitsandbytes upgrade: {args.model_name}")
+            except Exception as upgrade_error:
+                logger.error(f"Failed to upgrade bitsandbytes: {upgrade_error}")
+                logger.warning("Falling back to 8-bit quantization instead of 4-bit")
+
+                # Try with 8-bit quantization instead
+                try:
+                    model, tokenizer = FastLanguageModel.from_pretrained(
+                        model_name=args.model_name,
+                        load_in_4bit=False,
+                        load_in_8bit=True
+                    )
+                    logger.info(f"Successfully loaded model with 8-bit quantization: {args.model_name}")
+                except Exception as bit8_error:
+                    logger.error(f"Failed to load with 8-bit quantization: {bit8_error}")
+                    # Continue to next fallback
+
         # Try with additional parameters that might help
-        try:
-            logger.info("Retrying model loading with additional parameters...")
-            model, tokenizer = FastLanguageModel.from_pretrained(
-                model_name=args.model_name,
-                load_in_4bit=args.load_in_4bit,
-                load_in_8bit=args.load_in_8bit,
-                trust_remote_code=True,  # Explicitly set trust_remote_code
-                device_map="auto",       # Explicitly set device_map
-                use_cache=False if args.gradient_checkpointing else True  # Disable KV cache if using gradient checkpointing
-            )
-            logger.info(f"Successfully loaded model on retry: {args.model_name}")
-        except Exception as e2:
-            logger.error(f"Fatal error loading model on retry: {e2}")
-            raise RuntimeError(f"Could not load model {args.model_name}. Original error: {e}, Retry error: {e2}")
+        if 'model' not in locals() or model is None:
+            try:
+                logger.info("Retrying model loading with additional parameters...")
+                model, tokenizer = FastLanguageModel.from_pretrained(
+                    model_name=args.model_name,
+                    load_in_4bit=args.load_in_4bit,
+                    load_in_8bit=args.load_in_8bit,
+                    trust_remote_code=True,  # Explicitly set trust_remote_code
+                    device_map="auto",       # Explicitly set device_map
+                    use_cache=False if args.gradient_checkpointing else True  # Disable KV cache if using gradient checkpointing
+                )
+                logger.info(f"Successfully loaded model on retry: {args.model_name}")
+            except Exception as e2:
+                logger.error(f"Fatal error loading model on retry: {e2}")
+                raise RuntimeError(f"Could not load model {args.model_name}. Original error: {e}, Retry error: {e2}")
 
     # Set max sequence length after model is loaded
     model.config.max_position_embeddings = args.max_length
