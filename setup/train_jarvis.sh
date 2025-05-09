@@ -1399,11 +1399,11 @@ try:
 
                 # Log the dataset-specific parameters used
                 print(f'{dataset_name} parameters:')
-                print(f"  - Batch size: {data['params']['batch_size']}")
-                print(f"  - Sequence length: {data['params']['max_sequence_length']}")
-                print(f"  - Stride: {data['params']['stride']}")
-                print(f"  - Gradient accumulation steps: {data['params']['grad_accum_steps']}")
-                print(f"  - Number of batches: {len(data['batches'])}")
+                print(f\"  - Batch size: {data['params']['batch_size']}\")
+                print(f\"  - Sequence length: {data['params']['max_sequence_length']}\")
+                print(f\"  - Stride: {data['params']['stride']}\")
+                print(f\"  - Gradient accumulation steps: {data['params']['grad_accum_steps']}\")
+                print(f\"  - Number of batches: {len(data['batches'])}\")
 
             except Exception as e:
                 print(f'❌ Error preprocessing {dataset_name}: {e}')
@@ -1530,93 +1530,14 @@ except Exception as e:
     sys.exit(1)
 "
 
-        # Check if training was successful
-        if [ $? -ne 0 ]; then
-            echo "❌ CNN text model training failed. See logs for details."
-            exit 1
-        else
-            echo "✓ CNN text model training completed successfully!"
-        fi
-        ;;
-    custom-model)
-        echo "Running custom encoder-decoder model training with CNN model enhancement..."
+# Check if training was successful
+if [ $? -ne 0 ]; then
+    echo "❌ CNN text model training failed. See logs for details."
+    exit 1
+else
+    echo "✓ CNN text model training completed successfully!"
+fi
 
-        # First check if the CNN model exists
-        CNN_MODEL_PATH="/notebooks/Jarvis_AI_Assistant/models/cnn-flan-ul2-finetuned/model.pt"
-        if [ ! -f "$CNN_MODEL_PATH" ]; then
-            echo "❌ ERROR: CNN model not found at $CNN_MODEL_PATH"
-            echo "Please run train_jarvis.sh with --model-type cnn-text first"
-            exit 1
-        fi
-
-        # Verify GPU availability before starting training
-        python -c "
-import torch
-import sys
-
-if not torch.cuda.is_available():
-    print('❌ ERROR: CUDA is not available. Cannot proceed with GPU training.')
-    sys.exit(1)
-else:
-    device_name = torch.cuda.get_device_name(0)
-    device_capability = torch.cuda.get_device_capability(0)
-    free_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-    print(f'✓ Using GPU: {device_name} with CUDA capability {device_capability[0]}.{device_capability[1]}')
-    print(f'✓ Available GPU memory: {free_memory:.2f} GiB')
-
-    # Verify minimum memory requirements - Custom models need more memory
-    if free_memory < 20:
-        print(f'❌ ERROR: Not enough GPU memory. Need at least 20 GiB for custom model, but only {free_memory:.2f} GiB available.')
-        sys.exit(1)
-
-    # Clear CUDA cache
-    torch.cuda.empty_cache()
-    print('✓ CUDA cache cleared')
-"
-
-        # Check exit code of the GPU verification
-        if [ $? -ne 0 ]; then
-            echo "❌ GPU verification failed. Cannot proceed with training."
-            exit 1
-        fi
-
-        # Apply additional safeguards for GPU training
-        export PYTORCH_NO_CUDA_MEMORY_CACHING=1  # Disable CUDA memory caching
-
-        # Set default values for custom model training
-        OUTPUT_DIR="/notebooks/Jarvis_AI_Assistant/models/custom-encoder-decoder"
-        EPOCHS=3
-        BATCH_SIZE=4
-        MAX_SAMPLES=5000
-        LEARNING_RATE=5e-5
-        WEIGHT_DECAY=0.01
-        HIDDEN_SIZE=768
-        NUM_ENCODER_LAYERS=3
-        NUM_DECODER_LAYERS=3
-        DROPOUT=0.1
-        LOG_EVERY=10
-
-        # Create output directory if it doesn't exist
-        mkdir -p "$OUTPUT_DIR"
-
-        # Print training parameters
-        echo "===== Custom Encoder-Decoder Model Training ====="
-        echo "CNN Model Path: $CNN_MODEL_PATH"
-        echo "Output Directory: $OUTPUT_DIR"
-        echo "Epochs: $EPOCHS"
-        echo "Batch Size: $BATCH_SIZE"
-        echo "Max Samples: $MAX_SAMPLES"
-        echo "Learning Rate: $LEARNING_RATE"
-        echo "Weight Decay: $WEIGHT_DECAY"
-        echo "Hidden Size: $HIDDEN_SIZE"
-        echo "Encoder Layers: $NUM_ENCODER_LAYERS"
-        echo "Decoder Layers: $NUM_DECODER_LAYERS"
-        echo "Dropout: $DROPOUT"
-        echo "Log Every: $LOG_EVERY"
-        echo "=============================================="
-
-        # Run the training script
-        python -c "
 import sys
 import os
 import torch
