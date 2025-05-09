@@ -512,7 +512,13 @@ class CNNTextGenerator(TextGenerator):
                 gradient_accumulation_steps=None,  # Will be set based on GPU type
                 max_length=4096,  # Increased for A6000 GPU
                 bf16=True,  # Use bfloat16 precision for A6000 GPUs
-                num_workers=None):  # Number of workers for data loading
+                num_workers=None,  # Number of workers for data loading
+                warmup_ratio=0.03,  # Ratio of warmup steps to total training steps
+                weight_decay=0.01,  # Weight decay for optimizer
+                adam_beta1=0.9,  # Beta1 parameter for Adam optimizer
+                adam_beta2=0.999,  # Beta2 parameter for Adam optimizer
+                adam_epsilon=1e-8,  # Epsilon parameter for Adam optimizer
+                max_grad_norm=1.0):  # Maximum gradient norm for gradient clipping
         super().__init__(force_gpu)
         """
         Initialize the CNN-enhanced text generator optimized for A6000 GPUs
@@ -538,6 +544,12 @@ class CNNTextGenerator(TextGenerator):
             max_length: Maximum sequence length for training (4096 for A6000)
             bf16: Whether to use bfloat16 precision (True for A6000 with Ampere or newer architecture)
             num_workers: Number of workers for data loading (if None, will be set based on GPU type)
+            warmup_ratio: Ratio of warmup steps to total training steps
+            weight_decay: Weight decay for optimizer
+            adam_beta1: Beta1 parameter for Adam optimizer
+            adam_beta2: Beta2 parameter for Adam optimizer
+            adam_epsilon: Epsilon parameter for Adam optimizer
+            max_grad_norm: Maximum gradient norm for gradient clipping
         """
         # Store parameters
         self.cnn_layers = cnn_layers
@@ -558,6 +570,12 @@ class CNNTextGenerator(TextGenerator):
         self.load_in_4bit = load_in_4bit
         self.load_in_8bit = load_in_8bit
         self.num_workers = num_workers
+        self.warmup_ratio = warmup_ratio
+        self.weight_decay = weight_decay
+        self.adam_beta1 = adam_beta1
+        self.adam_beta2 = adam_beta2
+        self.adam_epsilon = adam_epsilon
+        self.max_grad_norm = max_grad_norm
 
         # Configure based on GPU type and VRAM
         self._configure_for_gpu()
@@ -1189,7 +1207,9 @@ def create_cnn_text_generator(model_name="google/flan-ul2-20b", force_gpu=True, 
                              quantization_config=None, use_flash_attention_2=True,
                              gradient_checkpointing=True, lora_rank=32, lora_alpha=64,
                              lora_dropout=0.05, batch_size=None, gradient_accumulation_steps=None,
-                             max_length=4096, num_workers=None):
+                             max_length=4096, num_workers=None, warmup_ratio=0.03,
+                             weight_decay=0.01, adam_beta1=0.9, adam_beta2=0.999,
+                             adam_epsilon=1e-8, max_grad_norm=1.0):
     """
     Helper function to create a CNN-enhanced text generator optimized for A6000 GPUs
 
@@ -1211,6 +1231,12 @@ def create_cnn_text_generator(model_name="google/flan-ul2-20b", force_gpu=True, 
         gradient_accumulation_steps: Steps to accumulate gradients (if None, will be set based on GPU)
         max_length: Maximum sequence length for training
         num_workers: Number of workers for data loading (if None, will be set based on GPU)
+        warmup_ratio: Ratio of warmup steps to total training steps
+        weight_decay: Weight decay for optimizer
+        adam_beta1: Beta1 parameter for Adam optimizer
+        adam_beta2: Beta2 parameter for Adam optimizer
+        adam_epsilon: Epsilon parameter for Adam optimizer
+        max_grad_norm: Maximum gradient norm for gradient clipping
 
     Returns:
         Initialized CNNTextGenerator optimized for the specified GPU
@@ -1256,5 +1282,11 @@ def create_cnn_text_generator(model_name="google/flan-ul2-20b", force_gpu=True, 
         gradient_accumulation_steps=gradient_accumulation_steps,
         max_length=max_length,
         bf16=use_bf16,
-        num_workers=num_workers
+        num_workers=num_workers,
+        warmup_ratio=warmup_ratio,
+        weight_decay=weight_decay,
+        adam_beta1=adam_beta1,
+        adam_beta2=adam_beta2,
+        adam_epsilon=adam_epsilon,
+        max_grad_norm=max_grad_norm
     )
