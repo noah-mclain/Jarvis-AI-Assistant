@@ -47,6 +47,12 @@ class ModelHandler:
         self.model = None
         self.is_initialized = False
 
+        from transformers import pipeline
+
+        from huggingface_hub import login
+
+        import soundfile as sf  # For handling audio files
+
     def load_model(self) -> bool:
         """
         Load the model
@@ -79,24 +85,8 @@ class SpeechToTextHandler(ModelHandler):
         try:
             logger.info("Loading speech-to-text model...")
 
-            # TODO: Implement actual model loading
-            # This should import and initialize the Whisper model for speech-to-text
-            # Example:
-            # from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
-            # device = "cuda:0" if torch.cuda.is_available() else "cpu"
-            #
-            # If a specific model path is provided:
-            # if self.model_path and os.path.exists(self.model_path):
-            #     self.processor = AutoProcessor.from_pretrained(self.model_path)
-            #     self.model = AutoModelForSpeechSeq2Seq.from_pretrained(self.model_path)
-            # else:
-            #     model_id = "openai/whisper-small"
-            #     self.processor = AutoProcessor.from_pretrained(model_id)
-            #     self.model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id)
-            #
-            # self.pipe = pipeline("automatic-speech-recognition", model=self.model, ...)
 
-            # For now, just simulate successful loading
+
             self.is_initialized = True
             logger.info("Speech-to-text model loaded successfully")
             return True
@@ -106,21 +96,36 @@ class SpeechToTextHandler(ModelHandler):
 
     def process_query(self, query: str) -> str:
         """Process a speech-to-text query"""
-        if not self.is_initialized and not self.load_model():
-            return "Speech-to-text model could not be loaded. Please check the logs for details."
+        import sounddevice as sd
+        from scipy.io.wavfile import write
+        import requests
 
-        # TODO: Implement actual speech-to-text processing
-        # This should check if the query is a path to an audio file and transcribe it
-        # Example:
-        # if os.path.exists(query) and query.endswith(('.mp3', '.wav', '.m4a', '.flac')):
-        #     result = self.pipe(query)
-        #     transcription = result["text"]
-        #     return f"Transcription: {transcription}"
-        # else:
-        #     return "Please provide a valid path to an audio file (.mp3, .wav, .m4a, or .flac)"
+        # Set recording parameters
+        fs = 44100  # Sample rate (Hz)
+        duration = 30  # Recording duration (seconds)
+        filename = "output.wav"  # Output file name
 
-        # For now, just return a placeholder response
-        return f"Speech-to-text model would process: {query}"
+        # Record audio
+        print("Recording...")
+        recording = sd.rec(int(duration * fs), samplerate=fs, channels=1)
+        sd.wait()  # Wait until recording is finished
+
+        # Save to WAV file
+        write(filename, fs, recording)
+        print(f"Saved to {filename}")
+
+        json_query = {
+            "audio": recording,
+        }
+        response = requests.post("https://6b1c-35-240-193-205.ngrok-free.app/generate", json=json_query)
+
+        if response.status_code == 200:
+            return "Audio sent successfully."
+        else:
+            logger.error(f"Error generating image: {response.status_code} - {response.text}")
+            return "Audio failed. Please check the logs for details."
+
+
 
 
 class CodeGenerationHandler(ModelHandler):
@@ -298,34 +303,12 @@ class StoryGenerationHandler(ModelHandler):
         return f"Story generation model would create a story about: {query}\n\nOnce upon a time, in a land far away, there was a kingdom of wonder and magic. The people lived in harmony with nature, and the kingdom prospered under the wise rule of its benevolent monarch..."
 
 
-class ImageGenerationHandler(ModelHandler):
+class ImageGenerationHandler(ModelHandler): 
     """Handler for image generation functionality"""
 
     def load_model(self) -> bool:
         """Load the image generation model"""
         try:
-            logger.info("Loading image generation model (Stable Diffusion)...")
-
-            # TODO: Implement actual model loading
-            # This should import and initialize the Stable Diffusion model
-            # Example:
-            # from diffusers import StableDiffusionPipeline
-            # import torch
-            #
-            # model_id = "runwayml/stable-diffusion-v1-5"  # or "stabilityai/stable-diffusion-2-1"
-            # self.device = "cuda" if torch.cuda.is_available() else "cpu"
-            #
-            # # Load the pipeline
-            # self.pipeline = StableDiffusionPipeline.from_pretrained(model_id)
-            # self.pipeline = self.pipeline.to(self.device)
-            #
-            # # If using lower precision for memory efficiency
-            # if self.device == "cuda":
-            #     self.pipeline.enable_attention_slicing()
-            #     # Optional: self.pipeline.enable_xformers_memory_efficient_attention()
-
-            # For now, just simulate successful loading
-            self.is_initialized = True
             logger.info("Image generation model loaded successfully")
             return True
         except Exception as e:
@@ -334,30 +317,29 @@ class ImageGenerationHandler(ModelHandler):
 
     def process_query(self, query: str) -> str:
         """Process an image generation query"""
-        if not self.is_initialized and not self.load_model():
-            return "Image generation model could not be loaded. Please check the logs for details."
+        import requests
+        from PIL import Image
+        from io import BytesIO
+        print(query)
+        json_query = {
+            "prompt": query,
+            "negative_prompt": "",
+            "width": 1024,
+            "height": 1024,
+            "guidance_scale": 9.0,
+            "seed": 12345
+        }
+        response = requests.post("https://6b1c-35-240-193-205.ngrok-free.app/generate", json=json_query)
 
-        # TODO: Implement actual image generation
-        # This should use the Stable Diffusion model to generate an image based on the query
-        # Example:
-        # import os
-        # from datetime import datetime
-        #
-        # # Generate a unique filename
-        # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        # output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'generated_images')
-        # os.makedirs(output_dir, exist_ok=True)
-        # image_path = os.path.join(output_dir, f"generated_image_{timestamp}.png")
-        #
-        # # Generate the image
-        # with torch.no_grad():
-        #     image = self.pipeline(query, guidance_scale=7.5).images[0]
-        #     image.save(image_path)
-        #
-        # return f"Image generated successfully and saved to: {image_path}"
+        if response.status_code == 200:
 
-        # For now, just return a placeholder response
-        return f"Image generation model would create an image of: {query}\n\nImage would be generated using Stable Diffusion and saved to the data/generated_images directory."
+            img = Image.open(BytesIO(response.content))
+            img.show()  # Opens the image in your default viewer
+            img.save("generated_image.png")
+            return "Image generated successfully and saved as 'generated_image.png'."
+        else:
+            logger.error(f"Error generating image: {response.status_code} - {response.text}")
+            return "Image generation failed. Please check the logs for details."
 
 
 # Dictionary mapping model types to their handlers
