@@ -20,7 +20,6 @@ import { useState, useRef, FormEvent, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { TextareaAutosize } from "@/components/ui/textarea-autosize";
 import { ModelButtons } from "@/components/model-buttons";
-import { ExecutePopup } from "@/components/execute-popup";
 
 /**
  * Props for the ChatInput component
@@ -187,18 +186,8 @@ export function ChatInput({
         />
 
         {/* Button container with flexible layout - moved below the text area */}
-        <div className="flex justify-between items-center p-1 mt-2">
-          {/* Left side - Command Terminal Button */}
-          <div>
-            <ExecutePopup
-              onExecute={(command) => {
-                // Placeholder for execute functionality
-                console.log("Executing command:", command);
-              }}
-            />
-          </div>
-
-          {/* Right side - Send Button */}
+        <div className="flex justify-end items-center p-1 mt-2">
+          {/* Send Button */}
           <div>
             {/*
               Submit button

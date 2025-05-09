@@ -22,6 +22,7 @@ import { ChatMessage } from "@/components/chat-message";
 import { ChatInput } from "@/components/chat-input";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SettingsPanel } from "@/components/settings-panel";
+import { ExecutePopup } from "@/components/execute-popup";
 import { Message } from "@/types/message";
 import { toast } from "@/components/ui/sonner";
 import { useWindowSize } from "@/hooks/use-window-size";
@@ -532,6 +533,37 @@ export function ChatInterface() {
   };
 
   /**
+   * Handles command execution from the ExecutePopup component
+   *
+   * This function:
+   * 1. Creates a user message with the command
+   * 2. Adds it to the current chat
+   * 3. The actual command execution is handled by the ExecutePopup component
+   *
+   * @param {string} command - The command text that was executed
+   */
+  const handleCommandExecute = (command: string) => {
+    // Ensure we have an active chat
+    if (!activeChat) {
+      return;
+    }
+
+    // Create a user message with the command
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content: `Command: ${command}`,
+      timestamp: new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    };
+
+    // Add the message to the current chat
+    setMessages((prev) => [...prev, userMessage]);
+  };
+
+  /**
    * Handles chat deletion
    *
    * This function:
@@ -624,8 +656,10 @@ export function ChatInterface() {
             )}
           </div>
 
-          {/* Right side of header - Theme toggle and settings panel */}
+          {/* Right side of header - Command execution, theme toggle, and settings panel */}
           <div className="flex items-center space-x-2">
+            <ExecutePopup onExecute={handleCommandExecute} />{" "}
+            {/* Command execution popup */}
             <ThemeToggle /> {/* Toggle between light/dark themes */}
             <SettingsPanel /> {/* Access application settings */}
           </div>

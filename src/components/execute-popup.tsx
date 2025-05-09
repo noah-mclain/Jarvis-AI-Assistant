@@ -86,27 +86,71 @@ export function ExecutePopup({ onExecute }: ExecutePopupProps) {
             clearInterval(countdownRef.current);
           }
 
-          // Execute the command
-          if (onExecute) {
-            onExecute(command);
-          } else {
-            // Placeholder implementation
-            toast.success("Command executed", {
-              description: `Executed: ${command}`,
-            });
-          }
-
-          // Reset states
-          setIsExecuting(false);
-          setIsSpeechToText(false);
-          setCommand("");
-          setIsOpen(false);
+          // Execute the command by sending it to the backend API
+          executeCommand(command);
 
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
+  };
+
+  /**
+   * Sends the command to the backend API for execution
+   *
+   * @param {string} commandText - The command text to execute
+   */
+  const executeCommand = async (commandText: string) => {
+    try {
+      // Send the command to the backend API
+      const response = await fetch("/api/execute", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          command: commandText,
+          // You can specify a model type here if needed
+          // modelType: 'codeGeneration',
+        }),
+      });
+
+      if (response.ok) {
+        // Process successful response
+        const data = await response.json();
+
+        // Show success toast with the result
+        toast.success("Command executed", {
+          description:
+            data.result.substring(0, 100) +
+            (data.result.length > 100 ? "..." : ""),
+        });
+
+        // Call the onExecute callback if provided
+        if (onExecute) {
+          onExecute(commandText);
+        }
+      } else {
+        // Handle API error
+        const errorData = await response.json().catch(() => ({}));
+        toast.error("Failed to execute command", {
+          description: errorData.error || response.statusText,
+        });
+      }
+    } catch (error) {
+      // Handle network or server errors
+      console.error("Error executing command:", error);
+      toast.error(
+        "Cannot connect to the server. The application may need to be restarted."
+      );
+    } finally {
+      // Reset states
+      setIsExecuting(false);
+      setIsSpeechToText(false);
+      setCommand("");
+      setIsOpen(false);
+    }
   };
 
   /**
@@ -126,22 +170,75 @@ export function ExecutePopup({ onExecute }: ExecutePopupProps) {
             clearInterval(countdownRef.current);
           }
 
-          // Placeholder for speech-to-text functionality
-          toast.success("Speech-to-text completed", {
-            description:
-              "This is a placeholder for speech-to-text functionality",
-          });
+          // In a real implementation, this would capture audio and send it for transcription
+          // For now, we'll simulate a transcription result
+          const simulatedTranscription =
+            "Show me the weather forecast for today";
+          setCommand(simulatedTranscription);
 
-          // Reset states
-          setIsExecuting(false);
-          setIsSpeechToText(false);
-          setIsOpen(false);
+          // Process the transcribed text
+          processSpeechToText(simulatedTranscription);
 
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
+  };
+
+  /**
+   * Processes the transcribed text by sending it to the backend API
+   *
+   * @param {string} text - The transcribed text to process
+   */
+  const processSpeechToText = async (text: string) => {
+    try {
+      // Send the transcribed text to the backend API
+      const response = await fetch("/api/speech-to-text", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text: text,
+          modelType: "speechToText",
+        }),
+      });
+
+      if (response.ok) {
+        // Process successful response
+        const data = await response.json();
+
+        // Show success toast with the result
+        toast.success("Speech processed", {
+          description:
+            data.result.substring(0, 100) +
+            (data.result.length > 100 ? "..." : ""),
+        });
+
+        // Call the onExecute callback if provided
+        if (onExecute) {
+          onExecute(text);
+        }
+      } else {
+        // Handle API error
+        const errorData = await response.json().catch(() => ({}));
+        toast.error("Failed to process speech", {
+          description: errorData.error || response.statusText,
+        });
+      }
+    } catch (error) {
+      // Handle network or server errors
+      console.error("Error processing speech:", error);
+      toast.error(
+        "Cannot connect to the server. The application may need to be restarted."
+      );
+    } finally {
+      // Reset states
+      setIsExecuting(false);
+      setIsSpeechToText(false);
+      setIsOpen(false);
+    }
   };
 
   /**

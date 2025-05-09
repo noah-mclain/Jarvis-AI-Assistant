@@ -251,6 +251,98 @@ load_data()  # Load data from files or initialize with defaults
 # API Routes
 # These routes define the REST API endpoints for the frontend to interact with
 
+@app.route('/api/execute', methods=['POST'])
+def execute_command():
+    """
+    API endpoint to execute a command.
+
+    This endpoint:
+    1. Receives a command from the frontend
+    2. Processes the command through the Jarvis AI assistant
+    3. Returns the response
+
+    Request Body:
+        JSON object with 'command' field containing the command text
+        and optional 'modelType' field specifying the model to use
+
+    Returns:
+        JSON response with the command result
+    """
+    try:
+        # Get the command and model type from the request body
+        data = request.json
+        command_text = data.get('command', '')
+        model_type = data.get('modelType', None)
+
+        # Validate that the command is not empty
+        if not command_text.strip():
+            return jsonify({"error": "Command cannot be empty"}), 400
+
+        # Process the command through the Jarvis AI assistant
+        try:
+            # Use the same get_jarvis_response function that handles messages
+            response_content = get_jarvis_response(command_text, model_type)
+        except Exception as e:
+            # Handle any errors in AI processing with a fallback response
+            logger.error(f"Error processing command: {e}")
+            response_content = "I'm sorry, I encountered an error processing your command. Please try again."
+
+        # Return the response
+        return jsonify({
+            "success": True,
+            "result": response_content
+        })
+    except Exception as e:
+        # Log and return any errors that occur
+        logger.error(f"Error executing command: {e}")
+        return jsonify({"error": "Failed to execute command"}), 500
+
+@app.route('/api/speech-to-text', methods=['POST'])
+def process_speech():
+    """
+    API endpoint to process speech-to-text input.
+
+    This endpoint:
+    1. Receives audio data or a transcription from the frontend
+    2. If it's a transcription, processes it through the Jarvis AI assistant
+    3. Returns the response
+
+    Request Body:
+        JSON object with 'text' field containing the transcribed text
+        and optional 'modelType' field specifying the model to use
+
+    Returns:
+        JSON response with the processing result
+    """
+    try:
+        # Get the transcribed text and model type from the request body
+        data = request.json
+        text = data.get('text', '')
+        model_type = data.get('modelType', 'speechToText')  # Default to speechToText model
+
+        # Validate that the text is not empty
+        if not text.strip():
+            return jsonify({"error": "Transcribed text cannot be empty"}), 400
+
+        # Process the text through the Jarvis AI assistant
+        try:
+            # Use the same get_jarvis_response function that handles messages
+            response_content = get_jarvis_response(text, model_type)
+        except Exception as e:
+            # Handle any errors in AI processing with a fallback response
+            logger.error(f"Error processing speech: {e}")
+            response_content = "I'm sorry, I encountered an error processing your speech. Please try again."
+
+        # Return the response
+        return jsonify({
+            "success": True,
+            "result": response_content
+        })
+    except Exception as e:
+        # Log and return any errors that occur
+        logger.error(f"Error processing speech: {e}")
+        return jsonify({"error": "Failed to process speech"}), 500
+
 @app.route('/api/models/select', methods=['POST'])
 def select_model():
     """

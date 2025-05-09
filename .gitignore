@@ -36,6 +36,7 @@ var/
 *.egg
 venv/
 .env
+jarvis_env/
 
 # Editor directories and files
 .vscode/*
