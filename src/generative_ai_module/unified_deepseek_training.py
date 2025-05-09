@@ -33,46 +33,31 @@ if __name__ == "__main__":
         # If it's already set, this will raise a RuntimeError
         print("Multiprocessing start method already set to:", multiprocessing.get_start_method())
 
-try:
-    from src.generative_ai_module.autocast_fix import safe_autocast, apply_autocast_fix
-except ImportError:
-    # Try relative import
-    try:
-        from .autocast_fix import safe_autocast, apply_autocast_fix
-    except ImportError:
-        # Define fallback functions if import fails
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning("Could not import autocast_fix module, using fallback implementation")
+import logging
+import torch
+from contextlib import contextmanager
 
-        import torch
-        from contextlib import contextmanager
-
-        @contextmanager
-        def safe_autocast(dtype=None):
-            """Fallback safe_autocast function"""
-            if hasattr(torch.cuda, 'amp') and hasattr(torch.cuda.amp, 'autocast'):
-                if dtype is not None:
-                    try:
-                        with safe_autocast(dtype=dtype) as ctx:
-                            yield ctx
-                    except TypeError:
-                        with safe_autocast() as ctx:
-                            yield ctx
-                else:
-                    with safe_autocast() as ctx:
-                        yield ctx
+@contextmanager
+def safe_autocast(dtype=None):
+    """Simple autocast wrapper that works with different PyTorch versions"""
+    if hasattr(torch.cuda, 'amp') and hasattr(torch.cuda.amp, 'autocast'):
+        try:
+            if dtype is not None:
+                with torch.cuda.amp.autocast(dtype=dtype) as ctx:
+                    yield ctx
             else:
-                # Dummy context manager if autocast is not available
-                @contextmanager
-                def dummy_context_manager():
-                    yield
-                yield dummy_context_manager()
-
-        def apply_autocast_fix():
-            """Fallback apply_autocast_fix function"""
-            logger.info("Using fallback autocast fix implementation")
-            return True
+                with torch.cuda.amp.autocast() as ctx:
+                    yield ctx
+        except TypeError:
+            # If dtype parameter is not supported, use without it
+            with torch.cuda.amp.autocast() as ctx:
+                yield ctx
+    else:
+        # Dummy context manager if autocast is not available
+        @contextmanager
+        def dummy_context_manager():
+            yield
+        yield dummy_context_manager()
 
 # Configure logging
 logging.basicConfig(
@@ -938,35 +923,8 @@ def train_with_unsloth(args):
     from transformers import TrainingArguments, Trainer, DataCollatorForLanguageModeling, __version__ as transformers_version
     from datasets import load_dataset
 
-    # Import and apply the autocast fix
-    try:
-        from src.generative_ai_module.autocast_fix import safe_autocast, apply_autocast_fix
-        # Apply the autocast fix
-        apply_autocast_fix()
-        logger.info("Successfully imported and applied autocast fix")
-    except ImportError:
-        logger.warning("Could not import autocast_fix module. Using fallback implementation.")
-        # Define a fallback helper function to handle autocast compatibility
-        from contextlib import contextmanager
-
-        @contextmanager
-        def safe_autocast(dtype=None):
-            """Create a safe autocast context that works with different PyTorch versions"""
-            import torch
-
-            # Check if autocast supports dtype parameter (newer PyTorch versions)
-            try:
-                if dtype is not None:
-                    with safe_autocast(dtype=dtype) as ctx:
-                        yield ctx
-                else:
-                    with safe_autocast() as ctx:
-                        yield ctx
-            except TypeError:
-                # Older PyTorch versions don't support dtype parameter
-                logger.warning("PyTorch version doesn't support dtype in autocast. Using default dtype.")
-                with safe_autocast() as ctx:
-                    yield ctx
+    # Use the safe_autocast function defined at the top of the file
+    logger.info("Using safe_autocast for mixed precision training")
 
     # Check transformers version for compatibility
     logger.info(f"Using transformers version: {transformers_version}")
