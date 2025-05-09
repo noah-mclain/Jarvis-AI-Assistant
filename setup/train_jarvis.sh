@@ -714,7 +714,7 @@ case "$MODEL_TYPE" in
         # Apply additional safeguards for GPU training
         export PYTORCH_NO_CUDA_MEMORY_CACHING=1  # Disable CUDA memory caching
 
-        python train_code_model.py "$GPU_TYPE" "$VRAM_SIZE"
+        python setup/train_code_model.py "$GPU_TYPE" "$VRAM_SIZE"
 
         # Check if training was successful
         if [ $? -ne 0 ]; then
@@ -739,7 +739,7 @@ case "$MODEL_TYPE" in
         # Apply additional safeguards for GPU training
         export PYTORCH_NO_CUDA_MEMORY_CACHING=1  # Disable CUDA memory caching
 
-        python train_text_model.py "$GPU_TYPE" "$VRAM_SIZE"
+        python setup/train_text_model.py "$GPU_TYPE" "$VRAM_SIZE"
 
         # Check if training was successful
         if [ $? -ne 0 ]; then
@@ -766,9 +766,9 @@ case "$MODEL_TYPE" in
 
         # Check if we should use the ImprovedPreprocessor
         if [ "$USE_IMPROVED_PREPROCESSOR" = "1" ]; then
-            python train_cnn_text_model.py "$GPU_TYPE" "$VRAM_SIZE" 1
+            python setup/train_cnn_text_model.py "$GPU_TYPE" "$VRAM_SIZE" 1
         else
-            python train_cnn_text_model.py "$GPU_TYPE" "$VRAM_SIZE"
+            python setup/train_cnn_text_model.py "$GPU_TYPE" "$VRAM_SIZE"
         fi
 
         # Check if training was successful
@@ -835,7 +835,7 @@ case "$MODEL_TYPE" in
         echo "=============================================="
 
         # Run the training script
-        python train_custom_model.py \
+        python setup/train_custom_model.py \
             --cnn-model-path "$CNN_MODEL_PATH" \
             --output-dir "$OUTPUT_DIR" \
             --epochs "$EPOCHS" \
