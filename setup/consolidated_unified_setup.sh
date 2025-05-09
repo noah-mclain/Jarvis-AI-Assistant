@@ -81,8 +81,22 @@ rm -rf ~/.cache/huggingface
 # Install dependencies
 echo "Installing dependencies..."
 chmod +x setup/consolidated_install_dependencies.sh
+
+# Run the dependencies installation script with error handling
 ./setup/consolidated_install_dependencies.sh || {
     echo "⚠️ Warning: Dependencies installation script exited with an error."
+    echo "Attempting to fix common dependency issues..."
+
+    # Fix typing-extensions version
+    pip install typing-extensions==4.13.2 --force-reinstall
+
+    # Install wheel and setuptools
+    pip install wheel setuptools --upgrade
+
+    # Install core dependencies directly
+    pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --extra-index-url https://download.pytorch.org/whl/cu121
+    pip install transformers==4.36.2 peft==0.6.0 accelerate==0.25.0 bitsandbytes==0.41.0
+
     echo "Continuing with setup anyway, but some features may not work correctly."
 }
 
@@ -392,9 +406,49 @@ except Exception as e:
 
 # Final fallback installation for critical dependencies
 echo "Performing final fallback installation for critical dependencies..."
+
+# Install wheel and setuptools first to avoid build issues
+pip install wheel setuptools --upgrade
+
+# Install typing-extensions with the correct version to avoid conflicts
+pip install typing-extensions==4.13.2 --force-reinstall
+
+# Install PyTorch ecosystem
+pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --extra-index-url https://download.pytorch.org/whl/cu121 --no-deps
 pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --extra-index-url https://download.pytorch.org/whl/cu121
+
+# Install Hugging Face ecosystem with compatible versions
+pip install transformers==4.36.2 peft==0.6.0 accelerate==0.25.0 bitsandbytes==0.41.0 --no-deps
 pip install transformers==4.36.2 peft==0.6.0 accelerate==0.25.0 bitsandbytes==0.41.0
+
+# Install additional dependencies with --no-deps to avoid conflicts
+pip install protobuf\<4.24 werkzeug pandas huggingface-hub markdown --no-deps
 pip install protobuf\<4.24 werkzeug pandas huggingface-hub markdown
+
+# Setup Google Drive mounting with rclone for Paperspace
+if [ "$IN_PAPERSPACE" = "1" ]; then
+    echo "===================================================================="
+    echo "Setting up Google Drive mounting with rclone for Paperspace"
+    echo "===================================================================="
+
+    # Install rclone
+    echo "Installing rclone..."
+    apt-get update -q
+    apt-get install -y rclone fuse
+
+    # Check if mount_drive_paperspace.py exists and is executable
+    if [ -f "setup/mount_drive_paperspace.py" ]; then
+        echo "Running mount_drive_paperspace.py..."
+        chmod +x setup/mount_drive_paperspace.py
+        python setup/mount_drive_paperspace.py
+    else
+        echo "⚠️ Warning: mount_drive_paperspace.py not found"
+        echo "You can manually mount Google Drive with:"
+        echo "1. Run: rclone config"
+        echo "2. Follow the setup steps for Google Drive"
+        echo "3. Run: rclone mount gdrive: /content/drive --daemon --vfs-cache-mode=full"
+    fi
+fi
 
 echo "===================================================================="
 echo "Consolidated setup complete! Jarvis AI Assistant environment is ready."

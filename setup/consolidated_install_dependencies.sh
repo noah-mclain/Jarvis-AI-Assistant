@@ -95,8 +95,8 @@ pip install scipy==1.12.0 matplotlib==3.8.3 pandas==2.2.0
 
 # 1.4 Install utility packages required by transformers ecosystem
 pip install filelock==3.12.2 requests==2.31.0 tqdm==4.66.1
-pip install pyyaml==6.0.1 typing-extensions==4.8.0 packaging==23.1
-pip install fsspec==2023.6.0 psutil==5.9.5 ninja==1.11.1
+pip install pyyaml==6.0.1 typing-extensions==4.13.2 packaging==23.1
+pip install fsspec==2023.6.0 psutil==5.9.5 ninja==1.11.1 wheel
 pip install markdown protobuf\<4.24 werkzeug
 
 # 1.5 Hugging Face ecosystem - in exact order for compatibility
@@ -147,21 +147,37 @@ pip install unsloth==2024.8 --no-deps
 
 # 5. Install Flash Attention 2.5.5 with proper dependency handling
 echo "Installing Flash Attention 2.5.5..."
-pip install packaging ninja --no-deps  # Ensure these are available
-pip install flash-attn==2.5.5 --no-build-isolation --no-deps
+
+# Ensure all build dependencies are available
+pip install packaging==23.1 ninja==1.11.1 wheel setuptools --no-deps
+pip install packaging==23.1 ninja==1.11.1 wheel setuptools
+
+# Try multiple installation methods for Flash Attention
+echo "Trying Flash Attention installation method 1..."
+pip install flash-attn==2.5.5 --no-build-isolation --no-deps || true
 
 # Verify Flash Attention installation
-if python -c "import flash_attn; print(f'Flash Attention version: {flash_attn.__version__}')"; then
+if python -c "import flash_attn; print(f'Flash Attention version: {flash_attn.__version__}')" 2>/dev/null; then
     echo "✅ Flash Attention 2.5.5 successfully installed!"
 else
-    echo "⚠️ Flash Attention installation failed. Trying alternative method..."
-    pip install flash-attn==2.5.5 --no-build-isolation
+    echo "⚠️ Flash Attention installation method 1 failed. Trying method 2..."
+    pip install flash-attn==2.5.5 --no-build-isolation || true
 
     # Verify again
-    if python -c "import flash_attn; print(f'Flash Attention version: {flash_attn.__version__}')"; then
-        echo "✅ Flash Attention successfully installed with alternative method!"
+    if python -c "import flash_attn; print(f'Flash Attention version: {flash_attn.__version__}')" 2>/dev/null; then
+        echo "✅ Flash Attention successfully installed with method 2!"
     else
-        echo "⚠️ Flash Attention installation failed after multiple attempts."
+        echo "⚠️ Flash Attention installation method 2 failed. Trying method 3 (pre-built wheel)..."
+        # Try to find a pre-built wheel
+        pip install flash-attn==2.5.5 --find-links https://github.com/Dao-AILab/flash-attention/releases/tag/v2.5.5 || true
+
+        # Final verification
+        if python -c "import flash_attn; print(f'Flash Attention version: {flash_attn.__version__}')" 2>/dev/null; then
+            echo "✅ Flash Attention successfully installed with method 3!"
+        else
+            echo "⚠️ Flash Attention installation failed after multiple attempts."
+            echo "Training will continue without Flash Attention."
+        fi
     fi
 fi
 
