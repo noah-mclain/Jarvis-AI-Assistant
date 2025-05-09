@@ -361,7 +361,8 @@ class DatasetProcessor:
         return sequences
 
     def create_batches(self, sequences: List[Tuple[torch.Tensor, torch.Tensor]],
-                      batch_size: int = 64, shuffle: bool = True) -> List[Tuple[torch.Tensor, torch.Tensor]]:
+                      batch_size: int = 64, shuffle: bool = True,
+                      dataset_name: str = None) -> List[Tuple[torch.Tensor, torch.Tensor]]:
         """
         Create batches from sequences
 
@@ -369,6 +370,7 @@ class DatasetProcessor:
             sequences: List of (input, target) tensor pairs
             batch_size: Batch size
             shuffle: Whether to shuffle the data
+            dataset_name: Optional name of the dataset for special handling
 
         Returns:
             List of batched (inputs, targets) tensor pairs
@@ -386,15 +388,72 @@ class DatasetProcessor:
             # Unzip the batch sequences
             batch_inputs, batch_targets = zip(*batch_sequences)
 
-            # Stack tensors into batches
-            input_batch = torch.stack(batch_inputs)
-            target_batch = torch.stack(batch_targets)
+            # Special handling for OpenAssistant dataset to ensure correct dtype
+            if dataset_name == "openassistant" or (
+                len(batch_sequences) > 0 and
+                hasattr(batch_sequences[0][0], 'dtype') and
+                batch_sequences[0][0].dtype != torch.long
+            ):
+                # Convert to long dtype explicitly
+                print(f"Converting batch tensors to torch.long dtype")
+
+                # Stack tensors into batches with explicit dtype
+                try:
+                    # First convert individual tensors if needed
+                    converted_inputs = []
+                    for tensor in batch_inputs:
+                        if tensor.dtype != torch.long:
+                            converted_inputs.append(tensor.to(dtype=torch.long))
+                        else:
+                            converted_inputs.append(tensor)
+
+                    converted_targets = []
+                    for tensor in batch_targets:
+                        if tensor.dtype != torch.long:
+                            converted_targets.append(tensor.to(dtype=torch.long))
+                        else:
+                            converted_targets.append(tensor)
+
+                    # Then stack them
+                    input_batch = torch.stack(converted_inputs)
+                    target_batch = torch.stack(converted_targets)
+
+                    # Verify dtype
+                    if input_batch.dtype != torch.long:
+                        print(f"Warning: Input batch still has incorrect dtype: {input_batch.dtype}. Forcing to torch.long.")
+                        input_batch = input_batch.long()
+
+                    if target_batch.dtype != torch.long:
+                        print(f"Warning: Target batch still has incorrect dtype: {target_batch.dtype}. Forcing to torch.long.")
+                        target_batch = target_batch.long()
+                except Exception as e:
+                    print(f"Error converting batch tensors: {e}")
+                    # Fall back to standard stacking
+                    input_batch = torch.stack(batch_inputs).long()
+                    target_batch = torch.stack(batch_targets).long()
+            else:
+                # Standard stacking for other datasets
+                try:
+                    input_batch = torch.stack(batch_inputs)
+                    target_batch = torch.stack(batch_targets)
+
+                    # Safety check for dtype
+                    if input_batch.dtype != torch.long:
+                        print(f"Warning: Input batch has incorrect dtype: {input_batch.dtype}. Converting to torch.long.")
+                        input_batch = input_batch.long()
+
+                    if target_batch.dtype != torch.long:
+                        print(f"Warning: Target batch has incorrect dtype: {target_batch.dtype}. Converting to torch.long.")
+                        target_batch = target_batch.long()
+                except Exception as e:
+                    print(f"Error stacking tensors: {e}")
+                    continue
 
             batches.append((input_batch, target_batch))
 
         return batches
 
-    def prepare_text_batches(self, raw_text, sequence_length, batch_size):
+    def prepare_text_batches(self, raw_text, sequence_length, batch_size, dataset_name=None):
         """
         Prepare text into batches for training
 
@@ -402,13 +461,14 @@ class DatasetProcessor:
             raw_text: Raw text data
             sequence_length: Length of sequences
             batch_size: Batch size
+            dataset_name: Optional name of the dataset for special handling
 
         Returns:
             Batched dataset ready for training
         """
         cleaned_text = self.clean_text(raw_text)
         sequences = self.create_sequences(cleaned_text, sequence_length)
-        return self.create_batches(sequences, batch_size)
+        return self.create_batches(sequences, batch_size, dataset_name=dataset_name)
 
     def load_writing_prompts(self, split='train', max_samples=None, cache_dir=None):
         """
@@ -630,12 +690,14 @@ ASSISTANT: I'm a software engineer during the week. But on weekends, I play guit
             raw_text = self.load_persona_chat(split, max_samples, cache_dir)
         elif source == 'writing_prompts':
             raw_text = self.load_writing_prompts(split=split, max_samples=max_samples, cache_dir=cache_dir)
+        elif source == 'openassistant':
+            raw_text = self.load_openassistant_dataset(split=split, max_samples=max_samples, cache_dir=cache_dir)
         else:
             # Treat as path to local file or directory
             raw_text = self.load_data(source)
 
-        # Create batches
-        return self.prepare_text_batches(raw_text, sequence_length, batch_size)
+        # Create batches with dataset name for special handling
+        return self.prepare_text_batches(raw_text, sequence_length, batch_size, dataset_name=source.lower())
 
     def prepare_code_dataset(self, source, sequence_length=100, batch_size=64):
         """
@@ -652,8 +714,8 @@ ASSISTANT: I'm a software engineer during the week. But on weekends, I play guit
         # Load code text
         raw_text = self.load_data(source)
 
-        # Prepare batches
-        return self.prepare_text_batches(raw_text, sequence_length, batch_size)
+        # Prepare batches (code datasets don't need special handling)
+        return self.prepare_text_batches(raw_text, sequence_length, batch_size, dataset_name="code")
 
     def prepare_local_dataset(self, data_dir, sequence_length=100, batch_size=64):
         """
@@ -700,7 +762,8 @@ ASSISTANT: I'm a software engineer during the week. But on weekends, I play guit
 
         # Prepare batches
         print(f"Loaded {len(raw_text)} characters from {data_dir}")
-        return self.prepare_text_batches(raw_text, sequence_length, batch_size)
+        # Use a generic dataset name for local files
+        return self.prepare_text_batches(raw_text, sequence_length, batch_size, dataset_name="local_text")
 
     def load_preprocessed_data(self, dataset_name: str, custom_path: str = None) -> Dict[str, Any]:
         """
@@ -833,16 +896,30 @@ ASSISTANT: I'm a software engineer during the week. But on weekends, I play guit
         """
         # Load the preprocessed data
         try:
-            data = self.load_preprocessed_data(dataset_name)
+            # Use the provided path if specified
+            data = self.load_preprocessed_data(dataset_name, custom_path=preprocessed_path)
 
             # Check if data contains batches
             if 'batches' not in data or not data['batches']:
-                print("Warning: No batches found in preprocessed data")
+                print(f"Warning: No batches found in preprocessed data for {dataset_name}")
                 return []
 
             # If no reshaping is needed, return the batches directly
             if batch_size is None:
-                return data['batches']
+                # Check if we need to convert tensor dtypes
+                if dataset_name.lower() == "openassistant":
+                    print(f"Checking and converting tensor dtypes for {dataset_name} dataset")
+                    converted_batches = []
+                    for input_batch, target_batch in data['batches']:
+                        # Convert to long dtype if needed
+                        if hasattr(input_batch, 'dtype') and input_batch.dtype != torch.long:
+                            input_batch = input_batch.to(dtype=torch.long)
+                        if hasattr(target_batch, 'dtype') and target_batch.dtype != torch.long:
+                            target_batch = target_batch.to(dtype=torch.long)
+                        converted_batches.append((input_batch, target_batch))
+                    return converted_batches
+                else:
+                    return data['batches']
 
             # Otherwise, reshape the batches
             print(f"Reshaping batches to size {batch_size}")
@@ -850,15 +927,24 @@ ASSISTANT: I'm a software engineer during the week. But on weekends, I play guit
             # Create a flat list of samples
             flat_samples = []
             for input_batch, target_batch in data['batches']:
+                # Convert to long dtype if needed
+                if hasattr(input_batch, 'dtype') and input_batch.dtype != torch.long:
+                    input_batch = input_batch.to(dtype=torch.long)
+                if hasattr(target_batch, 'dtype') and target_batch.dtype != torch.long:
+                    target_batch = target_batch.to(dtype=torch.long)
+
                 flat_samples.extend(
                     (input_batch[i], target_batch[i])
                     for i in range(input_batch.shape[0])
                 )
-            # Create new batches
-            return self.create_batches(flat_samples, batch_size)
+
+            # Create new batches with dataset name for special handling
+            return self.create_batches(flat_samples, batch_size, dataset_name=dataset_name.lower())
 
         except Exception as e:
             print(f"Error preparing from preprocessed data: {e}")
+            import traceback
+            traceback.print_exc()
             return []
 
     def adapt_preprocessed_data(self, data):
@@ -1044,6 +1130,7 @@ def preprocess_text(text):
             Preprocessed text ready for sequence creation
         """
         try:
+            print("Loading OpenAssistant dataset with explicit dtype control...")
             dataset = load_dataset("agie-ai/OpenAssistant-oasst1", split=split, cache_dir=cache_dir)
 
             if max_samples:
@@ -1075,6 +1162,9 @@ def preprocess_text(text):
 
                     if instruction and response:
                         compiled_text += f"USER: {instruction}\nASSISTANT: {response}\n<END>\n\n"
+
+            # Add a note about the special handling for OpenAssistant
+            print("Note: OpenAssistant dataset will be processed with special handling to ensure correct tensor dtype (torch.long)")
 
             return compiled_text
 
@@ -1264,20 +1354,74 @@ The chain rule is powerful because it allows you to break down complex derivativ
 
     def _process_openassistant_format(self, dataset, dataset_id):
         """Process dataset in OpenAssistant format"""
-        batches = []
+        text_batches = []
 
+        # First, collect all text samples
         for item in tqdm(dataset, desc=f"Processing {dataset_id}"):
             if 'text' in item and 'role' in item:
                 if item['role'] == 'assistant':
-                    batches.append(f"USER: [Previous question]\nASSISTANT: {item['text']}")
+                    text_batches.append(f"USER: [Previous question]\nASSISTANT: {item['text']}")
                 elif item['role'] == 'prompter':
-                    batches.append(f"USER: {item['text']}\nASSISTANT:")
+                    text_batches.append(f"USER: {item['text']}\nASSISTANT:")
+
+        # Now create sequences and batches with explicit dtype control
+        print(f"Creating sequences for OpenAssistant dataset...")
+        sequences = []
+
+        # Use a simplified approach for OpenAssistant to ensure correct dtype
+        for text in text_batches:
+            # Create a simple sequence with explicit Long dtype
+            input_tensor = torch.tensor([ord(c) % 256 for c in text[:100]], dtype=torch.long)
+            target_tensor = torch.tensor([ord(c) % 256 for c in text[1:101]], dtype=torch.long)
+
+            # Pad if needed
+            if len(input_tensor) < 100:
+                padding = torch.zeros(100 - len(input_tensor), dtype=torch.long)
+                input_tensor = torch.cat([input_tensor, padding])
+
+            if len(target_tensor) < 100:
+                padding = torch.zeros(100 - len(target_tensor), dtype=torch.long)
+                target_tensor = torch.cat([target_tensor, padding])
+
+            sequences.append((input_tensor, target_tensor))
+
+        # Create batches with explicit dtype control
+        print(f"Creating batches for OpenAssistant dataset...")
+        batches = []
+        batch_size = 16  # Default batch size
+
+        for i in range(0, len(sequences), batch_size):
+            batch_sequences = sequences[i:i+batch_size]
+
+            if not batch_sequences:
+                continue
+
+            # Unzip the batch sequences
+            batch_inputs, batch_targets = zip(*batch_sequences)
+
+            # Stack tensors into batches with explicit dtype
+            try:
+                input_batch = torch.stack(batch_inputs).to(dtype=torch.long)
+                target_batch = torch.stack(batch_targets).to(dtype=torch.long)
+
+                # Verify dtype
+                assert input_batch.dtype == torch.long, f"Input batch dtype is {input_batch.dtype}, not torch.long"
+                assert target_batch.dtype == torch.long, f"Target batch dtype is {target_batch.dtype}, not torch.long"
+
+                batches.append((input_batch, target_batch))
+            except Exception as e:
+                print(f"Error creating batch: {e}")
+                continue
+
+        print(f"Created {len(batches)} batches for OpenAssistant dataset with dtype torch.long")
 
         return {
             'batches': batches,
             'metadata': {
-                'sample_count': len(batches),
-                'source': dataset_id
+                'sample_count': len(text_batches),
+                'batch_count': len(batches),
+                'source': dataset_id,
+                'dtype': 'torch.long'  # Explicitly note the dtype
             }
         }
 
@@ -1384,7 +1528,9 @@ The chain rule is powerful because it allows you to break down complex derivativ
         sequences = self.create_sequences(raw_text, sequence_length)
 
         print(f"Creating batches with batch size {batch_size}...")
-        batches = self.create_batches(sequences, batch_size=batch_size)
+        # Pass the dataset name to create_batches for special handling
+        dataset_name_for_batches = source.lower() if not is_huggingface_dataset else None
+        batches = self.create_batches(sequences, batch_size=batch_size, dataset_name=dataset_name_for_batches)
 
         dataset = {
             'batches': batches,
@@ -1394,7 +1540,8 @@ The chain rule is powerful because it allows you to break down complex derivativ
                 'sequence_length': sequence_length,
                 'batch_size': batch_size,
                 'sample_count': len(sequences),
-                'batch_count': len(batches)
+                'batch_count': len(batches),
+                'dtype': 'torch.long'  # Explicitly note the dtype
             }
         }
 
