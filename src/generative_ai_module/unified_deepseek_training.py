@@ -16,6 +16,8 @@ import torch
 import argparse
 import logging
 import multiprocessing
+import subprocess
+import importlib.metadata
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Union, Tuple
@@ -41,6 +43,22 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Check package versions
+required_versions = {
+    "peft": "0.10.0",
+    "transformers": "4.40.0",
+    "accelerate": "0.29.0"
+}
+
+for pkg, ver in required_versions.items():
+    try:
+        installed_ver = importlib.metadata.version(pkg)
+        if installed_ver < ver:
+            logger.warning(f"{pkg} version {installed_ver} is outdated. Minimum required: {ver}")
+            subprocess.run(f"pip install -U {pkg}", shell=True)
+    except Exception as e:
+        logger.warning(f"Could not check {pkg} version: {e}")
 
 # Check for Unsloth availability
 try:
@@ -1058,7 +1076,7 @@ def train_with_unsloth(args):
                 lora_dropout=args.lora_dropout,
                 target_modules=target_modules,
                 bias="none",
-                # Don't set task_type here to avoid the duplicate parameter issue
+                task_type="CAUSAL_LM"  # Add task_type for proper configuration
             )
 
             # Apply LoRA with the config
@@ -1328,10 +1346,23 @@ def train_with_unsloth(args):
                     attention_mask_4d = attention_mask_4d.to(dtype=model_dtype)
                     logger.info(f"Converted attention mask to dtype: {model_dtype}")
 
+                # CRITICAL FIX: Check if attention mask is 4D with shape [batch_size, 1, seq_len, seq_len]
+                # If it's [batch_size, 1, 2048, 2048], convert it to 2D [batch_size, seq_len]
+                if attention_mask_4d.dim() == 4:
+                    # Check if it's the problematic shape
+                    if attention_mask_4d.shape[1] == 1 and attention_mask_4d.shape[2] == attention_mask_4d.shape[3]:
+                        # Extract just the first row of each sequence's mask (for causal attention)
+                        attention_mask_2d = attention_mask_4d.squeeze(1)[:, 0, :]
+                        logger.info(f"Converted 4D attention mask to 2D: {attention_mask_2d.shape}")
+                        attention_mask_tensor = attention_mask_2d
+                    else:
+                        logger.info(f"Keeping 4D attention mask with shape: {attention_mask_4d.shape}")
+                        attention_mask_tensor = attention_mask_4d
+
                 # Create the batch
                 batch = {
                     "input_ids": input_ids_tensor,
-                    "attention_mask": attention_mask_4d,
+                    "attention_mask": attention_mask_tensor,
                     "labels": labels_tensor
                 }
 
@@ -1598,6 +1629,7 @@ def train_with_unsloth(args):
                         # Use automatic mixed precision with the model's dtype
                         with torch.cuda.amp.autocast(dtype=model_dtype):
                             # Forward pass with use_cache=False for gradient checkpointing
+                            # CRITICAL FIX: Always use explicit keyword arguments
                             outputs = model(
                                 input_ids=inputs["input_ids"],
                                 attention_mask=inputs["attention_mask"] if "attention_mask" in inputs else None,
@@ -1926,6 +1958,10 @@ def train_with_unsloth(args):
         def training_step(self, model, inputs):
             """Override training_step to ensure proper device handling and gradient computation"""
             try:
+                # Add memory monitoring
+                if torch.cuda.is_available():
+                    logger.info(f"Memory before forward: {torch.cuda.memory_allocated()/1024**2:.2f}MB")
+
                 # Ensure model is in training mode
                 model.train()
 
@@ -1961,6 +1997,10 @@ def train_with_unsloth(args):
                     loss = self.compute_loss(model, inputs)
                     logger.info(f"Computed loss: {loss.item()}, device: {loss.device}, requires_grad: {loss.requires_grad}")
 
+                    # Add memory monitoring after forward pass
+                    if torch.cuda.is_available():
+                        logger.info(f"Memory after forward: {torch.cuda.memory_allocated()/1024**2:.2f}MB")
+
                     # Force loss to have gradients
                     if not hasattr(loss, 'grad_fn') or not loss.requires_grad:
                         logger.warning("Loss doesn't have gradients, creating a new tensor with requires_grad=True")
@@ -1977,6 +2017,10 @@ def train_with_unsloth(args):
                         logger.info("Attempting backward pass with accelerator")
                         self.accelerator.backward(loss)
                         logger.info("Backward pass with accelerator successful")
+
+                        # Add memory monitoring after backward pass
+                        if torch.cuda.is_available():
+                            logger.info(f"Memory after backward: {torch.cuda.memory_allocated()/1024**2:.2f}MB")
                     except Exception as e:
                         logger.error(f"Error in backward pass with accelerator: {e}")
                         # Try a more direct approach
@@ -1984,6 +2028,10 @@ def train_with_unsloth(args):
                             logger.info("Attempting direct backward pass")
                             loss.backward()
                             logger.info("Direct backward pass successful")
+
+                            # Add memory monitoring after direct backward pass
+                            if torch.cuda.is_available():
+                                logger.info(f"Memory after direct backward: {torch.cuda.memory_allocated()/1024**2:.2f}MB")
                         except Exception as e2:
                             logger.error(f"Direct backward also failed: {e2}")
                             # Create a dummy loss as last resort with explicit gradient
@@ -2265,6 +2313,24 @@ def train_with_unsloth(args):
             """Ensure all inputs and internal tensors are on the correct device and have correct shapes/dtypes"""
             device = model.device
             logger.info(f"In patched forward: Model is on device: {device}")
+
+            # CRITICAL FIX: Handle positional arguments properly
+            # If we have more than one positional argument and the second one is a tensor,
+            # it's likely input_ids passed as a positional argument
+            if len(args) > 1 and isinstance(args[1], torch.Tensor):
+                logger.info("Detected input_ids as positional argument, converting to kwargs")
+                # Extract input_ids
+                input_ids_arg = args[1]
+                # Create new args without input_ids
+                new_args = args[:1]
+                # Create new kwargs with input_ids
+                new_kwargs = kwargs.copy()
+                if "input_ids" not in new_kwargs:
+                    new_kwargs["input_ids"] = input_ids_arg
+                # Update args and kwargs
+                args = new_args
+                kwargs = new_kwargs
+                logger.info("Converted positional input_ids to keyword argument")
 
             # Get model's dtype for mixed precision
             model_dtype = getattr(model, "dtype", None)
@@ -3036,6 +3102,35 @@ def train_with_unsloth(args):
         logger.warning(f"Trainer model is not on CUDA! Moving to CUDA...")
         trainer.model = trainer.model.to("cuda")
         logger.info(f"Trainer model moved to device: {trainer.model.device}")
+
+    # Add minimal validation step before training
+    logger.info("Running validation forward pass...")
+    validation_sample = tokenizer("def hello_world():", return_tensors="pt").to(trainer.model.device)
+    try:
+        outputs = trainer.model(
+            input_ids=validation_sample.input_ids,
+            attention_mask=validation_sample.attention_mask,
+            labels=validation_sample.input_ids
+        )
+        logger.info("Validation forward pass succeeded")
+    except Exception as e:
+        logger.error(f"Validation failed: {e}")
+        logger.warning("Attempting to fix issues before proceeding...")
+        # Try to apply fixes
+        try:
+            # Ensure model is in eval mode for validation
+            trainer.model.eval()
+            # Try with explicit keyword arguments
+            outputs = trainer.model(
+                input_ids=validation_sample.input_ids,
+                attention_mask=None,  # Skip attention mask
+                labels=validation_sample.input_ids,
+                return_dict=True
+            )
+            logger.info("Validation succeeded with simplified arguments")
+        except Exception as e2:
+            logger.error(f"Simplified validation also failed: {e2}")
+            logger.warning("Proceeding with training despite validation failure")
 
     # Ensure model parameters have requires_grad=True where needed
     trainable_params = 0
