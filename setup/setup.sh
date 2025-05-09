@@ -151,6 +151,7 @@ install_core_dependencies() {
     pip install filelock==3.12.2 requests==2.31.0 tqdm==4.66.1
     pip install pyyaml==6.0.1 typing-extensions==4.8.0 packaging==23.1
     pip install fsspec==2023.6.0 psutil==5.9.5 ninja==1.11.1
+    pip install markdown protobuf\<4.24 werkzeug
 
     # 5. Hugging Face ecosystem - in exact order for compatibility
     echo "Installing Hugging Face ecosystem..."

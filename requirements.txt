@@ -22,6 +22,9 @@ packaging==23.1
 fsspec==2023.6.0
 psutil==5.9.5
 ninja==1.11.1
+markdown
+protobuf<4.24
+werkzeug
 
 # Hugging Face ecosystem (order-sensitive)
 safetensors==0.4.0

@@ -884,13 +884,109 @@ try:
         print('❌ WARNING: Model is not on GPU. Moving model to GPU...')
         model = model.cuda()
 
-    # Train the model
+    # Ensure datasets directory exists
+    datasets_dir = 'notebooks/Jarvis_AI_Assistant/datasets'
+    os.makedirs(datasets_dir, exist_ok=True)
+
+    # Import dataset processor
+    from src.generative_ai_module.dataset_processor import DatasetProcessor
+
+    # Create processor
+    processor = DatasetProcessor(model)
+
+    # Define datasets to preprocess
+    datasets = ['persona_chat', 'writing_prompts', 'pile', 'openassistant', 'gpteacher']
+    preprocessed_paths = {}
+
+    # Preprocess all datasets
+    print('Preprocessing datasets...')
+    for dataset_name in datasets:
+        preprocessed_path = os.path.join(datasets_dir, f'preprocessed_{dataset_name}.pt')
+        preprocessed_paths[dataset_name] = preprocessed_path
+
+        # Check if dataset is already preprocessed
+        if os.path.exists(preprocessed_path):
+            print(f'Dataset {dataset_name} already preprocessed at {preprocessed_path}')
+            continue
+
+        print(f'Preprocessing {dataset_name}...')
+        try:
+            # Prepare dataset with appropriate parameters
+            if dataset_name == 'persona_chat':
+                sequence_length = 512
+                batch_size = 16
+                raw_text = processor.load_persona_chat(split='train', max_samples=5000)
+            elif dataset_name == 'writing_prompts':
+                sequence_length = 1024
+                batch_size = 8
+                raw_text = processor.load_writing_prompts(split='train', max_samples=5000)
+            elif dataset_name == 'pile':
+                sequence_length = 1024
+                batch_size = 8
+                raw_text = processor.load_pile_dataset(split='train', max_samples=5000)
+            elif dataset_name == 'openassistant':
+                sequence_length = 512
+                batch_size = 16
+                raw_text = processor.load_openassistant_dataset(split='train', max_samples=5000)
+            elif dataset_name == 'gpteacher':
+                sequence_length = 768
+                batch_size = 12
+                raw_text = processor.load_gpteacher_dataset(split='train', max_samples=5000)
+
+            # Create sequences and batches
+            print(f'Creating sequences with length {sequence_length}...')
+            sequences = processor.create_sequences(raw_text, sequence_length)
+
+            print(f'Creating batches with batch size {batch_size}...')
+            batches = processor.create_batches(sequences, batch_size=batch_size)
+
+            # Create dataset dictionary
+            dataset = {
+                'batches': batches,
+                'metadata': {
+                    'dataset_name': dataset_name,
+                    'split': 'train',
+                    'sequence_length': sequence_length,
+                    'batch_size': batch_size,
+                    'sample_count': len(sequences),
+                    'batch_count': len(batches)
+                }
+            }
+
+            # Save preprocessed data
+            print(f'Saving preprocessed {dataset_name} to {preprocessed_path}...')
+            torch.save(dataset, preprocessed_path)
+            print(f'✓ Successfully preprocessed {dataset_name}')
+
+        except Exception as e:
+            print(f'❌ Error preprocessing {dataset_name}: {e}')
+            import traceback
+            traceback.print_exc()
+
+    # Train the model with all available datasets
     print('Starting training...')
-    model.train_from_preprocessed(
-        dataset_name='persona_chat',
-        epochs=3,
-        preprocessed_path='notebooks/Jarvis_AI_Assistant/datasets/preprocessed_persona_chat.pt'
-    )
+
+    # Check which datasets were successfully preprocessed
+    available_datasets = []
+    for dataset_name, path in preprocessed_paths.items():
+        if os.path.exists(path):
+            available_datasets.append(dataset_name)
+
+    if len(available_datasets) > 1:
+        print(f'Training with multiple datasets: {available_datasets}')
+        model.train_from_multiple_datasets(
+            dataset_names=available_datasets,
+            epochs=3,
+            dataset_paths=preprocessed_paths
+        )
+    else:
+        # Fall back to single dataset training
+        print(f'Training with single dataset: persona_chat')
+        model.train_from_preprocessed(
+            dataset_name='persona_chat',
+            epochs=3,
+            preprocessed_path=preprocessed_paths.get('persona_chat')
+        )
 
     # Save the model
     output_dir = 'notebooks/Jarvis_AI_Assistant/models/flan-ul2-finetuned'
@@ -1012,13 +1108,109 @@ try:
         print('❌ WARNING: Model is not on GPU. Moving model to GPU...')
         model = model.cuda()
 
-    # Train the model
+    # Ensure datasets directory exists
+    datasets_dir = 'notebooks/Jarvis_AI_Assistant/datasets'
+    os.makedirs(datasets_dir, exist_ok=True)
+
+    # Import dataset processor
+    from src.generative_ai_module.dataset_processor import DatasetProcessor
+
+    # Create processor
+    processor = DatasetProcessor(model)
+
+    # Define datasets to preprocess
+    datasets = ['persona_chat', 'writing_prompts', 'pile', 'openassistant', 'gpteacher']
+    preprocessed_paths = {}
+
+    # Preprocess all datasets
+    print('Preprocessing datasets...')
+    for dataset_name in datasets:
+        preprocessed_path = os.path.join(datasets_dir, f'preprocessed_{dataset_name}.pt')
+        preprocessed_paths[dataset_name] = preprocessed_path
+
+        # Check if dataset is already preprocessed
+        if os.path.exists(preprocessed_path):
+            print(f'Dataset {dataset_name} already preprocessed at {preprocessed_path}')
+            continue
+
+        print(f'Preprocessing {dataset_name}...')
+        try:
+            # Prepare dataset with appropriate parameters
+            if dataset_name == 'persona_chat':
+                sequence_length = 512
+                batch_size = 16
+                raw_text = processor.load_persona_chat(split='train', max_samples=5000)
+            elif dataset_name == 'writing_prompts':
+                sequence_length = 1024
+                batch_size = 8
+                raw_text = processor.load_writing_prompts(split='train', max_samples=5000)
+            elif dataset_name == 'pile':
+                sequence_length = 1024
+                batch_size = 8
+                raw_text = processor.load_pile_dataset(split='train', max_samples=5000)
+            elif dataset_name == 'openassistant':
+                sequence_length = 512
+                batch_size = 16
+                raw_text = processor.load_openassistant_dataset(split='train', max_samples=5000)
+            elif dataset_name == 'gpteacher':
+                sequence_length = 768
+                batch_size = 12
+                raw_text = processor.load_gpteacher_dataset(split='train', max_samples=5000)
+
+            # Create sequences and batches
+            print(f'Creating sequences with length {sequence_length}...')
+            sequences = processor.create_sequences(raw_text, sequence_length)
+
+            print(f'Creating batches with batch size {batch_size}...')
+            batches = processor.create_batches(sequences, batch_size=batch_size)
+
+            # Create dataset dictionary
+            dataset = {
+                'batches': batches,
+                'metadata': {
+                    'dataset_name': dataset_name,
+                    'split': 'train',
+                    'sequence_length': sequence_length,
+                    'batch_size': batch_size,
+                    'sample_count': len(sequences),
+                    'batch_count': len(batches)
+                }
+            }
+
+            # Save preprocessed data
+            print(f'Saving preprocessed {dataset_name} to {preprocessed_path}...')
+            torch.save(dataset, preprocessed_path)
+            print(f'✓ Successfully preprocessed {dataset_name}')
+
+        except Exception as e:
+            print(f'❌ Error preprocessing {dataset_name}: {e}')
+            import traceback
+            traceback.print_exc()
+
+    # Train the model with all available datasets
     print('Starting training...')
-    model.train_from_preprocessed(
-        dataset_name='persona_chat',
-        epochs=3,
-        preprocessed_path='notebooks/Jarvis_AI_Assistant/datasets/preprocessed_persona_chat.pt'
-    )
+
+    # Check which datasets were successfully preprocessed
+    available_datasets = []
+    for dataset_name, path in preprocessed_paths.items():
+        if os.path.exists(path):
+            available_datasets.append(dataset_name)
+
+    if len(available_datasets) > 1:
+        print(f'Training with multiple datasets: {available_datasets}')
+        model.train_from_multiple_datasets(
+            dataset_names=available_datasets,
+            epochs=3,
+            dataset_paths=preprocessed_paths
+        )
+    else:
+        # Fall back to single dataset training
+        print(f'Training with single dataset: persona_chat')
+        model.train_from_preprocessed(
+            dataset_name='persona_chat',
+            epochs=3,
+            preprocessed_path=preprocessed_paths.get('persona_chat')
+        )
 
     # Save the model
     output_dir = 'notebooks/Jarvis_AI_Assistant/models/cnn-flan-ul2-finetuned'
@@ -1353,15 +1545,95 @@ def train_custom_model():
     # Initialize the dataset handler
     dataset_handler = UnifiedDatasetHandler()
 
-    # Load all 5 datasets
+    # Load all preprocessed datasets
+    datasets_dir = 'notebooks/Jarvis_AI_Assistant/datasets'
+    os.makedirs(datasets_dir, exist_ok=True)
+    dataset_names = ['writing_prompts', 'persona_chat', 'pile', 'openassistant', 'gpteacher']
+    preprocessed_paths = {name: os.path.join(datasets_dir, f'preprocessed_{name}.pt') for name in dataset_names}
+
+    # Check which datasets are available
+    available_datasets = []
+    for dataset_name, path in preprocessed_paths.items():
+        if os.path.exists(path):
+            available_datasets.append(dataset_name)
+
+    if not available_datasets:
+        logger.warning("No preprocessed datasets found. Running preprocessing...")
+        # Import dataset processor
+        from src.generative_ai_module.dataset_processor import DatasetProcessor
+
+        # Create processor for preprocessing
+        processor = DatasetProcessor()
+
+        # Preprocess all datasets
+        logger.info('Preprocessing datasets...')
+        for dataset_name in dataset_names:
+            preprocessed_path = preprocessed_paths[dataset_name]
+
+            logger.info(f'Preprocessing {dataset_name}...')
+            try:
+                # Prepare dataset with appropriate parameters
+                if dataset_name == 'persona_chat':
+                    sequence_length = 512
+                    batch_size = 16
+                    raw_text = processor.load_persona_chat(split='train', max_samples=max_samples // 5)
+                elif dataset_name == 'writing_prompts':
+                    sequence_length = 1024
+                    batch_size = 8
+                    raw_text = processor.load_writing_prompts(split='train', max_samples=max_samples // 5)
+                elif dataset_name == 'pile':
+                    sequence_length = 1024
+                    batch_size = 8
+                    raw_text = processor.load_pile_dataset(split='train', max_samples=max_samples // 5)
+                elif dataset_name == 'openassistant':
+                    sequence_length = 512
+                    batch_size = 16
+                    raw_text = processor.load_openassistant_dataset(split='train', max_samples=max_samples // 5)
+                elif dataset_name == 'gpteacher':
+                    sequence_length = 768
+                    batch_size = 12
+                    raw_text = processor.load_gpteacher_dataset(split='train', max_samples=max_samples // 5)
+
+                # Create sequences and batches
+                logger.info(f'Creating sequences with length {sequence_length}...')
+                sequences = processor.create_sequences(raw_text, sequence_length)
+
+                logger.info(f'Creating batches with batch size {batch_size}...')
+                batches = processor.create_batches(sequences, batch_size=batch_size)
+
+                # Create dataset dictionary
+                dataset = {
+                    'batches': batches,
+                    'metadata': {
+                        'dataset_name': dataset_name,
+                        'split': 'train',
+                        'sequence_length': sequence_length,
+                        'batch_size': batch_size,
+                        'sample_count': len(sequences),
+                        'batch_count': len(batches)
+                    }
+                }
+
+                # Save preprocessed data
+                logger.info(f'Saving preprocessed {dataset_name} to {preprocessed_path}...')
+                os.makedirs(os.path.dirname(preprocessed_path), exist_ok=True)
+                torch.save(dataset, preprocessed_path)
+                logger.info(f'Successfully preprocessed {dataset_name}')
+
+                # Add to available datasets
+                available_datasets.append(dataset_name)
+
+            except Exception as e:
+                logger.error(f'Error preprocessing {dataset_name}: {e}')
+                import traceback
+                logger.error(traceback.format_exc())
+
+    # Load the preprocessed datasets
     datasets = []
-    for dataset_name in ['writing_prompts', 'persona_chat', 'pile', 'openassistant', 'gpteacher']:
-        logger.info(f'Loading dataset: {dataset_name}')
+    for dataset_name in available_datasets:
+        logger.info(f'Loading preprocessed dataset: {dataset_name}')
         try:
-            dataset = dataset_handler.load_dataset(
-                dataset_name=dataset_name,
-                max_samples=max_samples // 5  # Divide max samples among 5 datasets
-            )
+            dataset = torch.load(preprocessed_paths[dataset_name])
             datasets.append(dataset)
         except Exception as e:
             logger.warning(f'Failed to load dataset {dataset_name}: {e}')

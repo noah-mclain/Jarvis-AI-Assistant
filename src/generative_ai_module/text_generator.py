@@ -439,6 +439,64 @@ class TextGenerator(nn.Module):
         print(f"Training on {len(data['batches'])} batches from preprocessed {dataset_name} dataset")
         return self.train(data['batches'], epochs=epochs)
 
+    def train_from_multiple_datasets(self, dataset_names=None, epochs=5, dataset_paths=None):
+        """
+        Train the model using multiple preprocessed datasets
+
+        Args:
+            dataset_names: List of dataset names to use
+            epochs: Number of training epochs
+            dataset_paths: Dictionary mapping dataset names to preprocessed file paths
+
+        Returns:
+            Training loss history
+        """
+        # Import here to avoid circular imports
+        from .dataset_processor import DatasetProcessor
+        import os
+
+        # Default datasets if none provided
+        if dataset_names is None:
+            dataset_names = ["persona_chat", "writing_prompts", "pile", "openassistant", "gpteacher"]
+
+        # Default paths if none provided
+        if dataset_paths is None:
+            dataset_paths = {
+                name: f"notebooks/Jarvis_AI_Assistant/datasets/preprocessed_{name}.pt"
+                for name in dataset_names
+            }
+
+        # Create a processor to load the data
+        processor = DatasetProcessor(self)
+
+        # Collect all batches from available datasets
+        all_batches = []
+        loaded_datasets = []
+
+        for dataset_name in dataset_names:
+            path = dataset_paths.get(dataset_name)
+            if path and os.path.exists(path):
+                try:
+                    print(f"Loading preprocessed dataset: {dataset_name} from {path}")
+                    data = processor.load_preprocessed_data(dataset_name, path)
+
+                    if 'batches' in data and data['batches']:
+                        all_batches.extend(data['batches'])
+                        loaded_datasets.append(dataset_name)
+                        print(f"Added {len(data['batches'])} batches from {dataset_name}")
+                    else:
+                        print(f"Warning: No valid batches found in {dataset_name}")
+                except Exception as e:
+                    print(f"Error loading {dataset_name}: {e}")
+            else:
+                print(f"Dataset {dataset_name} not found at {path}")
+
+        if not all_batches:
+            raise ValueError("No valid batches found in any of the datasets")
+
+        print(f"Training on {len(all_batches)} total batches from {len(loaded_datasets)} datasets: {loaded_datasets}")
+        return self.train(all_batches, epochs=epochs)
+
     def save_model(self, path="models/text_generator_model.pt"):
         """Save the trained model to disk"""
         # Create directory if it doesn't exist
