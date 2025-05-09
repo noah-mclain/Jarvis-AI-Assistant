@@ -1163,12 +1163,22 @@ def train_with_unsloth(args):
                 except Exception as e:
                     logger.warning(f"Could not detect model dtype: {e}")
 
-                # Create input tensors
+                # Create input tensors - ALWAYS use torch.long for input_ids and labels
                 input_ids_tensor = torch.tensor(batch_input_ids, dtype=torch.long, device=device)
                 attention_mask_tensor = torch.tensor(batch_attention_mask, dtype=torch.long, device=device)
 
                 # For causal language modeling, labels are the same as input_ids
+                # Explicitly use clone() to ensure same dtype (torch.long)
                 labels_tensor = input_ids_tensor.clone()
+
+                # Double-check that input_ids and labels are torch.long
+                if input_ids_tensor.dtype != torch.long:
+                    logger.warning(f"Input IDs tensor has incorrect dtype: {input_ids_tensor.dtype}. Converting to torch.long")
+                    input_ids_tensor = input_ids_tensor.to(dtype=torch.long)
+
+                if labels_tensor.dtype != torch.long:
+                    logger.warning(f"Labels tensor has incorrect dtype: {labels_tensor.dtype}. Converting to torch.long")
+                    labels_tensor = labels_tensor.to(dtype=torch.long)
 
                 # Explicitly log tensor devices
                 logger.info(f"Input IDs tensor device: {input_ids_tensor.device}")
@@ -1215,9 +1225,19 @@ def train_with_unsloth(args):
                 logger.info(f"Creating fallback tensors on device: {device}")
 
                 # Create tensors with requires_grad=True for the loss computation
+                # ALWAYS use torch.long for input_ids and labels
                 input_ids = torch.zeros((batch_size, args.max_length), dtype=torch.long, device=device)
                 attention_mask = torch.zeros((batch_size, args.max_length), dtype=torch.long, device=device)
                 labels = torch.zeros((batch_size, args.max_length), dtype=torch.long, device=device)
+
+                # Double-check that input_ids and labels are torch.long
+                if input_ids.dtype != torch.long:
+                    logger.warning(f"Fallback input_ids tensor has incorrect dtype: {input_ids.dtype}. Converting to torch.long")
+                    input_ids = input_ids.to(dtype=torch.long)
+
+                if labels.dtype != torch.long:
+                    logger.warning(f"Fallback labels tensor has incorrect dtype: {labels.dtype}. Converting to torch.long")
+                    labels = labels.to(dtype=torch.long)
 
                 # Log tensor devices
                 logger.info(f"Fallback input IDs tensor device: {input_ids.device}")
@@ -1292,11 +1312,23 @@ def train_with_unsloth(args):
                 # This avoids any internal device mismatches in the parent implementation
                 logger.info("Using direct loss computation to avoid device mismatch issues")
 
-                # Ensure all inputs are on the correct device again right before forward pass
+                # Ensure all inputs are on the correct device and have the correct dtype
                 for k, v in inputs.items():
-                    if isinstance(v, torch.Tensor) and v.device != device:
-                        logger.info(f"Moving {k} tensor from {v.device} to {device} (final check)")
-                        inputs[k] = v.to(device)
+                    if isinstance(v, torch.Tensor):
+                        # Check device
+                        if v.device != device:
+                            logger.info(f"Moving {k} tensor from {v.device} to {device} (final check)")
+                            inputs[k] = v.to(device)
+
+                        # CRITICAL FIX: Ensure input_ids and labels remain as long integers
+                        if k == "input_ids" and v.dtype != torch.long:
+                            logger.warning(f"Input IDs have incorrect dtype: {v.dtype}. Converting to torch.long")
+                            inputs[k] = v.to(dtype=torch.long)
+                            logger.info(f"Fixed input_ids dtype: {inputs[k].dtype}")
+                        elif k == "labels" and v.dtype != torch.long:
+                            logger.warning(f"Labels have incorrect dtype: {v.dtype}. Converting to torch.long")
+                            inputs[k] = v.to(dtype=torch.long)
+                            logger.info(f"Fixed labels dtype: {inputs[k].dtype}")
 
                 # Get model's dtype for mixed precision
                 model_dtype = getattr(model, "dtype", None)
@@ -1442,10 +1474,24 @@ def train_with_unsloth(args):
                 # Try to continue with a simplified computation
                 try:
                     logger.info("Attempting simplified loss computation")
-                    # Get the input IDs and labels and ensure they're on the right device
+                    # Get the input IDs and labels and ensure they're on the right device and have the right dtype
                     device = model.device
+
+                    # Get input_ids and ensure they're torch.long
                     input_ids = inputs["input_ids"].to(device)
-                    labels = inputs["labels"].to(device) if "labels" in inputs else input_ids.clone()
+                    if input_ids.dtype != torch.long:
+                        logger.warning(f"Simplified computation - input_ids have incorrect dtype: {input_ids.dtype}. Converting to torch.long")
+                        input_ids = input_ids.to(dtype=torch.long)
+
+                    # Get labels and ensure they're torch.long
+                    if "labels" in inputs:
+                        labels = inputs["labels"].to(device)
+                        if labels.dtype != torch.long:
+                            logger.warning(f"Simplified computation - labels have incorrect dtype: {labels.dtype}. Converting to torch.long")
+                            labels = labels.to(dtype=torch.long)
+                    else:
+                        # Create labels from input_ids (already torch.long)
+                        labels = input_ids.clone()
 
                     # Log tensor information
                     logger.info(f"Simplified computation - input_ids: shape={input_ids.shape}, device={input_ids.device}")

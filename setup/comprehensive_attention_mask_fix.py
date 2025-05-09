@@ -66,8 +66,14 @@ def fix_dtype_mismatch():
             # Process input tensors to ensure consistent dtype
             for arg_name, arg_value in kwargs.items():
                 if isinstance(arg_value, torch.Tensor):
+                    # CRITICAL FIX: Ensure input_ids remain as long integers
+                    if arg_name == "input_ids":
+                        if arg_value.dtype != torch.long:
+                            logger.warning(f"Input IDs have incorrect dtype: {arg_value.dtype}. Converting to torch.long")
+                            kwargs[arg_name] = arg_value.to(dtype=torch.long)
+                            logger.info(f"Fixed input_ids dtype: {kwargs[arg_name].dtype}")
                     # Skip certain tensors that should not be converted
-                    if arg_name not in ["labels", "input_ids", "token_type_ids"]:
+                    elif arg_name not in ["labels", "token_type_ids"]:
                         # Handle attention mask specially
                         if arg_name == "attention_mask":
                             # If it's a 4D attention mask, ensure it has the correct shape
@@ -118,9 +124,16 @@ def fix_dtype_mismatch():
                     logger.info("Attempting to fix by converting all tensors to float32")
                     for arg_name, arg_value in kwargs.items():
                         if isinstance(arg_value, torch.Tensor):
-                            kwargs[arg_name] = arg_value.to(dtype=torch.float32)
+                            # Keep input_ids as long integers
+                            if arg_name == "input_ids":
+                                kwargs[arg_name] = arg_value.to(dtype=torch.long)
+                            # Keep labels as long integers
+                            elif arg_name == "labels":
+                                kwargs[arg_name] = arg_value.to(dtype=torch.long)
+                            else:
+                                kwargs[arg_name] = arg_value.to(dtype=torch.float32)
 
-                    # Try again with float32 tensors
+                    # Try again with fixed tensors
                     return original_forward(self, *args, **kwargs)
                 else:
                     # Re-raise other errors
@@ -143,6 +156,18 @@ def fix_dtype_mismatch():
 
                 # Get the model's dtype
                 model_dtype = getattr(self, "dtype", None)
+
+                # CRITICAL FIX: Ensure input_ids remain as long integers
+                if "input_ids" in inputs and inputs["input_ids"].dtype != torch.long:
+                    logger.warning(f"Input IDs have incorrect dtype: {inputs['input_ids'].dtype}. Converting to torch.long")
+                    inputs["input_ids"] = inputs["input_ids"].to(dtype=torch.long)
+                    logger.info(f"Fixed input_ids dtype: {inputs['input_ids'].dtype}")
+
+                # Ensure labels remain as long integers
+                if "labels" in inputs and inputs["labels"].dtype != torch.long:
+                    logger.warning(f"Labels have incorrect dtype: {inputs['labels'].dtype}. Converting to torch.long")
+                    inputs["labels"] = inputs["labels"].to(dtype=torch.long)
+                    logger.info(f"Fixed labels dtype: {inputs['labels'].dtype}")
 
                 if model_dtype is not None:
                     # Ensure all tensors have the correct dtype
@@ -513,7 +538,16 @@ def apply_comprehensive_fix():
                 try:
                     # First, convert mask to the expected type based on unmasked_value
                     if unmasked_value is not True:
-                        mask = mask.to(dtype=attention_mask.dtype) * unmasked_value
+                        # If unmasked_value is a float or tensor, convert mask to that dtype and multiply
+                        if isinstance(unmasked_value, (float, int)) or (isinstance(unmasked_value, torch.Tensor) and unmasked_value.dtype.is_floating_point):
+                            # Convert mask to the same dtype as attention_mask or to float32 if needed
+                            mask_dtype = attention_mask.dtype if attention_mask.dtype.is_floating_point else torch.float32
+                            mask = mask.to(dtype=mask_dtype) * unmasked_value
+                            logger.info(f"Applied unmasked_value {unmasked_value} to mask, resulting dtype: {mask.dtype}")
+                        else:
+                            # For boolean or other types, just use the value directly
+                            mask = mask * unmasked_value
+                            logger.info(f"Applied unmasked_value {unmasked_value} to mask without dtype conversion")
 
                     # Try to detect the model's dtype from the current context
                     model_dtype = None
