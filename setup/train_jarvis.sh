@@ -2,6 +2,112 @@
 # Consolidated script for Jarvis AI Assistant
 # This script sets up the environment and runs the Jarvis AI Assistant
 
+# Function to check and activate Python environment
+check_and_activate_python_env() {
+    echo "Checking Python environment..."
+
+    # Check if we're already in a virtual environment
+    if [[ "$VIRTUAL_ENV" == *"jarvis_env"* ]]; then
+        echo "✅ Python environment already activated: $VIRTUAL_ENV"
+        return 0
+    fi
+
+    # Try to activate the environment
+    if [ -f "jarvis_env/bin/activate" ]; then
+        echo "Activating Python environment from jarvis_env/bin/activate"
+        source jarvis_env/bin/activate
+    elif [ -f "/notebooks/jarvis_env/bin/activate" ]; then
+        echo "Activating Python environment from /notebooks/jarvis_env/bin/activate"
+        source /notebooks/jarvis_env/bin/activate
+    else
+        echo "⚠️ Warning: Could not find jarvis_env/bin/activate"
+        echo "Creating new Python environment..."
+        python -m venv jarvis_env
+        source jarvis_env/bin/activate
+    fi
+
+    # Verify activation
+    if [[ "$VIRTUAL_ENV" == *"jarvis_env"* ]]; then
+        echo "✅ Python environment successfully activated: $VIRTUAL_ENV"
+        return 0
+    else
+        echo "⚠️ Warning: Failed to activate Python environment"
+        echo "Current VIRTUAL_ENV: $VIRTUAL_ENV"
+        return 1
+    fi
+}
+
+# Function to check and activate Unsloth
+check_and_activate_unsloth() {
+    echo "Checking Unsloth installation..."
+
+    # Check if minimal Unsloth is in PYTHONPATH
+    CUSTOM_UNSLOTH_DIR="/notebooks/custom_unsloth"
+    if [[ "$PYTHONPATH" == *"$CUSTOM_UNSLOTH_DIR"* ]]; then
+        echo "✅ Minimal Unsloth already in PYTHONPATH"
+    else
+        # Try to activate minimal Unsloth
+        if [ -f "$CUSTOM_UNSLOTH_DIR/activate_minimal_unsloth.sh" ]; then
+            echo "Activating minimal Unsloth..."
+            source "$CUSTOM_UNSLOTH_DIR/activate_minimal_unsloth.sh"
+
+            # Verify activation
+            if [[ "$PYTHONPATH" == *"$CUSTOM_UNSLOTH_DIR"* ]]; then
+                echo "✅ Minimal Unsloth successfully activated"
+            else
+                echo "⚠️ Warning: Failed to activate minimal Unsloth"
+                # Add to PYTHONPATH manually
+                export PYTHONPATH="$CUSTOM_UNSLOTH_DIR:$PYTHONPATH"
+                echo "Manually added minimal Unsloth to PYTHONPATH"
+            fi
+        else
+            echo "⚠️ Warning: Could not find minimal Unsloth activation script"
+            echo "Checking if we need to create minimal Unsloth..."
+
+            # Check if create_minimal_unsloth.sh exists
+            if [ -f "setup/create_minimal_unsloth.sh" ]; then
+                echo "Creating minimal Unsloth..."
+                chmod +x setup/create_minimal_unsloth.sh
+                ./setup/create_minimal_unsloth.sh
+
+                # Try to activate it
+                if [ -f "$CUSTOM_UNSLOTH_DIR/activate_minimal_unsloth.sh" ]; then
+                    echo "Activating newly created minimal Unsloth..."
+                    source "$CUSTOM_UNSLOTH_DIR/activate_minimal_unsloth.sh"
+
+                    # Verify activation
+                    if [[ "$PYTHONPATH" == *"$CUSTOM_UNSLOTH_DIR"* ]]; then
+                        echo "✅ Minimal Unsloth successfully activated"
+                    else
+                        echo "⚠️ Warning: Failed to activate minimal Unsloth"
+                        # Add to PYTHONPATH manually
+                        export PYTHONPATH="$CUSTOM_UNSLOTH_DIR:$PYTHONPATH"
+                        echo "Manually added minimal Unsloth to PYTHONPATH"
+                    fi
+                else
+                    echo "⚠️ Warning: Failed to create minimal Unsloth"
+                fi
+            else
+                echo "⚠️ Warning: Could not find create_minimal_unsloth.sh"
+            fi
+        fi
+    fi
+
+    # Verify Unsloth is importable
+    python -c "
+try:
+    import unsloth
+    print(f'✅ Unsloth is importable, version: {unsloth.__version__}')
+except ImportError as e:
+    print(f'⚠️ Warning: Could not import unsloth: {e}')
+    print('Training may still work without Unsloth, but will be slower')
+"
+}
+
+# Activate Python environment and Unsloth
+check_and_activate_python_env
+check_and_activate_unsloth
+
 # Set default values
 GPU_TYPE="A6000"  # Default to A6000 with 50 GiB VRAM
 VRAM_SIZE=50      # Default to 50 GiB

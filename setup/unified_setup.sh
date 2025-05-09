@@ -21,7 +21,26 @@ pyenv install 3.11.5
 pyenv global 3.11.5
 python --version  # Should output "Python 3.11.5"
 python -m venv jarvis_env  # Uses pyenv's 3.11.5
-source jarvis_env/bin/activate
+# Activate Python environment
+if [ -f "jarvis_env/bin/activate" ]; then
+    echo "Activating Python environment from jarvis_env/bin/activate"
+    source jarvis_env/bin/activate
+elif [ -f "/notebooks/jarvis_env/bin/activate" ]; then
+    echo "Activating Python environment from /notebooks/jarvis_env/bin/activate"
+    source /notebooks/jarvis_env/bin/activate
+else
+    echo "Creating new Python environment"
+    python -m venv jarvis_env
+    source jarvis_env/bin/activate
+fi
+
+# Verify Python environment is activated
+if [[ "$VIRTUAL_ENV" == *"jarvis_env"* ]]; then
+    echo "✅ Python environment successfully activated: $VIRTUAL_ENV"
+else
+    echo "⚠️ Warning: Python environment may not be properly activated"
+    echo "Current VIRTUAL_ENV: $VIRTUAL_ENV"
+fi
 
 pip cache purge
 
@@ -58,8 +77,51 @@ chmod +x setup/*
 ./setup/create_minimal_unsloth.sh
 ./setup/apply_fixed_unsloth.sh
 
-source /notebooks/custom_unsloth/activate_minimal_unsloth.sh
-python /notebooks/custom_unsloth/use_minimal_unsloth.py
+# Activate minimal Unsloth
+CUSTOM_UNSLOTH_DIR="/notebooks/custom_unsloth"
+if [ -f "$CUSTOM_UNSLOTH_DIR/activate_minimal_unsloth.sh" ]; then
+    echo "Activating minimal Unsloth from $CUSTOM_UNSLOTH_DIR/activate_minimal_unsloth.sh"
+    source "$CUSTOM_UNSLOTH_DIR/activate_minimal_unsloth.sh"
+
+    # Verify Unsloth activation by running the test script
+    if [ -f "$CUSTOM_UNSLOTH_DIR/use_minimal_unsloth.py" ]; then
+        echo "Testing minimal Unsloth installation..."
+        python "$CUSTOM_UNSLOTH_DIR/use_minimal_unsloth.py"
+
+        if [ $? -eq 0 ]; then
+            echo "✅ Minimal Unsloth successfully activated and tested"
+        else
+            echo "⚠️ Warning: Minimal Unsloth test failed"
+        fi
+    else
+        echo "⚠️ Warning: Minimal Unsloth test script not found at $CUSTOM_UNSLOTH_DIR/use_minimal_unsloth.py"
+    fi
+else
+    echo "⚠️ Warning: Minimal Unsloth activation script not found at $CUSTOM_UNSLOTH_DIR/activate_minimal_unsloth.sh"
+    echo "Creating minimal Unsloth installation..."
+
+    # Run the create_minimal_unsloth.sh script if it exists
+    if [ -f "setup/create_minimal_unsloth.sh" ]; then
+        chmod +x setup/create_minimal_unsloth.sh
+        ./setup/create_minimal_unsloth.sh
+
+        # Now try to activate it
+        if [ -f "$CUSTOM_UNSLOTH_DIR/activate_minimal_unsloth.sh" ]; then
+            echo "Activating newly created minimal Unsloth..."
+            source "$CUSTOM_UNSLOTH_DIR/activate_minimal_unsloth.sh"
+            python "$CUSTOM_UNSLOTH_DIR/use_minimal_unsloth.py"
+        fi
+    else
+        echo "❌ Error: create_minimal_unsloth.sh script not found"
+    fi
+fi
+
+# Add minimal Unsloth to PYTHONPATH permanently
+if [ -d "$CUSTOM_UNSLOTH_DIR" ]; then
+    export PYTHONPATH="$CUSTOM_UNSLOTH_DIR:$PYTHONPATH"
+    echo "export PYTHONPATH=\"$CUSTOM_UNSLOTH_DIR:\$PYTHONPATH\"" >> ~/.bashrc
+    echo "✅ Added minimal Unsloth to PYTHONPATH permanently"
+fi
 
 ## Fix Import Issues
 
