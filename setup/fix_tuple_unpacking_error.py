@@ -200,6 +200,7 @@ def fix_tuple_unpacking_error(model=None):
             deepseek_module = importlib.import_module("transformers.models.deepseek.modeling_deepseek")
 
             # Patch DeepSeekModel
+            DeepSeekModel = getattr(deepseek_module, "DeepSeekModel")
             # Store the original forward method
             original_deepseek_forward = DeepSeekModel.forward
 
