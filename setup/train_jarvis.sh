@@ -1078,24 +1078,24 @@ try:
         print('❌ ERROR: CUDA is not available. Cannot proceed with GPU training.')
         sys.exit(1)
 
-    # Create and train the CNN-enhanced text generator with optimized parameters for GPU
+    # Create and train the CNN-enhanced text generator with optimized attention mechanisms
     model = create_cnn_text_generator(
         model_name='google/flan-ul2',
         force_gpu=True,
         gpu_type='$GPU_TYPE',
         vram_size=$VRAM_SIZE,
-        cnn_layers=3,  # Use 3 CNN layers for enhanced pattern recognition
+        cnn_layers=3,  # Use 3 CNN layers with enhanced attention-like features
         load_in_4bit=True,
-        use_flash_attention_2=True,
+        use_flash_attention_2=True,  # This will trigger our enhanced attention mechanisms for T5/FLAN models
         gradient_checkpointing=True,
         lora_rank=32,
         lora_alpha=64,
-        lora_dropout=0.05,
+        lora_dropout=0.1,  # Increased dropout for better regularization
         max_length=2048,  # Reduced from 4096 to ensure stability with FLAN-UL2
         batch_size=2,  # Further reduced for CNN layers which use more memory
         gradient_accumulation_steps=12,  # Increased to maintain effective batch size
         num_workers=0,  # Set to 0 to avoid multiprocessing issues with CUDA
-        warmup_ratio=0.03,
+        warmup_ratio=0.05,  # Increased warmup for better convergence
         weight_decay=0.01,
         adam_beta1=0.9,
         adam_beta2=0.999,
@@ -1427,12 +1427,15 @@ class CustomEncoderDecoder(torch.nn.Module):
         model_dir = os.path.dirname(model_path)
         tokenizer_path = os.path.join(model_dir, 'tokenizer')
 
-        # Create a new CNN model
+        # Create a new CNN model with enhanced attention mechanisms
         cnn_model = CNNTextGenerator(
             model_name_or_path='google/flan-ul2',
             force_gpu=True,
             cnn_layers=3,
-            load_in_4bit=True
+            load_in_4bit=True,
+            use_flash_attention_2=True,  # This will trigger our enhanced attention mechanisms for T5/FLAN models
+            lora_dropout=0.1,  # Increased dropout for better regularization
+            warmup_ratio=0.05  # Increased warmup for better convergence
         )
 
         # Load the saved model

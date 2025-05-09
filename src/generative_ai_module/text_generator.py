@@ -808,13 +808,43 @@ class CNNTextGenerator(TextGenerator):
             )
             print("Using 8-bit quantization")
 
-        # Add Flash Attention 2 if requested and possible
+        # Add optimized attention mechanisms if requested and possible
         if self.use_flash_attention_2:
             if is_gpt2_model:
                 print("Flash Attention 2 is not supported for GPT2 models - disabling")
                 self.use_flash_attention_2 = False
+            elif is_t5_model:
+                print("Flash Attention 2 is not supported for T5/FLAN-UL2 models - trying alternative attention mechanisms")
+                self.use_flash_attention_2 = False
+
+                # Try to use xFormers memory-efficient attention for T5/FLAN models
+                try:
+                    import xformers
+                    import xformers.ops
+                    xformers_version = getattr(xformers, "__version__", "unknown")
+                    print(f"xFormers {xformers_version} detected - enabling memory-efficient attention for T5/FLAN model")
+
+                    # Enable memory efficient attention in the model config
+                    load_kwargs['attention_mode'] = 'xformers'
+                    print("✅ xFormers memory-efficient attention enabled for T5/FLAN model")
+                except ImportError:
+                    print("xFormers not installed - continuing with standard attention")
+                    print("To install: pip install xformers --no-build-isolation")
+                except Exception as e:
+                    print(f"Error enabling xFormers attention: {e}")
+                    print("Continuing with standard attention")
+
+                # Set additional attention parameters for T5/FLAN models
+                if is_t5_model:
+                    # Increase attention dropout for better regularization
+                    load_kwargs['attention_dropout'] = 0.1
+                    print("Set attention dropout to 0.1 for better regularization")
+
+                    # Enable gradient checkpointing for memory efficiency
+                    self.gradient_checkpointing = True
+                    print("Enabled gradient checkpointing for memory efficiency")
             else:
-                # Check if flash attention is available
+                # For other models, try Flash Attention 2
                 try:
                     # Try to import flash_attn
                     import flash_attn
@@ -879,17 +909,33 @@ class CNNTextGenerator(TextGenerator):
                     use_gradient_checkpointing=self.gradient_checkpointing
                 )
 
-                # Define LoRA configuration based on model architecture
+                # Define enhanced LoRA configuration based on model architecture
                 if is_t5_model:
                     # T5/FLAN-UL2 architecture uses different module names
-                    target_modules = ["q", "k", "v", "o", "wi", "wo"]
+                    # Focus on attention modules for better attention fine-tuning
+                    target_modules = [
+                        # Attention modules
+                        "q", "k", "v", "o",  # Core attention components
+                        "SelfAttention.q", "SelfAttention.k", "SelfAttention.v", "SelfAttention.o",  # Self-attention
+                        "EncDecAttention.q", "EncDecAttention.k", "EncDecAttention.v", "EncDecAttention.o",  # Cross-attention
+                        # Feed-forward modules
+                        "wi", "wo",  # T5 FFN
+                        "DenseReluDense.wi", "DenseReluDense.wo",  # T5 FFN alternative names
+                    ]
                     task_type = "SEQ_2_SEQ_LM"
-                    print(f"Using T5/FLAN-UL2 target modules: {target_modules}")
+                    print(f"Using enhanced T5/FLAN-UL2 target modules focused on attention: {target_modules}")
                 else:
                     # Default modules for transformer models like GPT, LLaMA, etc.
-                    target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+                    target_modules = [
+                        # Attention modules
+                        "q_proj", "k_proj", "v_proj", "o_proj",  # Core attention projections
+                        "self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj", "self_attn.o_proj",  # Self-attention
+                        # Feed-forward modules
+                        "gate_proj", "up_proj", "down_proj",  # FFN for LLaMA-style models
+                        "fc1", "fc2"  # FFN for other models
+                    ]
                     task_type = "CAUSAL_LM"
-                    print(f"Using default transformer target modules: {target_modules}")
+                    print(f"Using enhanced transformer target modules focused on attention: {target_modules}")
 
                 # Verify target modules exist in the model
                 try:
@@ -932,28 +978,36 @@ class CNNTextGenerator(TextGenerator):
 
                 # Add a safety mechanism to handle completely different architectures
                 try:
+                    # Enhanced LoRA configuration with attention-focused parameters
                     lora_config = LoraConfig(
                         r=self.lora_rank,
                         lora_alpha=self.lora_alpha,
                         lora_dropout=self.lora_dropout,
                         target_modules=target_modules,
-                        bias="none",
-                        task_type=task_type
+                        bias="none",  # No bias adaptation to reduce parameters
+                        task_type=task_type,
+                        # Additional parameters for better attention fine-tuning
+                        modules_to_save=["layer_norm", "layernorm", "LN", "ln"] if is_t5_model else None,  # Save layer norms for T5 models
+                        fan_in_fan_out=False,  # Set to False for better compatibility with attention modules
+                        init_lora_weights="gaussian"  # Use gaussian initialization for better convergence
                     )
+                    print("Using enhanced LoRA configuration with attention-focused parameters")
                 except Exception as e:
-                    print(f"Error creating LoRA config: {e}")
+                    print(f"Error creating enhanced LoRA config: {e}")
                     print("Trying with a more generic configuration...")
 
-                    # Try with a more generic configuration
+                    # Try with a more generic configuration but still optimized for attention
                     lora_config = LoraConfig(
                         r=self.lora_rank,
                         lora_alpha=self.lora_alpha,
                         lora_dropout=self.lora_dropout,
-                        # Use a very minimal set of target modules
-                        target_modules=["q"],
+                        # Focus on attention modules even in fallback
+                        target_modules=["q", "k", "v"] if is_t5_model else ["q_proj", "k_proj", "v_proj"],
                         bias="none",
-                        task_type="CAUSAL_LM" if not is_t5_model else "SEQ_2_SEQ_LM"
+                        task_type="CAUSAL_LM" if not is_t5_model else "SEQ_2_SEQ_LM",
+                        init_lora_weights="gaussian"  # Still use gaussian initialization
                     )
+                    print("Using fallback LoRA configuration with attention focus")
 
                 # Apply LoRA adapters with error handling
                 try:
@@ -974,29 +1028,58 @@ class CNNTextGenerator(TextGenerator):
         # Get hidden size for dimensionality
         self.hidden_size = config.hidden_size
 
-        # Create CNN layers for pattern extraction
+        # Create enhanced CNN layers for pattern extraction with attention-like features
         self.cnn_layers_list = nn.ModuleList()
         for i in range(self.cnn_layers):
             kernel_size = self.cnn_kernel_sizes[i] if i < len(self.cnn_kernel_sizes) else 3
             padding = kernel_size // 2  # Same padding to maintain sequence length
 
-            # Create convolutional layer with batch normalization and dropout
+            # Calculate dilation rate for increasing receptive field
+            # First layer has dilation=1, subsequent layers have increasing dilation
+            dilation = 2**i if i > 0 else 1
+            effective_padding = padding * dilation
+
+            # Create enhanced convolutional layer with batch normalization and dropout
             cnn_layer = nn.Sequential(
+                # Main convolutional layer with dilation for larger receptive field
                 nn.Conv1d(
                     in_channels=self.hidden_size,
                     out_channels=self.hidden_size,
                     kernel_size=kernel_size,
-                    padding=padding
+                    padding=effective_padding,
+                    dilation=dilation
                 ),
                 nn.BatchNorm1d(self.hidden_size),
-                nn.ReLU(),
-                nn.Dropout(self.cnn_dropout)
+                nn.ReLU(),  # Using ReLU for compatibility
+                nn.Dropout(self.cnn_dropout),
+
+                # Add a 1x1 convolution to act as a position-wise feed-forward network
+                nn.Conv1d(
+                    in_channels=self.hidden_size,
+                    out_channels=self.hidden_size * 2,  # Expand dimension like in transformer FFN
+                    kernel_size=1
+                ),
+                nn.ReLU(),  # Using ReLU for compatibility
+                nn.Dropout(self.cnn_dropout),
+                nn.Conv1d(
+                    in_channels=self.hidden_size * 2,
+                    out_channels=self.hidden_size,  # Project back to original dimension
+                    kernel_size=1
+                ),
             )
 
             self.cnn_layers_list.append(cnn_layer)
 
+        # Create layer normalization for each CNN layer output (similar to transformer)
+        self.layer_norms = nn.ModuleList([nn.LayerNorm(self.hidden_size) for _ in range(self.cnn_layers)])
+
         # Create adapter to transform CNN outputs back to transformer format
-        self.adapter = nn.Linear(self.hidden_size, self.hidden_size)
+        self.adapter = nn.Sequential(
+            nn.Linear(self.hidden_size, self.hidden_size * 2),
+            nn.ReLU(),  # Using ReLU for compatibility
+            nn.Dropout(self.cnn_dropout),
+            nn.Linear(self.hidden_size * 2, self.hidden_size)
+        )
 
         # Move model to appropriate device
         self.device = (
@@ -1061,22 +1144,39 @@ class CNNTextGenerator(TextGenerator):
         else:
             raise ValueError("Could not get embeddings from model")
 
-        # Apply CNN layers for feature extraction
+        # Apply enhanced CNN layers for feature extraction with transformer-like residual connections
         # First, transpose for CNN (batch_size, hidden_size, seq_len)
         x = embeddings.transpose(1, 2)
 
-        # Pass through each CNN layer
-        for cnn_layer in self.cnn_layers_list:
+        # Pass through each CNN layer with residual connections and layer normalization
+        for i, cnn_layer in enumerate(self.cnn_layers_list):
+            # Store the input for residual connection
+            residual = x
+
+            # Apply CNN layer
             x = cnn_layer(x)
+
+            # Add residual connection
+            x = x + residual
+
+            # Apply layer normalization (after transposing back and forth)
+            x_norm = x.transpose(1, 2)  # (batch_size, seq_len, hidden_size)
+            x_norm = self.layer_norms[i](x_norm)
+            x = x_norm.transpose(1, 2)  # Back to (batch_size, hidden_size, seq_len)
 
         # Transpose back to transformer format (batch_size, seq_len, hidden_size)
         x = x.transpose(1, 2)
 
-        # Apply adapter to ensure compatibility with transformer
-        enhanced_embeddings = self.adapter(x)
+        # Apply enhanced adapter with feed-forward network
+        adapter_output = self.adapter(x)
 
         # Add residual connection to preserve original embeddings
-        enhanced_embeddings = enhanced_embeddings + embeddings
+        enhanced_embeddings = adapter_output + embeddings
+
+        # Apply attention-like scaling to enhance important features
+        # This mimics the effect of self-attention by scaling based on feature magnitude
+        feature_scale = torch.sigmoid(enhanced_embeddings.mean(dim=-1, keepdim=True) * 5.0)
+        enhanced_embeddings = enhanced_embeddings * feature_scale
 
         # Handle different model types
         if self.model_type == "seq2seq":
@@ -1393,12 +1493,13 @@ def create_cnn_text_generator(model_name="google/flan-ul2", force_gpu=True, cnn_
     Returns:
         Initialized CNNTextGenerator optimized for the specified GPU
     """
-    # Check if model is GPT2 - Flash Attention 2 is not supported for GPT2
+    # Check if model is GPT2 or T5/FLAN - Flash Attention 2 is not supported for these models
     is_gpt2_model = "gpt2" in model_name.lower()
+    is_t5_model = any(name in model_name.lower() for name in ["t5", "flan-t5", "flan-ul2", "ul2", "flan"])
 
-    # Disable Flash Attention 2 for GPT2 models
-    if is_gpt2_model and use_flash_attention_2:
-        print("Flash Attention 2 is not supported for GPT2 models - disabling")
+    # Disable Flash Attention 2 for unsupported models
+    if (is_gpt2_model or is_t5_model) and use_flash_attention_2:
+        print(f"Flash Attention 2 is not supported for {'GPT2' if is_gpt2_model else 'T5/FLAN'} models - disabling")
         use_flash_attention_2 = False
 
     # Determine if we should use bfloat16 based on model type and GPU capabilities

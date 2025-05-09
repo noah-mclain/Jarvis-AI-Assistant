@@ -183,7 +183,16 @@ install_core_dependencies() {
     echo "Installing optimization libraries..."
     pip install bitsandbytes==0.41.0
     pip install triton==2.1.0
+
+    # Install xFormers with enhanced attention support
+    echo "Installing xFormers with enhanced attention support..."
+    pip install xformers==0.0.23.post1 --index-url https://download.pytorch.org/whl/cu121 --no-deps
     pip install xformers==0.0.23.post1 --index-url https://download.pytorch.org/whl/cu121
+
+    # Install additional dependencies for enhanced attention mechanisms
+    echo "Installing additional dependencies for enhanced attention mechanisms..."
+    pip install einops==0.7.0 --no-deps  # Required for attention operations
+    pip install opt_einsum==3.3.0 --no-deps  # Optimized einsum operations for attention
 
     # 7. Install unsloth (version 2024.8 is confirmed to work with this setup)
     echo "Installing unsloth dependencies..."
@@ -320,6 +329,21 @@ try:
     print('✅ Flash Attention successfully imported')
 except Exception as e:
     print(f'❌ Flash Attention error: {e}')
+
+try:
+    import xformers
+    import xformers.ops
+    print(f'xFormers version: {xformers.__version__ if hasattr(xformers, \"__version__\") else \"installed\"}')
+    print('✅ xFormers successfully imported')
+except Exception as e:
+    print(f'❌ xFormers error: {e}')
+
+try:
+    import opt_einsum
+    print(f'opt_einsum version: {opt_einsum.__version__ if hasattr(opt_einsum, \"__version__\") else \"installed\"}')
+    print('✅ opt_einsum successfully imported')
+except Exception as e:
+    print(f'❌ opt_einsum error: {e}')
 "
 }
 
