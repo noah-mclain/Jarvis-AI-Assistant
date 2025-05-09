@@ -7,6 +7,7 @@ from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 from collections import Counter
+from typing import List, Dict, Any, Optional, Union, Tuple
 
 # Add the parent directory to the Python path if needed
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -272,6 +273,27 @@ def get_sample_writing_prompts():
 <END>
 """
 
+def create_sequences(self, text: str, seq_length: int):
+    """Create sequences with proper dtype handling"""
+    tokens = self.tokenizer.encode(text)
+
+    # Ensure proper dtype handling
+    input_ids = torch.tensor(
+        tokens[:seq_length],
+        dtype=torch.long,  # Force long type
+        device='cpu'  # Keep on CPU initially
+    )
+
+    # Handle padding with correct dtype
+    if len(input_ids) < seq_length:
+        padding = torch.full((seq_length - len(input_ids),),
+                            self.tokenizer.pad_token_id,
+                            dtype=torch.long,
+                            device='cpu')
+        input_ids = torch.cat([input_ids, padding])
+
+    return input_ids
+
 def create_improved_sequences(tokens, seq_length=256, stride=1):  # Reduced from 512 to 256
     """Create sequences with stride for more efficient data usage"""
     return [
@@ -348,6 +370,31 @@ def verify_sequence_creation(tokens, tokenizer, seq_length=100):
         print(f"Target: '{target_text}'")
 
     return sequences
+
+def create_batches(sequences: List[torch.Tensor], batch_size: int):
+    """Create batches with memory optimization"""
+    batches = []
+    current_batch = []
+
+    # Add memory monitoring
+    for seq in sequences:
+        # Keep tensors on CPU until needed
+        if len(current_batch) >= batch_size:
+            # Use pin_memory for faster GPU transfer
+            batch_tensor = torch.stack(current_batch).pin_memory()
+            batches.append(batch_tensor)
+            current_batch = []
+            # Clear memory aggressively
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        current_batch.append(seq.cpu())  # Keep on CPU initially
+
+    # Handle the last batch if it exists
+    if current_batch:
+        batch_tensor = torch.stack(current_batch).pin_memory()
+        batches.append(batch_tensor)
+
+    return batches
 
 def create_and_verify_batches(sequences, batch_size=4):  # Reduced from 32 to 4
     """Create batches and verify shapes"""
@@ -430,11 +477,22 @@ def segment_by_dialogue_turns(text):
 
 class ImprovedPreprocessor:
     """Wrapper class for preprocessing functionality"""
-    def __init__(self, min_length=10, max_length=100, analyze=False):
+    def __init__(self, min_length=10, max_length=100, analyze=False, batch_size=4):
         self.min_length = min_length
         self.max_length = max_length
         self.analyze = analyze
         self.tokenizer = ImprovedCharTokenizer(add_special_tokens=True)
+        self.batch_size = batch_size
+        self.config = {
+            "max_sequence_length": 2048,  # Reduce from 4096
+            "batch_size": batch_size,  # Start with smaller batches
+            "gradient_accumulation_steps": 8,
+            "use_mixed_precision": True,
+            "enable_gradient_checkpointing": True,
+            "cpu_offload": True,
+            "memory_cleanup_interval": 100  # Steps between explicit cleanup
+        }
+        self.seq_length = self.config.get('max_sequence_length', 2048)
 
     def process_dataset(self, dataset_name, max_samples=100):
         """Process a dataset with the given parameters"""
@@ -445,6 +503,9 @@ class ImprovedPreprocessor:
             max_samples=max_samples
         )
 
+        # Validate dataset
+        data = self.validate_dataset(data)
+
         # Create sequences
         sequences = create_improved_sequences(
             data['tokens'],
@@ -452,22 +513,106 @@ class ImprovedPreprocessor:
             stride=1
         )
 
-        # Create batches
-        batches = create_and_verify_batches(sequences)
+        # Create batches using memory-optimized method
+        if hasattr(data, 'tensor_sequences'):
+            batches = create_batches(data['tensor_sequences'], self.batch_size)
+        else:
+            # Fall back to original method
+            batches = create_and_verify_batches(sequences, batch_size=self.batch_size)
 
         # Add batches to data
         data['batches'] = batches
 
+        # Clear memory aggressively
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
         return data
+
+    def validate_dataset(self, data):
+        """Check for minimum length requirements and handle short sequences"""
+        # Check for minimum length requirements
+        min_length = self.config.get('min_sequence_length', 64)
+
+        if 'raw_texts' in data:
+            valid_texts = []
+            for text in data['raw_texts']:
+                if len(text) < min_length:
+                    # Handle short samples by combining with next if possible
+                    text = self._handle_short_sequence(text, data['raw_texts'])
+                valid_texts.append(text)
+
+            # Update the data with validated texts
+            data['raw_texts'] = valid_texts
+
+            # Re-tokenize if needed
+            if len(valid_texts) != len(data.get('tokens', [])):
+                # Tokenize all texts
+                tokens = []
+                for text in tqdm(valid_texts, desc="Re-tokenizing validated texts"):
+                    tokens.extend(self.tokenizer.encode(text))
+                data['tokens'] = tokens
+
+        return data
+
+    def _handle_short_sequence(self, text, all_texts):
+        """Implement sequence combination logic for short texts"""
+        # Try to find another text to combine with
+        if len(all_texts) > 1:
+            # Get a random text from the dataset to combine with
+            additional_text = random.choice(all_texts)
+            text += f"\n{additional_text}"
+
+        # Ensure it doesn't exceed max length
+        return text[:self.seq_length]
 
     def analyze_token_distribution(self, data):
         """Analyze token distribution in the dataset"""
         return analyze_token_distribution(data['tokens'], self.tokenizer)
 
-    def save_tokenized_data(self, data, output_dir, dataset_name):
+    def save_tokenized_data(self, data, output_dir, dataset_name=None):
         """Save preprocessed data"""
         os.makedirs(output_dir, exist_ok=True)
         save_preprocessed_data(data, output_dir=output_dir)
+
+    def train_batch(self, batch, model=None, optimizer=None):
+        """Memory-optimized training loop for a single batch"""
+        # Store model and optimizer if provided
+        if model is not None:
+            self.model = model
+        if optimizer is not None:
+            self.optimizer = optimizer
+
+        # Ensure we have model and optimizer
+        if not hasattr(self, 'model') or not hasattr(self, 'optimizer'):
+            raise ValueError("Model and optimizer must be provided either during initialization or when calling train_batch")
+
+        # Move to GPU with memory checks
+        if torch.cuda.is_available():
+            batch = batch.to(device='cuda', non_blocking=True)
+
+        # Verify input types before forward pass
+        if batch.dtype != torch.long:
+            batch = batch.to(torch.long)
+
+        # Enable gradient checkpointing and mixed precision
+        with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+            with torch.no_grad():
+                outputs = self.model(batch)
+                loss = outputs.loss
+
+        # Memory-optimized backward
+        loss.backward()
+        self.optimizer.step()
+        self.optimizer.zero_grad(set_to_none=True)  # Reduce memory fragmentation
+
+        # Force memory cleanup
+        del outputs
+        loss_value = loss.item()
+        del loss
+        torch.cuda.empty_cache()
+
+        return loss_value
 
     def save_analysis_results(self, analysis_results, output_dir, dataset_name):
         """Save analysis results"""
@@ -494,6 +639,52 @@ class ImprovedPreprocessor:
             # Add a note about the visualization
             f.write("\nNote: A visualization of the token distribution has been saved as 'token_distribution.png'\n")
             f.write("in the preprocessing_analysis directory.\n")
+
+def safe_preprocess(dataset_name):
+    """Safely preprocess a dataset with comprehensive error handling"""
+    try:
+        # Create preprocessor with memory-optimized settings
+        preprocessor = ImprovedPreprocessor(batch_size=4)
+
+        # Process dataset
+        data = preprocessor.process_dataset(dataset_name)
+
+        # Analyze token distribution
+        analysis = preprocessor.analyze_token_distribution(data)
+
+        # Save results
+        preprocessor.save_tokenized_data(data, "preprocessed_data", dataset_name)
+        preprocessor.save_analysis_results(analysis, "preprocessing_analysis", dataset_name)
+
+        return True
+    except RuntimeError as e:
+        if 'CUDA out of memory' in str(e):
+            # Automatic batch size reduction
+            print(f"CUDA out of memory error detected. Reducing batch size and retrying...")
+
+            # Try with smaller batch size
+            try:
+                # Create preprocessor with reduced batch size
+                new_batch_size = 2  # Reduce batch size
+                print(f"Reducing batch size to {new_batch_size}")
+
+                preprocessor = ImprovedPreprocessor(batch_size=new_batch_size)
+                data = preprocessor.process_dataset(dataset_name)
+                analysis = preprocessor.analyze_token_distribution(data)
+                preprocessor.save_tokenized_data(data, "preprocessed_data", dataset_name)
+                preprocessor.save_analysis_results(analysis, "preprocessing_analysis", dataset_name)
+
+                print(f"Successfully processed with reduced batch size")
+                return True
+            except Exception as inner_e:
+                print(f"Error with reduced batch size: {str(inner_e)}")
+                return False
+        else:
+            print(f"RuntimeError preprocessing {dataset_name}: {str(e)}")
+            return False
+    except Exception as e:
+        print(f"Critical error processing {dataset_name}: {str(e)}")
+        return None
 
 def main():
     print("====== Dataset Preprocessing Verification ======")
