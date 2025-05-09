@@ -188,9 +188,15 @@ if [ -n "$MODEL_TYPE" ]; then
 fi
 echo "========================================"
 
-# Setup the environment and create directories
+# Force Paperspace environment detection
+export PAPERSPACE=true
 echo "Setting up environment and creating directories..."
 python -c "
+import os
+# Force Paperspace environment detection
+os.environ['PAPERSPACE'] = 'true'
+print('✅ Forced Paperspace environment detection')
+
 from src.generative_ai_module import setup_paperspace_env, create_directories
 print('Setting up Paperspace environment...')
 setup_paperspace_env()

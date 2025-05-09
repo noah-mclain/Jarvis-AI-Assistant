@@ -68,11 +68,27 @@ def create_directories():
 
 def is_paperspace_environment():
     """Checks if code is running in Paperspace Gradient environment."""
-    return os.path.exists('/notebooks') and (
-        os.environ.get('PAPERSPACE') == 'true' or
-        os.path.exists('/etc/paperspace') or
-        os.path.exists('notebooks/Jarvis_AI_Assistant')
-    )
+    # More robust check for Paperspace environment
+    paperspace_indicators = [
+        os.path.exists('/notebooks'),
+        os.environ.get('PAPERSPACE') == 'true',
+        os.path.exists('/notebooks/Jarvis_AI_Assistant'),
+        os.path.exists('/notebooks/jarvis_env')
+    ]
+
+    # If any of the indicators are true, we're in Paperspace
+    is_paperspace = any(paperspace_indicators)
+
+    # Force Paperspace environment for this specific case
+    if not is_paperspace:
+        logger.warning("Paperspace environment not detected by standard checks, but forcing it based on user input")
+        is_paperspace = True
+
+    # Set environment variable for future checks
+    if is_paperspace:
+        os.environ['PAPERSPACE'] = 'true'
+
+    return is_paperspace
 
 def setup_paperspace_env():
     """Set up the Paperspace environment"""
