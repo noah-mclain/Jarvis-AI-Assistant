@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""
+""""
 Ultimate fix for all attention-related issues in transformer models.
 
 This script applies comprehensive patches to fix:
@@ -12,7 +12,7 @@ This script applies comprehensive patches to fix:
 7. Memory issues with large attention matrices
 
 This is the most comprehensive fix that should prevent any attention-related errors.
-"""
+""""
 
 import os
 import sys
@@ -32,12 +32,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def apply_ultimate_fix():
-    """
+    """"
     Apply the ultimate fix for all attention-related issues.
     
     Returns:
         bool: True if all fixes were applied successfully, False otherwise.
-    """
+    """"
     success = True
     
     # 1. Fix PreTrainedModel.forward to handle tuple outputs
@@ -49,10 +49,10 @@ def apply_ultimate_fix():
         
         # Define a patched forward method
         def patched_forward(self, *args, **kwargs):
-            """
+            """"
             Patched forward method that ensures outputs are always ModelOutput objects
             and handles all potential errors.
-            """
+            """"
             # Always set return_dict=True to avoid tuple outputs
             if "return_dict" not in kwargs:
                 kwargs["return_dict"] = True
@@ -197,9 +197,9 @@ def apply_ultimate_fix():
         
         # Define a patched function
         def patched_prepare_4d(attention_mask, input_shape, inputs_embeds, past_key_values_length, sliding_window, dtype):
-            """
+            """"
             Patched version that handles all edge cases in attention mask preparation.
-            """
+            """"
             import torch
             
             # Fix attention_mask shape if needed
@@ -274,9 +274,9 @@ def apply_ultimate_fix():
         
         @staticmethod
         def patched_unmask_unattended(attention_mask, indices_k=None, indices_q=None, unmasked_value=True):
-            """
+            """"
             Patched version of _unmask_unattended that handles all edge cases.
-            """
+            """"
             import torch
             
             # Get the device of the attention mask

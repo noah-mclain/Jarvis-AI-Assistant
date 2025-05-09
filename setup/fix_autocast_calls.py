@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""
+""""
 Fix autocast calls in the unified_deepseek_training.py file.
 This script patches all torch.cuda.amp.autocast calls to use our safe_autocast function.
-"""
+""""
 
 import sys
 import logging
@@ -42,7 +42,7 @@ def fix_autocast_calls():
         # Add the safe_autocast function if it doesn't exist
         if "def safe_autocast" not in content:
             # Add the safe_autocast function after the imports
-            safe_autocast_func = """
+            safe_autocast_func = """"
 # Define a helper function to handle autocast compatibility
 def safe_autocast(dtype=None):
     \"\"\"Create a safe autocast context that works with different PyTorch versions\"\"\"
@@ -69,10 +69,10 @@ def safe_autocast(dtype=None):
                 yield ctx
     except TypeError:
         # Older PyTorch versions don't support dtype parameter
-        logger.warning("PyTorch version doesn't support dtype in autocast. Using default dtype.")
+        logger.warning("PyTorch version doesn't support dtype in autocast. Using default dtype.")'
         with torch.cuda.amp.autocast() as ctx:
             yield ctx
-"""
+""""
             # Find the position to insert the function
             import_section_end = content.find("def main(")
             if import_section_end == -1:

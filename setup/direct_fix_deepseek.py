@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""
+""""
 Direct fix for DeepSeek model in transformers.
 
 This script directly modifies the transformers package to add DeepSeek model support.
-"""
+""""
 
 import os
 import sys
@@ -42,7 +42,7 @@ def create_minimal_deepseek_files(transformers_dir):
     # Create __init__.py
     init_path = os.path.join(deepseek_dir, "__init__.py")
     with open(init_path, "w") as f:
-        f.write("""
+        f.write(""""
 # Minimal DeepSeek model implementation
 from typing import TYPE_CHECKING
 
@@ -61,13 +61,13 @@ _import_structure = {
 
 import sys
 sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
-""")
+""")"
     logger.info(f"Created file: {init_path}")
     
     # Create configuration_deepseek.py
     config_path = os.path.join(deepseek_dir, "configuration_deepseek.py")
     with open(config_path, "w") as f:
-        f.write("""
+        f.write(""""
 from ...configuration_utils import PretrainedConfig
 
 class DeepSeekConfig(PretrainedConfig):
@@ -75,13 +75,13 @@ class DeepSeekConfig(PretrainedConfig):
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-""")
+""")"
     logger.info(f"Created file: {config_path}")
     
     # Create modeling_deepseek.py
     modeling_path = os.path.join(deepseek_dir, "modeling_deepseek.py")
     with open(modeling_path, "w") as f:
-        f.write("""
+        f.write(""""
 import torch
 from torch import nn
 from ...modeling_utils import PreTrainedModel
@@ -143,7 +143,7 @@ class DeepSeekForSequenceClassification(DeepSeekPreTrainedModel):
             hidden_states=None,
             attentions=None,
         )
-""")
+""")"
     logger.info(f"Created file: {modeling_path}")
     
     return True
@@ -177,7 +177,7 @@ def create_dummy_module(transformers_dir):
     # Create a dummy deepseek.py file
     dummy_path = os.path.join(models_dir, "deepseek.py")
     with open(dummy_path, "w") as f:
-        f.write("""
+        f.write(""""
 # Dummy DeepSeek module
 import torch
 from torch import nn
@@ -244,7 +244,7 @@ class DeepSeekForSequenceClassification(DeepSeekPreTrainedModel):
             hidden_states=None,
             attentions=None,
         )
-""")
+""")"
     logger.info(f"Created dummy module: {dummy_path}")
     
     return True

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""
+""""
 Fix attention mask issues without relying on DeepSeek model.
 
 This script applies patches to fix attention mask issues in transformers
 without relying on the DeepSeek model.
-"""
+""""
 
 import os
 import sys

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""
+""""
 Comprehensive fix for DeepSeek Coder training issues.
 
 This script combines fixes for:
@@ -16,7 +16,7 @@ This script combines fixes for:
 
 Usage:
     python setup/fix_deepseek_training.py [--path /path/to/src/generative_ai_module/unified_deepseek_training.py]
-"""
+""""
 
 import os
 import sys
@@ -76,7 +76,7 @@ def fix_dataset_processing(content):
     # Fix 2: Update the data collator to handle potential issues
     pattern2 = r'(\s+)# Create data collator\s*data_collator = DataCollatorForLanguageModeling\(\s*tokenizer=tokenizer,\s*mlm=False\s*\)'
 
-    replacement2 = r'\1# Create a custom data collator that handles potential issues\n\1class SafeDataCollator(DataCollatorForLanguageModeling):\n\1    def __call__(self, features):\n\1        try:\n\1            # Try the standard collation\n\1            return super().__call__(features)\n\1        except ValueError as e:\n\1            # If there\'s an error, log it and try a more robust approach\n\1            logger.warning(f"Data collation error: {e}")\n\1            \n\1            # Convert all features to the same format\n\1            batch = {}\n\1            for key in features[0].keys():\n\1                if key in ["input_ids", "attention_mask", "labels"]:\n\1                    batch[key] = []\n\1                    for feature in features:\n\1                        # Ensure the feature is a list\n\1                        if isinstance(feature[key], list):\n\1                            batch[key].append(feature[key])\n\1                        else:\n\1                            batch[key].append([feature[key]])\n\1            \n\1            # Pad the sequences\n\1            return self.tokenizer.pad(batch, return_tensors="pt")\n\1\n\1# Create data collator with custom handling\n\1data_collator = SafeDataCollator(\n\1    tokenizer=tokenizer,\n\1    mlm=False\n\1)'
+    replacement2 = r'\1# Create a custom data collator that handles potential issues\n\1class SafeDataCollator(DataCollatorForLanguageModeling):\n\1    def __call__(self, features):\n\1        try:\n\1            # Try the standard collation\n\1            return super().__call__(features)\n\1        except ValueError as e:\n\1            # If there\'s an error, log it and try a more robust approach\n\1            logger.warning(f"Data collation error: {e}")\n\1            \n\1            # Convert all features to the same format\n\1            batch = {}\n\1            for key in features[0].keys():\n\1                if key in ["input_ids", "attention_mask", "labels"]:\n\1                    batch[key] = []\n\1                    for feature in features:\n\1                        # Ensure the feature is a list\n\1                        if isinstance(feature[key], list):\n\1                            batch[key].append(feature[key])\n\1                        else:\n\1                            batch[key].append([feature[key]])\n\1            \n\1            # Pad the sequences\n\1            return self.tokenizer.pad(batch, return_tensors="pt")\n\1\n\1# Create data collator with custom handling\n\1data_collator = SafeDataCollator(\n\1    tokenizer=tokenizer,\n\1    mlm=False\n\1)''
 
     # Check if the pattern is found
     if not re.search(pattern2, content):
@@ -110,7 +110,7 @@ def fix_attention_mask(content):
     insertion_point = import_section_end.end()
 
     # Attention mask fix function
-    attention_mask_fix = """
+    attention_mask_fix = """"
 # Apply attention mask fix
 def apply_attention_mask_fix():
     """Apply the attention mask fix for DeepSeek models"""
@@ -194,7 +194,7 @@ def apply_attention_mask_fix():
     except Exception as e:
         logger.error(f"Error applying attention mask fix: {e}")
         return False
-"""
+""""
 
     # Insert the attention mask fix function
     content = content[:insertion_point] + attention_mask_fix + content[insertion_point:]
@@ -259,7 +259,7 @@ def fix_custom_unsloth(custom_unsloth_path):
         filtered_kwargs_str = '\n'.join(filtered_kwargs)
 
         # Add a comment explaining the change
-        comment = f"{indent}# device_map is handled by FastLanguageModel, so we don't pass it here\n"
+        comment = f"{indent}# device_map is handled by FastLanguageModel, so we don't pass it here\n"'
 
         # Return the fixed code
         return f"{comment}{indent}model = AutoModelForCausalLM.from_pretrained(\n{indent}    {model_name},\n{filtered_kwargs_str})"

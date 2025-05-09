@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""
+""""
 Comprehensive fix for all attention mask and tuple unpacking issues in transformers models.
 
 This script applies patches to fix:
@@ -9,7 +9,7 @@ This script applies patches to fix:
 4. "too many values to unpack (expected 2)" error in model forward pass
 
 Run this script before training to ensure all issues are fixed.
-"""
+""""
 
 import os
 import sys
@@ -28,12 +28,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def fix_all_attention_issues():
-    """
+    """"
     Apply all fixes for attention mask and tuple unpacking issues.
     
     Returns:
         bool: True if all fixes were applied successfully, False otherwise.
-    """
+    """"
     success = True
     
     # Run all fix scripts
@@ -129,9 +129,9 @@ def fix_all_attention_issues():
             
             # Define a patched forward method
             def patched_forward(self, *args, **kwargs):
-                """
+                """"
                 Patched forward method that ensures outputs are always ModelOutput objects.
-                """
+                """"
                 # Always set return_dict=True to avoid tuple outputs
                 if "return_dict" not in kwargs:
                     kwargs["return_dict"] = True

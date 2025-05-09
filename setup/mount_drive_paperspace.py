@@ -1,7 +1,7 @@
-"""
+""""
 Direct Google Drive mounting script for Paperspace.
 This script attempts multiple mounting methods to handle Paperspace environments.
-"""
+""""
 import os
 import sys
 import subprocess
@@ -39,7 +39,7 @@ def install_dependencies():
         return False
 
 def try_colab_mounting():
-    """Try mounting with Google Colab's method."""
+    """Try mounting with Google Colab's method."""'
     print("\nAttempting to mount via Google Colab method...")
     try:
         from google.colab import drive
@@ -75,7 +75,7 @@ def setup_rclone_config_manual():
     print("7. Root folder: Just press Enter for default")
     print("8. Service account file: Press Enter (leave empty)")
     print("9. Edit advanced config: n (no)")
-    print("10. Use auto config: n (no, since we're on a remote server)")
+    print("10. Use auto config: n (no, since we're on a remote server)")'
     print("11. Copy the URL shown and paste it into a browser")
     print("12. Authenticate with your Google account")
     print("13. Copy the verification code and paste it back in the terminal")

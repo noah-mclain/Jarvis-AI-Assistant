@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""
+""""
 Fix the models/__init__.py file in transformers.
 
 This script fixes the syntax error in the models/__init__.py file.
-"""
+""""
 
 import os
 import sys
@@ -95,7 +95,7 @@ def create_empty_init(transformers_dir):
     
     # Create a minimal __init__.py file
     with open(init_path, "w") as f:
-        f.write("""
+        f.write(""""
 # This file was created by fix_models_init.py
 # It replaces the original __init__.py file to fix syntax errors
 
@@ -110,7 +110,7 @@ from . import gpt2
 from . import llama
 from . import mistral
 from . import t5
-""")
+""")"
     
     logger.info(f"Created minimal {init_path}")
     

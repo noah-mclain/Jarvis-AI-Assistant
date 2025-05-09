@@ -33,6 +33,8 @@ if __name__ == "__main__":
         # If it's already set, this will raise a RuntimeError
         print("Multiprocessing start method already set to:", multiprocessing.get_start_method())
 
+from src.generative_ai_module.autocast_fix import safe_autocast, apply_autocast_fix
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -199,18 +201,30 @@ def apply_attention_mask_fix():
                 param_names = list(sig.parameters.keys())
                 logger.info(f"Original function signature: {param_names}")
 
-                # Define patched function with a flexible signature to handle different versions
-                def patched_prepare_4d(*args, **kwargs):
+                # Define patched function with a specific signature for transformers 4.51.3
+                def patched_prepare_4d(
+                    attention_mask,
+                    input_shape,
+                    inputs_embeds,
+                    past_key_values_length=0,
+                    sliding_window=None,
+                    dtype=None
+                ):
                     """
                     Patched version that ensures attention_mask is 2D before processing.
-                    Handles different function signatures across transformers versions.
+                    Modified implementation for transformers 4.51.3 that takes exactly the right number of parameters.
                     """
-                    # Extract attention_mask from args or kwargs
-                    attention_mask = None
-                    if len(args) > 0:
-                        attention_mask = args[0]
-                    elif 'attention_mask' in kwargs:
-                        attention_mask = kwargs['attention_mask']
+                    import torch
+                    import transformers
+                    from packaging import version
+
+                    # Log the function call for debugging
+                    logger.info(f"Called patched_prepare_4d with attention_mask shape: {attention_mask.shape if attention_mask is not None else None}")
+                    logger.info(f"Input shape: {input_shape}, Past KV length: {past_key_values_length}, Sliding window: {sliding_window}")
+
+                    # Get transformers version
+                    TRANSFORMERS_VERSION = version.parse(transformers.__version__)
+                    logger.info(f"Transformers version: {TRANSFORMERS_VERSION}")
 
                     # Fix attention_mask shape if needed
                     if attention_mask is not None and attention_mask.dim() > 2:
@@ -233,34 +247,92 @@ def apply_attention_mask_fix():
                             attention_mask = torch.ones((batch_size, seq_length), device=attention_mask.device)
                             logger.info(f"Created new attention mask with shape: {attention_mask.shape}")
 
-                        # Update args or kwargs with the fixed mask
-                        if len(args) > 0:
-                            args_list = list(args)
-                            args_list[0] = attention_mask
-                            args = tuple(args_list)
-                        elif 'attention_mask' in kwargs:
-                            kwargs['attention_mask'] = attention_mask
+                    # Get device from inputs_embeds
+                    device = inputs_embeds.device if inputs_embeds is not None else attention_mask.device
 
-                    # Call the original function with the fixed mask
+                    # Get dtype if not provided
+                    if dtype is None:
+                        dtype = inputs_embeds.dtype if inputs_embeds is not None else torch.float32
+
+                    # Handle different transformers versions
                     try:
-                        return original_prepare_4d(*args, **kwargs)
-                    except TypeError as e:
-                        # If we get a TypeError, it might be due to missing arguments
-                        error_msg = str(e)
-                        logger.warning(f"Error calling original function: {error_msg}")
+                        # Try to call the original function with the fixed parameters
+                        if TRANSFORMERS_VERSION >= version.parse("4.40.0"):
+                            # For newer versions, we need to pass all parameters
+                            return original_prepare_4d(
+                                attention_mask=attention_mask,
+                                input_shape=input_shape,
+                                inputs_embeds=inputs_embeds,
+                                past_key_values_length=past_key_values_length,
+                                sliding_window=sliding_window,
+                                dtype=dtype
+                            )
+                        else:
+                            # For older versions, we might need to omit some parameters
+                            try:
+                                return original_prepare_4d(
+                                    attention_mask=attention_mask,
+                                    input_shape=input_shape,
+                                    inputs_embeds=inputs_embeds,
+                                    past_key_values_length=past_key_values_length,
+                                    dtype=dtype
+                                )
+                            except TypeError:
+                                # If that fails, try with even fewer parameters
+                                return original_prepare_4d(
+                                    attention_mask=attention_mask,
+                                    input_shape=input_shape,
+                                    dtype=dtype
+                                )
+                    except Exception as e:
+                        logger.warning(f"Error calling original function: {e}")
 
-                        # Check if we're missing sliding_window or dtype
-                        if "missing required positional argument: 'sliding_window'" in error_msg and 'sliding_window' not in kwargs:
-                            kwargs['sliding_window'] = None
-                            logger.info("Added missing sliding_window=None parameter")
+                        # Implement a fallback solution
+                        logger.info("Using fallback implementation for _prepare_4d_causal_attention_mask_for_sdpa")
 
-                        if "missing required positional argument: 'dtype'" in error_msg and 'dtype' not in kwargs:
-                            import torch
-                            kwargs['dtype'] = torch.float32
-                            logger.info("Added missing dtype=torch.float32 parameter")
+                        # Create a 4D causal attention mask
+                        batch_size, seq_length = input_shape
 
-                        # Try again with the updated kwargs
-                        return original_prepare_4d(*args, **kwargs)
+                        # Add past_key_values_length to sequence length
+                        seq_length_with_past = seq_length + past_key_values_length
+
+                        # Create a causal mask [seq_length_with_past, seq_length_with_past]
+                        causal_mask = torch.triu(
+                            torch.ones((seq_length_with_past, seq_length_with_past), device=device, dtype=torch.bool),
+                            diagonal=1
+                        )
+
+                        # If sliding_window is provided, apply it
+                        if sliding_window is not None:
+                            causal_mask = torch.triu(
+                                causal_mask,
+                                diagonal=-sliding_window + 1
+                            )
+
+                        # Expand to [1, 1, seq_length_with_past, seq_length_with_past]
+                        causal_mask = causal_mask.unsqueeze(0).unsqueeze(0)
+
+                        # Convert to proper dtype
+                        causal_mask = causal_mask.to(dtype=dtype)
+
+                        # Apply attention_mask if provided
+                        if attention_mask is not None:
+                            # Expand attention_mask to 4D [batch_size, 1, 1, seq_length]
+                            expanded_mask = attention_mask.unsqueeze(1).unsqueeze(2)
+
+                            # Convert to proper dtype
+                            expanded_mask = expanded_mask.to(dtype=dtype)
+
+                            # Convert to proper format (0 for attended positions, -10000.0 for masked positions)
+                            expanded_mask = (1.0 - expanded_mask) * -10000.0
+
+                            # Expand to match causal mask dimensions
+                            expanded_mask = expanded_mask.expand(batch_size, 1, seq_length, seq_length_with_past)
+
+                            # Combine with causal mask
+                            causal_mask = causal_mask + expanded_mask
+
+                        return causal_mask
 
                 # Apply the patch
                 import transformers.modeling_attn_mask_utils
@@ -963,14 +1035,21 @@ def train_with_unsloth(args):
 
     # Parse version string to check compatibility
     try:
-        version_parts = transformers_version.split('.')
-        major = int(version_parts[0]) if len(version_parts) > 0 else 0
-        minor = int(version_parts[1]) if len(version_parts) > 1 else 0
-        logger.info(f"Parsed transformers version: {major}.{minor}")
+        import transformers
+        from packaging import version
 
-        # Adjust parameters based on transformers version
-        if major < 4 or (major == 4 and minor < 20):
-            logger.warning(f"Using older transformers version ({transformers_version}). Some parameters may not be supported.")
+        TRANSFORMERS_VERSION = version.parse(transformers.__version__)
+        logger.info(f"Parsed transformers version: {TRANSFORMERS_VERSION}")
+
+        # Check compatibility with DeepSeek models
+        if TRANSFORMERS_VERSION < version.parse("4.28.0"):
+            logger.warning(f"Transformers version {transformers.__version__} may not be compatible with DeepSeek models. Recommended: 4.28.0+")
+
+        # Check for specific version that has the attention mask issue
+        if TRANSFORMERS_VERSION >= version.parse("4.40.0") and TRANSFORMERS_VERSION < version.parse("4.52.0"):
+            logger.warning(f"Transformers version {transformers.__version__} may have attention mask issues. Applying fixes.")
+            # Apply attention mask fix
+            apply_attention_mask_fix()
     except Exception as e:
         logger.warning(f"Could not parse transformers version: {e}. Assuming compatibility.")
 
@@ -3453,11 +3532,44 @@ def train_with_unsloth(args):
             logger.warning("Changing output directory to be within /notebooks/Jarvis_AI_Assistant/models/")
             model_name = os.path.basename(args.output_dir)
             args.output_dir = f"/notebooks/Jarvis_AI_Assistant/models/{model_name}"
+
+        # Create output directory and verify it exists
+        os.makedirs(args.output_dir, exist_ok=True)
+        if not os.path.exists(args.output_dir):
+            raise RuntimeError(f"Failed to create output directory: {args.output_dir}")
+
+        # Test directory writability
+        try:
+            test_file = os.path.join(args.output_dir, 'test_write.txt')
+            with open(test_file, 'w') as f:
+                f.write('test')
+            os.remove(test_file)
+            logger.info(f"Output directory {args.output_dir} is writable")
+        except Exception as e:
+            logger.warning(f"Error testing directory writability: {e}")
+            # Use a local directory as fallback
+            local_dir = os.path.join(os.getcwd(), "models/deepseek-coder-6.7b-finetuned")
+            logger.warning(f"Changed output directory to local path: {local_dir}")
+            args.output_dir = local_dir
             os.makedirs(args.output_dir, exist_ok=True)
+
+        # Clear memory before saving
+        clear_memory()
 
         logger.info(f"Saving model to {args.output_dir}")
         model.save_pretrained(args.output_dir)
         tokenizer.save_pretrained(args.output_dir)
+
+        # Verify model was saved correctly
+        if not os.path.exists(os.path.join(args.output_dir, "pytorch_model.bin")) and \
+           not os.path.exists(os.path.join(args.output_dir, "adapter_model.bin")):
+            logger.warning("Model file not found after saving. Checking for other model files...")
+            model_files = [f for f in os.listdir(args.output_dir) if f.endswith('.bin')]
+            if model_files:
+                logger.info(f"Found alternative model files: {model_files}")
+            else:
+                raise RuntimeError("No model files found after saving")
+
         logger.info(f"Model and tokenizer successfully saved to {args.output_dir}")
 
         # Create a README file with training information
@@ -3818,13 +3930,72 @@ This model was fine-tuned from {args.model_name} on {datetime.now().strftime('%Y
         except Exception as e:
             logger.warning(f"Failed to create README.md: {e}")
 
+def clear_memory():
+    """Clear GPU and CPU memory to prevent OOM errors"""
+    import gc
+
+    # Clear Python garbage collector
+    gc.collect()
+
+    # Clear CUDA cache if available
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        logger.info(f"Cleared {torch.cuda.memory_allocated()/1024**3:.2f} GB GPU memory")
+
+def validate_training_setup():
+    """Validate the training setup before starting training"""
+    import torch
+    from transformers import AutoModel
+
+    logger.info("Validating training setup...")
+
+    # Test forward pass with a small input
+    try:
+        # Create a small test model
+        test_model = AutoModel.from_pretrained("deepseek-ai/deepseek-coder-1.3b-base",
+                                              trust_remote_code=True,
+                                              device_map="auto")
+
+        # Create a small test input
+        test_input = torch.randint(0, 100, (2, 10)).to(test_model.device)
+
+        # Test forward pass
+        logger.info("Testing forward pass...")
+        outputs = test_model(test_input)
+        logger.info("Validation forward pass succeeded")
+
+        # Test save/load
+        test_path = "/tmp/model_test"
+        os.makedirs(test_path, exist_ok=True)
+
+        logger.info("Testing model save...")
+        test_model.save_pretrained(test_path)
+
+        logger.info("Testing model load...")
+        reloaded = AutoModel.from_pretrained(test_path, trust_remote_code=True)
+        logger.info("Model save/load validation succeeded")
+
+        # Clean up
+        import shutil
+        shutil.rmtree(test_path, ignore_errors=True)
+
+        # Clear memory
+        del test_model
+        del reloaded
+        clear_memory()
+
+        return True
+    except Exception as e:
+        logger.error(f"Validation failed: {str(e)}")
+        return False
+
 def safe_main():
     """Wrapper around main() with comprehensive error handling"""
     try:
         # Set up additional safeguards
         if torch.cuda.is_available():
             # Set up CUDA error handling
-            torch.cuda.empty_cache()
+            clear_memory()
 
             # Check available GPU memory
             free_memory = torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated(0)
@@ -3833,6 +4004,10 @@ def safe_main():
 
             if free_memory_gb < 2.0:
                 logger.warning(f"Very low GPU memory available ({free_memory_gb:.2f} GiB). Training may fail.")
+
+        # Validate training setup
+        if not validate_training_setup():
+            logger.warning("Training setup validation failed, but continuing anyway")
 
         # Run the main function
         main()

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""
+""""
 Fix for the transformers attention mask issue in DeepSeek-Coder models.
 
 This script patches the LlamaModel.forward method to properly handle attention masks,
 fixing the 'Attention mask should be of size (batch_size, 1, seq_length, seq_length)' error.
-"""
+""""
 
 import torch
 import sys
@@ -13,7 +13,7 @@ import inspect
 from typing import Optional, Tuple, Union, List, Dict, Any
 
 def debug_function_signature(func):
-    """Print detailed information about a function's signature"""
+    """Print detailed information about a function's signature"""'
     sig = inspect.signature(func)
     print(f"Function: {func.__name__}")
     print(f"Signature: {sig}")
@@ -23,10 +23,10 @@ def debug_function_signature(func):
     print()
 
 def patch_llama_model_forward():
-    """
+    """"
     Patch the LlamaModel.forward method to properly handle attention masks.
     This fixes the 'Attention mask should be of size (batch_size, 1, seq_length, seq_length)' error.
-    """
+    """"
     try:
         from transformers.models.llama.modeling_llama import LlamaModel
         
@@ -50,9 +50,9 @@ def patch_llama_model_forward():
             output_hidden_states: Optional[bool] = None,
             return_dict: Optional[bool] = None,
         ):
-            """
+            """"
             Patched forward method for LlamaModel that properly handles attention masks.
-            """
+            """"
             # Force use_cache to False when using gradient checkpointing
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
                 if use_cache:
@@ -119,9 +119,9 @@ def patch_llama_model_forward():
         return False
 
 def patch_attention_mask_in_dataset_collator():
-    """
+    """"
     Patch the data collator to ensure attention masks have the correct shape.
-    """
+    """"
     try:
         from transformers import DataCollatorForLanguageModeling
         

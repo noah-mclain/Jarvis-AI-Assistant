@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""
+""""
 Fix for unsloth trust_remote_code issue.
 
 This script patches the unsloth library to properly handle the trust_remote_code parameter
@@ -13,7 +13,7 @@ The script will:
 1. Check if unsloth is installed
 2. Patch the unsloth library to handle trust_remote_code correctly
 3. Verify the patch was applied successfully
-"""
+""""
 
 import os
 import sys

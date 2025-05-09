@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""
+""""
 Fix joblib dependency issues.
 
 This script ensures that joblib is properly installed and available for scikit-learn.
-"""
+""""
 
 import os
 import sys
@@ -101,12 +101,12 @@ def fix_joblib():
             if not os.path.exists(joblib_py):
                 # Create _joblib.py
                 with open(joblib_py, "w") as f:
-                    f.write("""
+                    f.write(""""
 # This file was created by fix_joblib.py to fix joblib dependency issues
 import joblib
 
 from joblib import *
-""")
+""")"
                 logger.info(f"Created {joblib_py}")
         except Exception as e2:
             logger.error(f"Failed to create symlink: {e2}")

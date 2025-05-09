@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""
+""""
 Fix for the attention mask parameter issue in transformers library.
 
 This script specifically addresses the error:
@@ -7,7 +7,7 @@ This script specifically addresses the error:
 
 It directly patches the _prepare_4d_causal_attention_mask_for_sdpa function to handle
 the required parameters correctly.
-"""
+""""
 
 import os
 import sys
@@ -49,10 +49,10 @@ def fix_attention_mask_params():
 
             # Define a new function that handles different function signatures
             def fixed_prepare_4d(*args, **kwargs):
-                """
+                """"
                 Fixed version of _prepare_4d_causal_attention_mask_for_sdpa that adapts
                 to different function signatures across transformers versions.
-                """
+                """"
                 # Extract attention_mask from args or kwargs
                 attention_mask = None
                 if len(args) > 0:

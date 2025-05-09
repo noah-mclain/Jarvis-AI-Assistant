@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""
+""""
 Fix dependencies for Paperspace environment.
 
 This script ensures that all required dependencies are installed with the correct versions
 without modifying any existing code or causing conflicts with the requirements.txt file.
-"""
+""""
 
 import os
 import sys

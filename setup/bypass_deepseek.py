@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""
+""""
 Bypass DeepSeek model imports in transformers.
 
 This script patches the code that tries to import DeepSeek model to bypass the import
 and continue without errors.
-"""
+""""
 
 import os
 import sys
@@ -165,7 +165,7 @@ def create_dummy_deepseek_module():
     
     # Create __init__.py
     with open('deepseek/__init__.py', 'w') as f:
-        f.write("""
+        f.write(""""
 # Dummy DeepSeek module
 class DeepSeekConfig:
     pass
@@ -184,7 +184,7 @@ class DeepSeekPreTrainedModel:
 
 class DeepSeekAttention:
     pass
-""")
+""")"
     
     # Add the current directory to sys.path
     sys.path.insert(0, os.getcwd())
@@ -209,7 +209,7 @@ def patch_transformers_init(transformers_dir):
         logger.info(f"Created backup: {backup_path}")
         
         # Add code to handle DeepSeek imports
-        patch_code = """
+        patch_code = """"
 # Patch for DeepSeek model
 import sys
 class DummyModule:
@@ -221,7 +221,7 @@ class DummyDeepSeek:
         return DummyModule()
 
 sys.modules['transformers.models.deepseek'] = DummyDeepSeek()
-"""
+""""
         
         # Add the patch at the beginning of the file
         new_content = patch_code + content

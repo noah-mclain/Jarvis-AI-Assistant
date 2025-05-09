@@ -275,7 +275,7 @@ if missing_packages or version_conflicts or not has_transformers_utils:
 # Special warning for bitsandbytes version
 if not bitsandbytes_version_ok:
     print('\n⚠️ WARNING: Your bitsandbytes version may not support 4-bit quantization.')
-    print('This can cause errors like: "Calling `to()` is not supported for `4-bit` quantized models"')
+    print('This can cause errors like: "Calling `to()` is not supported for `4bit` quantized models"')
     print('Consider upgrading bitsandbytes to version 0.42.0 or higher:')
     print('pip install bitsandbytes>=0.42.0')
     print('\nContinuing with training, but 4-bit quantization may fail.')
@@ -429,6 +429,11 @@ EOF
     echo "Fixing unsloth trust_remote_code issue..."
     chmod +x setup/fix_unsloth_trust_remote_code.py
     python setup/fix_unsloth_trust_remote_code.py
+
+    # Fix unterminated string literals
+    echo "Fixing unterminated string literals..."
+    chmod +x setup/fix_unterminated_strings.py
+    python setup/fix_unterminated_strings.py
 
     # Fix autocast calls
     echo "Fixing autocast calls..."

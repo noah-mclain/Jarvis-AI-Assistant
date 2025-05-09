@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""
+""""
 Fix for the CustomEncoderDecoderModel class in unified_deepseek_training.py.
 This script patches the forward method to handle both tuple and non-tuple returns.
-"""
+""""
 
 import sys
 import logging

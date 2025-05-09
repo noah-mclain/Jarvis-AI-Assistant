@@ -42,7 +42,7 @@ class ImprovedCharTokenizer:
 
         print(f"Vocabulary size: {self.vocab_size}")
         print(f"Special tokens: {self.special_tokens}")
-    
+
     def encode(self, text, add_bos=False, add_eos=False):
         """Convert text to sequence of token IDs"""
         result = []
@@ -55,14 +55,14 @@ class ImprovedCharTokenizer:
             result.append(self.eos_idx)
 
         return result
-    
+
     def decode(self, ids, skip_special_tokens=True):
         """Convert token IDs back to text"""
         # Filter out special tokens if requested
         if skip_special_tokens:
-            ids = [idx for idx in ids if idx not in 
+            ids = [idx for idx in ids if idx not in
                   [self.pad_idx, self.bos_idx, self.eos_idx]]
-        
+
         return ''.join([self.idx_to_char.get(idx, '<UNK>') for idx in ids])
 
 def clean_and_normalize_text(text):
@@ -208,12 +208,12 @@ def load_persona_chat(split='train', max_samples=None, cache_dir=None):
 def load_writing_prompts(split='train', max_samples=None, cache_dir=None):
     """
     Load and preprocess the Writing Prompts dataset
-    
+
     Args:
         split: Dataset split ('train', 'test', or 'validation')
         max_samples: Maximum number of samples to load (None for all)
         cache_dir: Optional directory to cache the downloaded dataset
-        
+
     Returns:
         Preprocessed text ready for sequence creation
     """
@@ -272,7 +272,7 @@ def get_sample_writing_prompts():
 <END>
 """
 
-def create_improved_sequences(tokens, seq_length=100, stride=1):
+def create_improved_sequences(tokens, seq_length=256, stride=1):  # Reduced from 512 to 256
     """Create sequences with stride for more efficient data usage"""
     return [
         (tokens[i : i + seq_length], tokens[i + seq_length])
@@ -330,68 +330,68 @@ def analyze_token_distribution(tokens, tokenizer):
 def verify_sequence_creation(tokens, tokenizer, seq_length=100):
     """Verify sequence creation and show examples"""
     sequences = create_improved_sequences(tokens, seq_length, stride=seq_length)
-    
+
     print(f"\nCreated {len(sequences)} sequences with length {seq_length}")
-    
+
     # Show a few examples
     print("\nSequence examples:")
     for i in range(min(3, len(sequences))):
         input_seq, target = sequences[i]
-        
+
         # Decode the sequence
         input_text = tokenizer.decode(input_seq)
         target_text = tokenizer.decode([target])
-        
+
         # Print sample
         print(f"\nExample {i+1}:")
         print(f"Input (truncated): {input_text[:50]}...")
         print(f"Target: '{target_text}'")
-    
+
     return sequences
 
-def create_and_verify_batches(sequences, batch_size=64):
+def create_and_verify_batches(sequences, batch_size=4):  # Reduced from 32 to 4
     """Create batches and verify shapes"""
     # Shuffle sequences
     random.shuffle(sequences)
-    
+
     # Create mini-batches
     batches = []
     for i in range(0, len(sequences), batch_size):
         batch_sequences = sequences[i:i+batch_size]
-        
+
         if not batch_sequences:
             continue
-            
+
         # Unzip the batch
         input_seqs, targets = zip(*batch_sequences)
-        
+
         # Convert to tensors
         input_tensor = torch.tensor(input_seqs, dtype=torch.long)
         target_tensor = torch.tensor(targets, dtype=torch.long)
-        
+
         batches.append((input_tensor, target_tensor))
-    
+
     print(f"\nCreated {len(batches)} batches with batch size {batch_size}")
-    
+
     if batches:
         # Print shape information for the first batch
         inputs, targets = batches[0]
         print(f"Input batch shape: {inputs.shape}")
         print(f"Target batch shape: {targets.shape}")
-    
+
     return batches
 
 def save_preprocessed_data(data, output_dir="preprocessed_data"):
     """Save preprocessed data to disk"""
     os.makedirs(output_dir, exist_ok=True)
-    
+
     # Save tokenized data
     torch.save(data, os.path.join(output_dir, f"{data['dataset_name']}_preprocessed.pt"))
-    
+
     # Save a sample as text
     with open(os.path.join(output_dir, f"{data['dataset_name']}_sample.txt"), "w") as f:
         f.write(data['sample_text'])
-    
+
     print(f"\nSaved preprocessed data to {output_dir}/{data['dataset_name']}_preprocessed.pt")
     print(f"Saved text sample to {output_dir}/{data['dataset_name']}_sample.txt")
 
@@ -399,33 +399,33 @@ def create_vocabulary(text_corpus, min_frequency=5):
     """Create a vocabulary from text corpus with frequency thresholding"""
     # Count all character occurrences
     counter = Counter(text_corpus)
-    
+
     # Filter by frequency
     vocab = [char for char, count in counter.items() if count >= min_frequency]
-    
+
     # Add special tokens at the beginning
     special_tokens = ['<PAD>', '<UNK>', '<BOS>', '<EOS>']
     vocab = special_tokens + sorted(vocab)
-    
+
     return vocab
 
 def segment_by_dialogue_turns(text):
     """Segment text into dialogue turns for better context modeling"""
     segments = []
     current_segment = []
-    
+
     for line in text.split('\n'):
         if (line.startswith('USER:') or line.startswith('ASSISTANT:')) and current_segment:
             segments.append('\n'.join(current_segment))
             current_segment = []
-        
+
         if line.strip():
             current_segment.append(line)
-    
+
     # Add the last segment
     if current_segment:
         segments.append('\n'.join(current_segment))
-    
+
     return segments
 
 class ImprovedPreprocessor:
@@ -435,7 +435,7 @@ class ImprovedPreprocessor:
         self.max_length = max_length
         self.analyze = analyze
         self.tokenizer = ImprovedCharTokenizer(add_special_tokens=True)
-    
+
     def process_dataset(self, dataset_name, max_samples=100):
         """Process a dataset with the given parameters"""
         # Load and preprocess the dataset
@@ -444,40 +444,40 @@ class ImprovedPreprocessor:
             tokenizer=self.tokenizer,
             max_samples=max_samples
         )
-        
+
         # Create sequences
         sequences = create_improved_sequences(
             data['tokens'],
             seq_length=self.max_length,
             stride=1
         )
-        
+
         # Create batches
         batches = create_and_verify_batches(sequences)
-        
+
         # Add batches to data
         data['batches'] = batches
-        
+
         return data
-    
+
     def analyze_token_distribution(self, data):
         """Analyze token distribution in the dataset"""
         return analyze_token_distribution(data['tokens'], self.tokenizer)
-    
+
     def save_tokenized_data(self, data, output_dir, dataset_name):
         """Save preprocessed data"""
         os.makedirs(output_dir, exist_ok=True)
         save_preprocessed_data(data, output_dir=output_dir)
-    
+
     def save_analysis_results(self, analysis_results, output_dir, dataset_name):
         """Save analysis results"""
         os.makedirs(output_dir, exist_ok=True)
         output_file = os.path.join(output_dir, f"{dataset_name}_analysis.txt")
-        
+
         with open(output_file, 'w') as f:
             f.write("Token Distribution Analysis\n")
             f.write("=========================\n\n")
-            
+
             # Write token counts
             f.write("Token Counts:\n")
             for token, count in analysis_results['most_common']:
@@ -485,12 +485,12 @@ class ImprovedPreprocessor:
                 if char_repr in ['\n', '\t', ' ']:
                     char_repr = f"'{repr(char_repr)[1:-1]}'"
                 f.write(f"  {token}: '{char_repr}' ({count} occurrences, {count/analysis_results['total_tokens']*100:.2f}%)\n")
-            
+
             # Write sequence statistics
             f.write("\nToken Statistics:\n")
             f.write(f"Total tokens: {analysis_results['total_tokens']}\n")
             f.write(f"Unique tokens: {analysis_results['unique_tokens']} out of {self.tokenizer.vocab_size}\n")
-            
+
             # Add a note about the visualization
             f.write("\nNote: A visualization of the token distribution has been saved as 'token_distribution.png'\n")
             f.write("in the preprocessing_analysis directory.\n")
@@ -554,4 +554,4 @@ def main():
     print("Saved all preprocessed data to 'preprocessed_data' directory")
 
 if __name__ == "__main__":
-    main() 
+    main()

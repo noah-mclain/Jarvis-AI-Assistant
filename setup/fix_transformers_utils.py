@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""
+""""
 Fix for transformers.utils import issue.
 
 This script ensures that transformers.utils is available by:
 1. Checking if transformers is installed
-2. Creating a utils.py file in the transformers package if it doesn't exist
+2. Creating a utils.py file in the transformers package if it doesn't exist'
 3. Adding necessary imports and functions to the utils.py file
-"""
+""""
 
 import os
 import sys
@@ -47,7 +47,7 @@ def create_utils_module(transformers_dir):
     # Create utils.py with necessary imports and functions
     logger.info(f"Creating utils.py at {utils_path}")
     with open(utils_path, "w") as f:
-        f.write("""
+        f.write(""""
 # Auto-generated utils.py for transformers package
 import os
 import sys
@@ -183,7 +183,7 @@ def is_xformers_available():
         return True
     except ImportError:
         return False
-""")
+""")"
     
     return os.path.exists(utils_path)
 

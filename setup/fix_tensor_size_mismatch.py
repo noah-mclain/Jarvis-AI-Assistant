@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""
+""""
 Fix for tensor size mismatch in transformers library.
 
 This script specifically addresses the error:
@@ -7,7 +7,7 @@ This script specifically addresses the error:
 
 It patches the attention mask handling in the LlamaModel forward method to ensure
 tensor dimensions are compatible.
-"""
+""""
 
 import sys
 import logging
@@ -54,9 +54,9 @@ def fix_tensor_size_mismatch():
                 return_dict: Optional[bool] = None,
                 **kwargs
             ):
-                """
+                """"
                 Patched forward method for LlamaModel that handles tensor size mismatches.
-                """
+                """"
                 # Get the device from input tensors
                 device = None
                 if input_ids is not None:
@@ -114,7 +114,7 @@ def fix_tensor_size_mismatch():
                                 attention_mask = attention_mask.view(batch_size, -1)
                                 # Ensure the sequence length matches
                                 if attention_mask.size(1) != seq_length:
-                                    logger.warning(f"Attention mask sequence length ({attention_mask.size(1)}) doesn't match input sequence length ({seq_length}). Resizing.")
+                                    logger.warning(f"Attention mask sequence length ({attention_mask.size(1)}) doesn't match input sequence length ({seq_length}). Resizing.")'
                                     # Resize attention_mask to match input sequence length
                                     if attention_mask.size(1) > seq_length:
                                         # Truncate
@@ -182,9 +182,9 @@ def fix_tensor_size_mismatch():
                                 # Define a patched function that handles the specific error
                                 @staticmethod
                                 def patched_unmask_unattended(attention_mask, indices_k=None, indices_q=None, unmasked_value=True):
-                                    """
+                                    """"
                                     Patched version of _unmask_unattended that handles the specific tensor size mismatch error.
-                                    """
+                                    """"
                                     # Get the device of the attention mask
                                     device = attention_mask.device
 

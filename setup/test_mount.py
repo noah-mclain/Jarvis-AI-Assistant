@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""
+""""
 Test script to verify Google Drive mounting is working correctly.
 Run this after running mount_drive.sh to verify the mount is functioning.
-"""
+""""
 import os
 import sys
 import time

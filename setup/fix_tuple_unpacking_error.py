@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""
+""""
 Fix for the "too many values to unpack (expected 2)" error in transformers models.
 
 This script applies patches to fix the tuple unpacking error that occurs when
@@ -8,7 +8,7 @@ expects to unpack them into exactly 2 variables.
 
 The fix ensures that model outputs are always returned as ModelOutput objects
 with a dictionary-like interface, rather than tuples.
-"""
+""""
 
 import os
 import sys
@@ -27,10 +27,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def fix_tuple_unpacking_error(model=None):
-    """
+    """"
     Apply fixes for the "too many values to unpack (expected 2)" error.
 
-    This function patches the model's forward method to ensure it always returns
+    This function patches the model's forward method to ensure it always returns'
     a ModelOutput object with a dictionary-like interface, rather than a tuple.
 
     Args:
@@ -38,7 +38,7 @@ def fix_tuple_unpacking_error(model=None):
 
     Returns:
         bool: True if the fix was applied successfully, False otherwise.
-    """
+    """"
     import torch
 
     success = False
@@ -54,9 +54,9 @@ def fix_tuple_unpacking_error(model=None):
 
             # Define a patched forward method
             def patched_forward(*args, **kwargs):
-                """
+                """"
                 Patched forward method that ensures outputs are always ModelOutput objects.
-                """
+                """"
                 # Always set return_dict=True to avoid tuple outputs
                 if "return_dict" not in kwargs:
                     kwargs["return_dict"] = True
@@ -130,9 +130,9 @@ def fix_tuple_unpacking_error(model=None):
 
             # Define a patched forward method
             def patched_pretrained_forward(self, *args, **kwargs):
-                """
+                """"
                 Patched forward method that ensures outputs are always ModelOutput objects.
-                """
+                """"
                 # Always set return_dict=True to avoid tuple outputs
                 if "return_dict" not in kwargs:
                     kwargs["return_dict"] = True
@@ -265,9 +265,9 @@ def fix_tuple_unpacking_error(model=None):
 
             # Define a patched forward method
             def patched_deepseek_forward(self, *args, **kwargs):
-                """
+                """"
                 Patched forward method for DeepSeekModel.
-                """
+                """"
                 # Always set return_dict=True to avoid tuple outputs
                 if "return_dict" not in kwargs:
                     kwargs["return_dict"] = True
@@ -374,9 +374,9 @@ def fix_tuple_unpacking_error(model=None):
             if DeepSeekForCausalLM is not None:
                 # Define a patched forward method for DeepSeekForCausalLM
                 def patched_deepseek_causal_forward(self, *args, **kwargs):
-                    """
+                    """"
                     Patched forward method for DeepSeekForCausalLM.
-                    """
+                    """"
                     # Always set return_dict=True to avoid tuple outputs
                     if "return_dict" not in kwargs:
                         kwargs["return_dict"] = True
