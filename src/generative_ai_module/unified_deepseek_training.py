@@ -757,11 +757,11 @@ def main():
                         help="Learning rate scheduler type")
     parser.add_argument("--evaluation_strategy", type=str, default="steps",
                         choices=["no", "steps", "epoch"],
-                        help="Evaluation strategy")
+                        help="Evaluation strategy to use during training")
     parser.add_argument("--eval_steps", type=int, default=100,
-                        help="Evaluation steps")
+                        help="Number of steps between evaluations when using steps strategy")
     parser.add_argument("--save_steps", type=int, default=100,
-                        help="Save steps")
+                        help="Number of steps between model checkpoints")
     parser.add_argument("--save_total_limit", type=int, default=3,
                         help="Maximum number of checkpoints to keep")
 
@@ -826,6 +826,36 @@ def train_with_unsloth(args):
     from unsloth import FastLanguageModel
     from transformers import TrainingArguments, Trainer, DataCollatorForLanguageModeling, __version__ as transformers_version
     from datasets import load_dataset
+
+    # Import and apply the autocast fix
+    try:
+        from src.generative_ai_module.autocast_fix import safe_autocast, apply_autocast_fix
+        # Apply the autocast fix
+        apply_autocast_fix()
+        logger.info("Successfully imported and applied autocast fix")
+    except ImportError:
+        logger.warning("Could not import autocast_fix module. Using fallback implementation.")
+        # Define a fallback helper function to handle autocast compatibility
+        from contextlib import contextmanager
+
+        @contextmanager
+        def safe_autocast(dtype=None):
+            """Create a safe autocast context that works with different PyTorch versions"""
+            import torch
+
+            # Check if autocast supports dtype parameter (newer PyTorch versions)
+            try:
+                if dtype is not None:
+                    with torch.cuda.amp.autocast(dtype=dtype) as ctx:
+                        yield ctx
+                else:
+                    with torch.cuda.amp.autocast() as ctx:
+                        yield ctx
+            except TypeError:
+                # Older PyTorch versions don't support dtype parameter
+                logger.warning("PyTorch version doesn't support dtype in autocast. Using default dtype.")
+                with torch.cuda.amp.autocast() as ctx:
+                    yield ctx
 
     # Check transformers version for compatibility
     logger.info(f"Using transformers version: {transformers_version}")
@@ -946,25 +976,39 @@ def train_with_unsloth(args):
 
     logger.info("Loading and preprocessing dataset...")
 
-    # Load dataset
-    if args.all_subsets:
-        logger.info("Loading all language subsets")
-        from src.generative_ai_module.code_preprocessing import load_and_preprocess_all_subsets
-        train_dataset, eval_dataset = load_and_preprocess_all_subsets(
-            max_samples=args.max_samples,
-            sequence_length=args.max_length,
-            return_raw=True
-        )
-    else:
-        logger.info(f"Loading {args.dataset_subset} subset")
-        from src.generative_ai_module.code_preprocessing import load_and_preprocess_dataset
-        train_dataset, eval_dataset = load_and_preprocess_dataset(
-            max_samples=args.max_samples,
-            sequence_length=args.max_length,
-            subset=args.dataset_subset,
-            all_subsets=False,
-            return_raw=True
-        )
+    # Load dataset - always try to load all subsets first
+    logger.info("Attempting to load all language subsets")
+    from src.generative_ai_module.code_preprocessing import load_and_preprocess_all_subsets, load_and_preprocess_dataset
+
+    # First try to load all language subsets
+    train_dataset, eval_dataset = load_and_preprocess_all_subsets(
+        max_samples=args.max_samples,
+        sequence_length=args.max_length,
+        return_raw=True
+    )
+
+    # If loading all subsets failed or returned empty datasets, fall back to specific subset
+    if train_dataset is None or len(train_dataset) == 0:
+        logger.warning("Loading all subsets failed or returned empty datasets. Falling back to specific subset.")
+        if args.dataset_subset:
+            logger.info(f"Loading {args.dataset_subset} subset")
+            train_dataset, eval_dataset = load_and_preprocess_dataset(
+                max_samples=args.max_samples,
+                sequence_length=args.max_length,
+                subset=args.dataset_subset,
+                all_subsets=False,
+                return_raw=True
+            )
+        else:
+            # If no specific subset is specified, try python as a last resort
+            logger.info("No specific subset specified. Trying 'python' subset as fallback.")
+            train_dataset, eval_dataset = load_and_preprocess_dataset(
+                max_samples=args.max_samples,
+                sequence_length=args.max_length,
+                subset="python",
+                all_subsets=False,
+                return_raw=True
+            )
 
     # Validate datasets before proceeding
     if train_dataset is None or len(train_dataset) == 0:
@@ -1340,66 +1384,90 @@ def train_with_unsloth(args):
     if args.num_workers > 0:
         logger.warning(f"Reducing dataloader workers from {args.num_workers} to {safe_num_workers} to avoid CUDA multiprocessing issues")
 
-    training_args = TrainingArguments(
-        output_dir=args.output_dir,
-        num_train_epochs=args.epochs,
-        per_device_train_batch_size=args.batch_size,
-        per_device_eval_batch_size=args.batch_size,
-        gradient_accumulation_steps=args.gradient_accumulation_steps,
-        learning_rate=args.learning_rate,
-        weight_decay=args.weight_decay,
-        warmup_steps=args.warmup_steps,
-        max_grad_norm=args.max_grad_norm,
+    # Check transformers version to determine which parameters are supported
+    from transformers import __version__ as transformers_version
+    logger.info(f"Configuring TrainingArguments for transformers version: {transformers_version}")
+
+    # Create a dictionary of arguments that we'll filter based on version compatibility
+    training_args_dict = {
+        "output_dir": args.output_dir,
+        "num_train_epochs": args.epochs,
+        "per_device_train_batch_size": args.batch_size,
+        "per_device_eval_batch_size": args.batch_size,
+        "gradient_accumulation_steps": args.gradient_accumulation_steps,
+        "learning_rate": args.learning_rate,
+        "weight_decay": args.weight_decay,
+        "warmup_steps": args.warmup_steps,
+        "max_grad_norm": args.max_grad_norm,
 
         # Logging and evaluation settings
-        logging_steps=10,
-        save_steps=args.save_steps,
-        evaluation_strategy=args.evaluation_strategy,
-        eval_steps=args.eval_steps,
-        save_total_limit=args.save_total_limit,
-        save_safetensors=True,  # Use safetensors format for better compatibility
+        "logging_steps": 10,
+        "save_steps": args.save_steps,
+        "save_total_limit": args.save_total_limit,
 
         # Precision settings
-        bf16=args.bf16,
-        fp16=not args.bf16 and torch.cuda.is_available(),
+        "bf16": args.bf16,
+        "fp16": not args.bf16 and torch.cuda.is_available(),
 
         # Memory optimization settings
-        gradient_checkpointing=args.gradient_checkpointing,
-        optim="adamw_torch",  # More memory-efficient optimizer
-        adam_beta1=args.adam_beta1,
-        adam_beta2=args.adam_beta2,
-        adam_epsilon=args.adam_epsilon,
+        "gradient_checkpointing": args.gradient_checkpointing,
+        "optim": "adamw_torch",  # More memory-efficient optimizer
+        "adam_beta1": args.adam_beta1,
+        "adam_beta2": args.adam_beta2,
+        "adam_epsilon": args.adam_epsilon,
 
         # Data loading optimizations - adjusted for multiprocessing safety
-        remove_unused_columns=False,
-        dataloader_num_workers=safe_num_workers,  # Use 0 workers to avoid multiprocessing issues
-        dataloader_pin_memory=False,  # Set to False to avoid potential CUDA issues
-        group_by_length=True,
+        "remove_unused_columns": False,
+        "dataloader_num_workers": safe_num_workers,  # Use 0 workers to avoid multiprocessing issues
+        "dataloader_pin_memory": False,  # Set to False to avoid potential CUDA issues
+        "group_by_length": True,
 
         # Additional memory and performance optimizations
-        ddp_find_unused_parameters=False,
-        torch_compile=False,  # Disable torch.compile which can use more memory
-        report_to=["tensorboard"],  # Minimal reporting to save memory
+        "ddp_find_unused_parameters": False,
+        "torch_compile": False,  # Disable torch.compile which can use more memory
+        "report_to": ["tensorboard"],  # Minimal reporting to save memory
 
         # Learning rate scheduler
-        lr_scheduler_type=args.scheduler_type,
+        "lr_scheduler_type": args.scheduler_type,
 
         # Push to Hub settings (disabled by default)
-        push_to_hub=False,
-        hub_strategy="every_save",
-
-        # Mixed precision training
-        tf32=True,  # Use TF32 precision on Ampere+ GPUs for better performance
+        "push_to_hub": False,
 
         # Distributed training settings
-        local_rank=-1,
+        "local_rank": -1,
 
         # Seed for reproducibility
-        seed=42,
+        "seed": 42,
 
         # Additional safety settings
-        dataloader_drop_last=False    # Don't drop last batch
-    )
+        "dataloader_drop_last": False    # Don't drop last batch
+    }
+
+    # Add version-specific parameters
+    try:
+        # Try to parse version
+        version_parts = transformers_version.split('.')
+        major = int(version_parts[0])
+        minor = int(version_parts[1])
+
+        # For newer versions (4.28+), add these parameters
+        if major > 4 or (major == 4 and minor >= 28):
+            logger.info("Adding parameters for transformers 4.28+")
+            training_args_dict["save_safetensors"] = True
+            training_args_dict["hub_strategy"] = "every_save"
+            training_args_dict["tf32"] = True
+
+            # Add evaluation strategy parameters for newer versions
+            if hasattr(TrainingArguments, "evaluation_strategy"):
+                logger.info("Adding evaluation_strategy parameter")
+                training_args_dict["evaluation_strategy"] = "steps"
+                training_args_dict["eval_steps"] = args.eval_steps
+    except Exception as e:
+        logger.warning(f"Error parsing transformers version: {e}. Using basic parameters.")
+
+    # Create TrainingArguments with the filtered dictionary
+    logger.info(f"Creating TrainingArguments with parameters: {list(training_args_dict.keys())}")
+    training_args = TrainingArguments(**training_args_dict)
 
     # Create a completely custom data collator that doesn't rely on the parent class
     class SimpleDataCollator:

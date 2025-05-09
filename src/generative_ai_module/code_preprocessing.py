@@ -297,8 +297,16 @@ def load_and_preprocess_all_subsets(max_samples=None, sequence_length=512, retur
     Returns:
         train_data, valid_data: Combined preprocessed datasets from all languages
     """
+    # All available language subsets in CodeSearchNet
     all_subsets = ["python", "java", "go", "php", "ruby", "javascript"]
     start_time = time.time()
+
+    # Print information about the dataset
+    print("CodeSearchNet dataset information:")
+    print("  - Available languages: python, java, go, php, ruby, javascript")
+    print("  - Each language contains code functions with documentation")
+    print("  - Dataset will be processed to create instruction-response pairs")
+    print("  - All languages will be combined into a single dataset")
 
     print("Loading ALL language subsets from code_search_net dataset...")
 

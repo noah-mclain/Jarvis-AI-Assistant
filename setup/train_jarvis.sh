@@ -334,13 +334,136 @@ if [ "$MODEL_TYPE" = "code" ]; then
 
     # Fix bitsandbytes version for 4-bit quantization
     echo "Checking bitsandbytes version for 4-bit quantization compatibility..."
+
+    # Create a script to check and fix bitsandbytes version
+    cat > setup/fix_bitsandbytes_version.py << 'EOF'
+#!/usr/bin/env python3
+"""
+Check and fix bitsandbytes version for 4-bit quantization compatibility.
+"""
+import sys
+import logging
+import importlib
+import subprocess
+import os
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+def check_bitsandbytes_version():
+    """Check if bitsandbytes version is compatible with 4-bit quantization"""
+    try:
+        import bitsandbytes
+        if hasattr(bitsandbytes, '__version__'):
+            version = bitsandbytes.__version__
+            logger.info(f"bitsandbytes version: {version}")
+
+            # Parse version
+            try:
+                major, minor, patch = map(int, version.split('.'))
+                # Check if version is >= 0.42.0 for 4-bit quantization
+                if (major > 0) or (major == 0 and minor >= 42):
+                    logger.info("✅ bitsandbytes version is compatible with 4-bit quantization")
+                    return True
+                else:
+                    logger.warning("⚠️ bitsandbytes version is too old for 4-bit quantization")
+                    logger.warning("Minimum required: 0.42.0 for 4-bit quantization")
+                    return False
+            except ValueError:
+                logger.warning(f"Could not parse bitsandbytes version: {version}")
+                return False
+        else:
+            logger.warning("bitsandbytes version attribute not found")
+            return False
+    except ImportError:
+        logger.error("bitsandbytes is not installed")
+        return False
+
+def fix_bitsandbytes_version():
+    """Fix bitsandbytes version for 4-bit quantization compatibility"""
+    if check_bitsandbytes_version():
+        logger.info("bitsandbytes version is already compatible with 4-bit quantization")
+        return True
+
+    logger.info("Attempting to fix bitsandbytes version...")
+
+    # Try to upgrade bitsandbytes
+    try:
+        logger.info("Upgrading bitsandbytes to version 0.43.0...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "bitsandbytes>=0.43.0", "--no-deps"])
+        logger.info("bitsandbytes upgraded successfully")
+
+        # Verify the upgrade
+        if check_bitsandbytes_version():
+            logger.info("✅ bitsandbytes version is now compatible with 4-bit quantization")
+            return True
+        else:
+            logger.warning("⚠️ bitsandbytes version is still not compatible with 4-bit quantization")
+            return False
+    except Exception as e:
+        logger.error(f"Error upgrading bitsandbytes: {e}")
+        return False
+
+if __name__ == "__main__":
+    # Fix bitsandbytes version
+    success = fix_bitsandbytes_version()
+
+    # Exit with appropriate code
+    sys.exit(0 if success else 1)
+EOF
+
+    # Make the script executable
     chmod +x setup/fix_bitsandbytes_version.py
+
+    # Run the script
     python setup/fix_bitsandbytes_version.py
 
     # Fix unsloth trust_remote_code issue
     echo "Fixing unsloth trust_remote_code issue..."
     chmod +x setup/fix_unsloth_trust_remote_code.py
     python setup/fix_unsloth_trust_remote_code.py
+
+    # Fix autocast calls
+    echo "Fixing autocast calls..."
+    chmod +x setup/fix_autocast_calls.py
+    python setup/fix_autocast_calls.py
+
+    # Import the autocast_fix module in the unified_deepseek_training.py file
+    echo "Importing autocast_fix module in unified_deepseek_training.py..."
+    python -c "
+import re
+import sys
+from pathlib import Path
+
+file_path = Path('src/generative_ai_module/unified_deepseek_training.py')
+if not file_path.exists():
+    print(f'File not found: {file_path}')
+    sys.exit(1)
+
+with open(file_path, 'r') as f:
+    content = f.read()
+
+# Check if the import is already there
+if 'from autocast_fix import safe_autocast' not in content and 'from .autocast_fix import safe_autocast' not in content:
+    # Add the import after the other imports
+    import_section_end = content.find('# Configure logging')
+    if import_section_end != -1:
+        new_content = content[:import_section_end] + 'from .autocast_fix import safe_autocast, apply_autocast_fix\n\n' + content[import_section_end:]
+        with open(file_path, 'w') as f:
+            f.write(new_content)
+        print('Added autocast_fix import to unified_deepseek_training.py')
+    else:
+        print('Could not find a suitable position to add the import')
+else:
+    print('autocast_fix import already exists in unified_deepseek_training.py')
+"
 
     # Apply individual attention mask fix scripts directly
     echo "Applying individual attention mask fix scripts..."
@@ -349,9 +472,160 @@ if [ "$MODEL_TYPE" = "code" ]; then
     chmod +x setup/fix_tensor_size_mismatch.py
     chmod +x setup/fix_attention_dimension_mismatch.py
     chmod +x setup/fix_tuple_unpacking_error.py
+    chmod +x setup/fix_custom_encoder_decoder_model.py
     chmod +x setup/comprehensive_attention_mask_fix.py
     chmod +x setup/fix_all_attention_issues.py
     chmod +x setup/ultimate_attention_fix.py
+
+    # Fix custom encoder-decoder model
+    echo "Fixing custom encoder-decoder model..."
+    python setup/fix_custom_encoder_decoder_model.py
+
+    # Apply the autocast fix
+    echo "Applying autocast fix..."
+    python -c "
+try:
+    from src.generative_ai_module.autocast_fix import apply_autocast_fix
+    success = apply_autocast_fix()
+    print(f'Autocast fix applied: {success}')
+except Exception as e:
+    print(f'Error applying autocast fix: {e}')
+    print('Continuing anyway...')
+"
+
+    # Create autocast fix module if it doesn't exist
+    if [ ! -f "src/generative_ai_module/autocast_fix.py" ]; then
+        echo "Creating autocast fix module..."
+        cat > src/generative_ai_module/autocast_fix.py << 'EOF'
+#!/usr/bin/env python3
+"""
+Fix for autocast compatibility issues across different PyTorch versions.
+This module provides a safe_autocast context manager that works with different PyTorch versions,
+and a function to patch all torch.cuda.amp.autocast calls in the codebase.
+"""
+
+import logging
+import sys
+import torch
+from contextlib import contextmanager
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+@contextmanager
+def safe_autocast(dtype=None):
+    """
+    Create a safe autocast context that works with different PyTorch versions.
+
+    Args:
+        dtype: The dtype to use for autocast (only supported in newer PyTorch versions)
+
+    Yields:
+        An autocast context manager that works with the current PyTorch version
+    """
+    # Check if torch.cuda.amp.autocast exists
+    if not hasattr(torch.cuda, 'amp') or not hasattr(torch.cuda.amp, 'autocast'):
+        logger.warning("torch.cuda.amp.autocast not available. Using no-op context manager.")
+        # Create a no-op context manager
+        @contextmanager
+        def dummy_context_manager():
+            yield
+        yield dummy_context_manager()
+        return
+
+    # Check if autocast supports dtype parameter (newer PyTorch versions)
+    try:
+        if dtype is not None:
+            # Try to create an autocast with dtype parameter
+            with torch.cuda.amp.autocast(dtype=dtype) as ctx:
+                yield ctx
+        else:
+            # Use default dtype
+            with torch.cuda.amp.autocast() as ctx:
+                yield ctx
+    except TypeError:
+        # Older PyTorch versions don't support dtype parameter
+        logger.warning("PyTorch version doesn't support dtype in autocast. Using default dtype.")
+        with torch.cuda.amp.autocast() as ctx:
+            yield ctx
+
+def patch_autocast_calls():
+    """
+    Patch all autocast calls in the codebase.
+    This function monkey-patches torch.cuda.amp.autocast to use our safe_autocast function.
+    """
+    try:
+        # Check if torch.cuda.amp.autocast exists
+        if not hasattr(torch.cuda, 'amp') or not hasattr(torch.cuda.amp, 'autocast'):
+            logger.warning("torch.cuda.amp.autocast not available. Nothing to patch.")
+            return False
+
+        # Store the original autocast function
+        original_autocast = torch.cuda.amp.autocast
+
+        # Define a patched autocast function
+        class patched_autocast(torch.cuda.amp.autocast):
+            def __init__(self, *args, **kwargs):
+                # Extract dtype if present
+                dtype = kwargs.get('dtype', None)
+
+                # Remove dtype if it's not supported in this PyTorch version
+                try:
+                    # Try to create an autocast with the provided arguments
+                    super().__init__(*args, **kwargs)
+                except TypeError:
+                    # If dtype is not supported, remove it and try again
+                    if 'dtype' in kwargs:
+                        logger.warning("PyTorch version doesn't support dtype in autocast. Removing dtype parameter.")
+                        kwargs.pop('dtype')
+                    super().__init__(*args, **kwargs)
+
+        # Apply the patch
+        torch.cuda.amp.autocast = patched_autocast
+        logger.info("Successfully patched torch.cuda.amp.autocast")
+
+        # Also patch the module-level import
+        if 'torch.cuda.amp' in sys.modules:
+            sys.modules['torch.cuda.amp'].autocast = patched_autocast
+            logger.info("Successfully patched torch.cuda.amp module")
+
+        return True
+    except Exception as e:
+        logger.error(f"Error in patch_autocast_calls: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False
+
+def apply_autocast_fix():
+    """Apply the autocast fix and return True if successful"""
+    try:
+        success = patch_autocast_calls()
+        if success:
+            logger.info("Successfully applied autocast fix")
+        else:
+            logger.warning("Failed to apply autocast fix")
+        return success
+    except Exception as e:
+        logger.error(f"Failed to apply autocast fix: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False
+
+if __name__ == "__main__":
+    # Apply the autocast fix
+    success = apply_autocast_fix()
+
+    # Exit with appropriate code
+    sys.exit(0 if success else 1)
+EOF
+    fi
 
     # Check if transformers.utils is available
     echo "Checking if transformers.utils is available..."
