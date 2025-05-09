@@ -123,6 +123,27 @@ if transformers_info_dirs:
             subprocess.run(['rm', '-rf', d])
 "
 
+# Install joblib first to ensure it's available early
+echo "Installing joblib first..."
+pip install joblib==1.3.2
+
+# Verify joblib installation
+python -c "
+try:
+    import joblib
+    print(f'✅ joblib version: {joblib.__version__}')
+except ImportError as e:
+    print(f'❌ joblib error: {e}')
+    print('Installing joblib with pip...')
+    import os
+    os.system('pip install joblib==1.3.2')
+    try:
+        import joblib
+        print(f'✅ joblib version after reinstall: {joblib.__version__}')
+    except ImportError:
+        print('❌ Failed to install joblib')
+"
+
 # Clean up environment
 echo "Performing complete environment cleanup..."
 
@@ -823,9 +844,68 @@ if [ "$IN_PAPERSPACE" = "1" ]; then
     apt-get update -q
     apt-get install -y rclone fuse
 
+    # Interactive rclone configuration
+    echo "===================================================================="
+    echo "Interactive rclone configuration for Google Drive"
+    echo "===================================================================="
+    echo "You will now be guided through the rclone configuration process."
+    echo "Please follow these steps:"
+    echo "1. Select 'n' for New remote"
+    echo "2. Enter 'gdrive' as the name"
+    echo "3. Select the number for 'Google Drive'"
+    echo "4. For client_id and client_secret, just press Enter to use the defaults"
+    echo "5. Select 'scope' option 1 (full access)"
+    echo "6. For root_folder_id, just press Enter"
+    echo "7. For service_account_file, just press Enter"
+    echo "8. Select 'y' to edit advanced config if you need to, otherwise 'n'"
+    echo "9. Select 'y' to use auto config"
+    echo "10. Follow the browser authentication steps when prompted"
+    echo "11. Select 'y' to confirm the configuration is correct"
+    echo "12. Select 'q' to quit the config process when done"
+    echo "===================================================================="
+    echo "Starting rclone config now..."
+    echo "Press Enter to continue"
+    read -p ""
+
+    # Run rclone config interactively
+    rclone config
+
+    # Verify rclone configuration
+    echo "Verifying rclone configuration..."
+    if rclone listremotes | grep -q "gdrive:"; then
+        echo "✅ Google Drive remote 'gdrive:' configured successfully"
+    else
+        echo "⚠️ Google Drive remote 'gdrive:' not found in rclone config"
+        echo "You can manually configure it later with: rclone config"
+    fi
+
     # Create mount point for Google Drive
     DRIVE_MOUNT_POINT="/notebooks/drive"
     mkdir -p "$DRIVE_MOUNT_POINT"
+
+    # Mount Google Drive
+    echo "Mounting Google Drive..."
+    if rclone listremotes | grep -q "gdrive:"; then
+        # Mount in the background
+        rclone mount gdrive: "$DRIVE_MOUNT_POINT" --daemon --vfs-cache-mode=full --vfs-cache-max-size=1G --dir-cache-time=1h --buffer-size=32M --transfers=4 --checkers=8 --drive-chunk-size=32M --timeout=1h --umask=000
+
+        # Wait for the mount to be ready
+        echo "Waiting for Google Drive to be mounted..."
+        for i in {1..10}; do
+            if mountpoint -q "$DRIVE_MOUNT_POINT"; then
+                echo "✅ Google Drive mounted successfully at $DRIVE_MOUNT_POINT"
+                break
+            fi
+            echo "Waiting... ($i/10)"
+            sleep 1
+        done
+
+        if ! mountpoint -q "$DRIVE_MOUNT_POINT"; then
+            echo "⚠️ Google Drive mount not detected. Will try to continue anyway."
+        fi
+    else
+        echo "⚠️ Skipping Google Drive mount as 'gdrive:' remote was not configured"
+    fi
 
     # Define Jarvis AI Assistant directory structure
     JARVIS_DIR="$DRIVE_MOUNT_POINT/My Drive/Jarvis_AI_Assistant"
@@ -851,6 +931,11 @@ if [ "$IN_PAPERSPACE" = "1" ]; then
 
     # Create a test file to verify the mount is working
     echo "Testing Google Drive mount..." > "$JARVIS_DIR/mount_test.txt"
+    if [ -f "$JARVIS_DIR/mount_test.txt" ]; then
+        echo "✅ Successfully wrote test file to Google Drive"
+    else
+        echo "⚠️ Could not write test file to Google Drive"
+    fi
 
     # Check if mount_drive_paperspace.py exists and is executable
     if [ -f "setup/mount_drive_paperspace.py" ]; then
@@ -879,9 +964,39 @@ def mount_google_drive():
     result = subprocess.run(["rclone", "listremotes"], capture_output=True, text=True)
     if "gdrive:" not in result.stdout:
         print("Google Drive remote not found in rclone config.")
-        print("Please run 'rclone config' to set up Google Drive remote.")
-        print("Follow the prompts to create a new remote named 'gdrive' for Google Drive.")
-        return False
+        print("Would you like to configure rclone now? (y/n)")
+        choice = input().strip().lower()
+        if choice == 'y':
+            print("\nPlease follow these steps:")
+            print("1. Select 'n' for New remote")
+            print("2. Enter 'gdrive' as the name")
+            print("3. Select the number for 'Google Drive'")
+            print("4. For client_id and client_secret, just press Enter to use the defaults")
+            print("5. Select 'scope' option 1 (full access)")
+            print("6. For root_folder_id, just press Enter")
+            print("7. For service_account_file, just press Enter")
+            print("8. Select 'y' to edit advanced config if you need to, otherwise 'n'")
+            print("9. Select 'y' to use auto config")
+            print("10. Follow the browser authentication steps when prompted")
+            print("11. Select 'y' to confirm the configuration is correct")
+            print("12. Select 'q' to quit the config process when done")
+            print("\nStarting rclone config now...\n")
+
+            # Run rclone config
+            subprocess.run(["rclone", "config"])
+
+            # Check if configuration was successful
+            result = subprocess.run(["rclone", "listremotes"], capture_output=True, text=True)
+            if "gdrive:" not in result.stdout:
+                print("Google Drive remote still not found in rclone config.")
+                print("Please run 'rclone config' manually later.")
+                return False
+            else:
+                print("✅ Google Drive remote 'gdrive:' configured successfully")
+        else:
+            print("Please run 'rclone config' to set up Google Drive remote.")
+            print("Follow the prompts to create a new remote named 'gdrive' for Google Drive.")
+            return False
 
     # Create mount point
     mount_point = "/notebooks/drive"
