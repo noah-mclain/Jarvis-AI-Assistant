@@ -1,5 +1,4 @@
-[file name]: requirements.txt
-[file content begin]
+
 # Core foundation packages - must be installed first
 numpy==1.26.4
 --extra-index-url https://download.pytorch.org/whl/cu121
@@ -67,4 +66,3 @@ flash-attn==2.5.5
 
 # Spacy model (direct URL)
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0.tar.gz
-[file content end]
