@@ -834,38 +834,38 @@ fi
 # [Remaining training code sections follow the same pattern of fixes...]
 
 # Final verification Python code
-python -c '
+python -c "
 import os
 import sys
 import torch
 
+model_type = os.environ.get('MODEL_TYPE', '')
 model_dirs = {
-    "code": "/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-6.7b-finetuned",
-    "text": "/notebooks/Jarvis_AI_Assistant/models/flan-ul2-finetuned",
-    "cnn-text": "/notebooks/Jarvis_AI_Assistant/models/cnn-flan-ul2-finetuned",
-    "custom-model": "/notebooks/Jarvis_AI_Assistant/models/custom-encoder-decoder"
+    'code': '/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-6.7b-finetuned',
+    'text': '/notebooks/Jarvis_AI_Assistant/models/flan-ul2-finetuned',
+    'cnn-text': '/notebooks/Jarvis_AI_Assistant/models/cnn-flan-ul2-finetuned',
+    'custom-model': '/notebooks/Jarvis_AI_Assistant/models/custom-encoder-decoder'
 }
 
-model_type = os.environ.get("MODEL_TYPE", "")
 if model_type in model_dirs:
     model_dir = model_dirs[model_type]
     if os.path.exists(model_dir):
-        print(f"✓ Model directory {model_dir} exists")
-        required_files = ["model.pt"] if model_type != "code" else ["config.json", "adapter_config.json"]
+        print(f'✓ Model directory {model_dir} exists')
+        required_files = ['model.pt'] if model_type != 'code' else ['config.json', 'adapter_config.json']
         missing = [f for f in required_files if not os.path.exists(os.path.join(model_dir, f))]
         if missing:
-            print(f"❌ WARNING: Missing files: {missing}")
+            print(f'❌ WARNING: Missing files: {missing}')
         else:
-            print(f"✓ All required files present")
+            print(f'✓ All required files present')
     else:
-        print(f"❌ WARNING: Directory {model_dir} missing")
+        print(f'❌ WARNING: Directory {model_dir} missing')
 else:
-    print(f"❌ Unknown model type: {model_type}")
+    print(f'❌ Unknown model type: {model_type}')
 
 if torch.cuda.is_available():
     torch.cuda.empty_cache()
-    print("✓ CUDA cache cleared")
-'
+    print('✓ CUDA cache cleared')
+"
 
 # Final cleanup
 echo "Cleaning up temporary files..."
