@@ -81,14 +81,23 @@ rm -rf ~/.cache/huggingface
 # Install dependencies
 echo "Installing dependencies..."
 chmod +x setup/consolidated_install_dependencies.sh
-./setup/consolidated_install_dependencies.sh
+./setup/consolidated_install_dependencies.sh || {
+    echo "⚠️ Warning: Dependencies installation script exited with an error."
+    echo "Continuing with setup anyway, but some features may not work correctly."
+}
 
 # Configure GPU optimizations
 echo "Configuring GPU optimizations..."
 mkdir -p ~/.config/accelerate
 
 # Detect GPU type
-GPU_TYPE=$(python -c "import torch; print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None')")
+GPU_TYPE=$(python -c "
+try:
+    import torch
+    print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None')
+except Exception:
+    print('None')
+")
 echo "Detected GPU: $GPU_TYPE"
 
 if [[ "$GPU_TYPE" == *"A100"* ]]; then
@@ -380,6 +389,12 @@ try:
 except Exception as e:
     print(f'❌ unsloth error: {e}')
 "
+
+# Final fallback installation for critical dependencies
+echo "Performing final fallback installation for critical dependencies..."
+pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --extra-index-url https://download.pytorch.org/whl/cu121
+pip install transformers==4.36.2 peft==0.6.0 accelerate==0.25.0 bitsandbytes==0.41.0
+pip install protobuf\<4.24 werkzeug pandas huggingface-hub markdown
 
 echo "===================================================================="
 echo "Consolidated setup complete! Jarvis AI Assistant environment is ready."

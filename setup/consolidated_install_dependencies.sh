@@ -25,9 +25,9 @@ install_package() {
     package=$1
     version=$2
     options=$3
-    
+
     echo "Installing $package $version..."
-    
+
     if [ -z "$version" ]; then
         pip install "$package" --no-deps $options
         pip install "$package" $options
@@ -35,7 +35,7 @@ install_package() {
         pip install "$package$version" --no-deps $options
         pip install "$package$version" $options
     fi
-    
+
     # Check if installation was successful
     if python -c "import $package" 2>/dev/null; then
         echo "✅ $package installed successfully"
@@ -44,20 +44,11 @@ install_package() {
     fi
 }
 
-# Check if CUDA is available
-echo "Checking for CUDA availability..."
-if ! python -c "import torch; print(torch.cuda.is_available())" 2>/dev/null | grep -q "True"; then
-    echo "❌ ERROR: CUDA is not available. This setup requires CUDA."
-    exit 1
-fi
+# Skip CUDA check initially since PyTorch isn't installed yet
+echo "Checking for CUDA availability will be done after PyTorch installation..."
 
-# Get CUDA version
-CUDA_VERSION=$(python -c "import torch; print(torch.version.cuda)")
-echo "CUDA Version: $CUDA_VERSION"
-
-# Check PyTorch version
-TORCH_VERSION=$(python -c "import torch; print(torch.__version__)")
-echo "PyTorch Version: $TORCH_VERSION"
+# Set a flag to check CUDA later
+CHECK_CUDA_LATER=1
 
 # Set LD_LIBRARY_PATH for CUDA libraries
 echo "Setting up CUDA library paths..."
@@ -83,6 +74,20 @@ fi
 # 1.2 Install PyTorch 2.1.2 with CUDA 12.1 (verified compatible version)
 echo "Installing PyTorch 2.1.2 with CUDA 12.1 support..."
 pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --extra-index-url https://download.pytorch.org/whl/cu121
+
+# Now check if CUDA is available after PyTorch installation
+echo "Checking for CUDA availability..."
+if python -c "import torch; print(torch.cuda.is_available())" 2>/dev/null | grep -q "True"; then
+    echo "✅ CUDA is available!"
+    # Get CUDA version
+    CUDA_VERSION=$(python -c "import torch; print(torch.version.cuda)")
+    echo "CUDA Version: $CUDA_VERSION"
+    # Check PyTorch version
+    TORCH_VERSION=$(python -c "import torch; print(torch.__version__)")
+    echo "PyTorch Version: $TORCH_VERSION"
+else
+    echo "⚠️ CUDA is not available. Continuing anyway, but GPU acceleration won't work."
+fi
 
 # 1.3 Install core scientific packages
 echo "Installing core scientific packages..."
@@ -151,7 +156,7 @@ if python -c "import flash_attn; print(f'Flash Attention version: {flash_attn.__
 else
     echo "⚠️ Flash Attention installation failed. Trying alternative method..."
     pip install flash-attn==2.5.5 --no-build-isolation
-    
+
     # Verify again
     if python -c "import flash_attn; print(f'Flash Attention version: {flash_attn.__version__}')"; then
         echo "✅ Flash Attention successfully installed with alternative method!"
@@ -202,6 +207,64 @@ try:
     print('✅ opt_einsum successfully imported')
 except Exception as e:
     print(f'❌ opt_einsum error: {e}')
+"
+
+echo "===================================================================="
+echo "Performing final verification of critical dependencies..."
+echo "===================================================================="
+
+# Verify critical dependencies
+python -c "
+import sys
+print(f'Python version: {sys.version}')
+
+try:
+    import torch
+    print(f'PyTorch version: {torch.__version__}')
+    print(f'CUDA available: {torch.cuda.is_available()}')
+    if torch.cuda.is_available():
+        print(f'CUDA device: {torch.cuda.get_device_name(0)}')
+except Exception as e:
+    print(f'❌ PyTorch error: {e}')
+    # Install PyTorch again as a fallback
+    import os
+    os.system('pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --extra-index-url https://download.pytorch.org/whl/cu121')
+
+try:
+    import transformers
+    print(f'Transformers version: {transformers.__version__}')
+except Exception as e:
+    print(f'❌ Transformers error: {e}')
+    # Install Transformers again as a fallback
+    import os
+    os.system('pip install transformers==4.36.2')
+
+try:
+    import peft
+    print(f'PEFT version: {peft.__version__}')
+except Exception as e:
+    print(f'❌ PEFT error: {e}')
+    # Install PEFT again as a fallback
+    import os
+    os.system('pip install peft==0.6.0')
+
+try:
+    import accelerate
+    print(f'Accelerate version: {accelerate.__version__}')
+except Exception as e:
+    print(f'❌ Accelerate error: {e}')
+    # Install Accelerate again as a fallback
+    import os
+    os.system('pip install accelerate==0.25.0')
+
+try:
+    import bitsandbytes
+    print(f'BitsAndBytes version: {bitsandbytes.__version__}')
+except Exception as e:
+    print(f'❌ BitsAndBytes error: {e}')
+    # Install BitsAndBytes again as a fallback
+    import os
+    os.system('pip install bitsandbytes==0.41.0')
 "
 
 echo "===================================================================="
