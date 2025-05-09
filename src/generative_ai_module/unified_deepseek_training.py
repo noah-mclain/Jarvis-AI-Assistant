@@ -33,7 +33,46 @@ if __name__ == "__main__":
         # If it's already set, this will raise a RuntimeError
         print("Multiprocessing start method already set to:", multiprocessing.get_start_method())
 
-from src.generative_ai_module.autocast_fix import safe_autocast, apply_autocast_fix
+try:
+    from src.generative_ai_module.autocast_fix import safe_autocast, apply_autocast_fix
+except ImportError:
+    # Try relative import
+    try:
+        from .autocast_fix import safe_autocast, apply_autocast_fix
+    except ImportError:
+        # Define fallback functions if import fails
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning("Could not import autocast_fix module, using fallback implementation")
+
+        import torch
+        from contextlib import contextmanager
+
+        @contextmanager
+        def safe_autocast(dtype=None):
+            """Fallback safe_autocast function"""
+            if hasattr(torch.cuda, 'amp') and hasattr(torch.cuda.amp, 'autocast'):
+                if dtype is not None:
+                    try:
+                        with safe_autocast(dtype=dtype) as ctx:
+                            yield ctx
+                    except TypeError:
+                        with safe_autocast() as ctx:
+                            yield ctx
+                else:
+                    with safe_autocast() as ctx:
+                        yield ctx
+            else:
+                # Dummy context manager if autocast is not available
+                @contextmanager
+                def dummy_context_manager():
+                    yield
+                yield dummy_context_manager()
+
+        def apply_autocast_fix():
+            """Fallback apply_autocast_fix function"""
+            logger.info("Using fallback autocast fix implementation")
+            return True
 
 # Configure logging
 logging.basicConfig(
@@ -918,15 +957,15 @@ def train_with_unsloth(args):
             # Check if autocast supports dtype parameter (newer PyTorch versions)
             try:
                 if dtype is not None:
-                    with torch.cuda.amp.autocast(dtype=dtype) as ctx:
+                    with safe_autocast(dtype=dtype) as ctx:
                         yield ctx
                 else:
-                    with torch.cuda.amp.autocast() as ctx:
+                    with safe_autocast() as ctx:
                         yield ctx
             except TypeError:
                 # Older PyTorch versions don't support dtype parameter
                 logger.warning("PyTorch version doesn't support dtype in autocast. Using default dtype.")
-                with torch.cuda.amp.autocast() as ctx:
+                with safe_autocast() as ctx:
                     yield ctx
 
     # Check transformers version for compatibility
@@ -1936,7 +1975,7 @@ def train_with_unsloth(args):
                     if is_peft_model and "got multiple values for argument" in str(forward_error) if 'forward_error' in locals() else False:
                         logger.info("Using special PeftModel forward call to avoid 'got multiple values for argument' error")
                         # Use automatic mixed precision with the model's dtype
-                        with torch.cuda.amp.autocast(dtype=model_dtype):
+                        with safe_autocast(dtype=model_dtype):
                             # Call the model's forward method correctly (without passing model as first argument)
                             outputs = model.forward(
                                 input_ids=inputs["input_ids"],
@@ -1947,7 +1986,7 @@ def train_with_unsloth(args):
                             )
                     else:
                         # Use automatic mixed precision with the model's dtype
-                        with torch.cuda.amp.autocast(dtype=model_dtype):
+                        with safe_autocast(dtype=model_dtype):
                             # Forward pass with use_cache=False for gradient checkpointing
                             # CRITICAL FIX: Always use explicit keyword arguments
                             outputs = model(
@@ -1996,7 +2035,7 @@ def train_with_unsloth(args):
                         if is_peft_model and "got multiple values for argument" in str(forward_error):
                             logger.info("Using special PeftModel forward call to avoid 'got multiple values for argument' error")
                             # Use automatic mixed precision with the model's dtype
-                            with torch.cuda.amp.autocast(dtype=model_dtype):
+                            with safe_autocast(dtype=model_dtype):
                                 # Call the model's forward method correctly
                                 outputs = model.forward(
                                     input_ids=inputs["input_ids"],
@@ -2007,7 +2046,7 @@ def train_with_unsloth(args):
                                 )
                         else:
                             # Use automatic mixed precision with the model's dtype
-                            with torch.cuda.amp.autocast(dtype=model_dtype):
+                            with safe_autocast(dtype=model_dtype):
                                 outputs = model(
                                     input_ids=inputs["input_ids"],
                                     attention_mask=None,  # Skip attention mask
@@ -2029,7 +2068,7 @@ def train_with_unsloth(args):
                             if is_peft_model and ("got multiple values for argument" in str(forward_error) or "got multiple values for argument" in str(direct_error)):
                                 logger.info("Using special PeftModel forward call to avoid 'got multiple values for argument' error")
                                 # Use automatic mixed precision with the model's dtype
-                                with torch.cuda.amp.autocast(dtype=model_dtype):
+                                with safe_autocast(dtype=model_dtype):
                                     # Call the model's forward method correctly
                                     outputs = model.forward(
                                         input_ids=inputs["input_ids"],
@@ -2039,7 +2078,7 @@ def train_with_unsloth(args):
                                     )
                             else:
                                 # Use automatic mixed precision with the model's dtype
-                                with torch.cuda.amp.autocast(dtype=model_dtype):
+                                with safe_autocast(dtype=model_dtype):
                                     outputs = model(
                                         input_ids=inputs["input_ids"],
                                         labels=inputs["labels"],
@@ -2063,7 +2102,7 @@ def train_with_unsloth(args):
                                                      "got multiple values for argument" in str(no_mask_error)):
                                     logger.info("Using special PeftModel forward call to avoid 'got multiple values for argument' error")
                                     # Use automatic mixed precision with the model's dtype
-                                    with torch.cuda.amp.autocast(dtype=model_dtype):
+                                    with safe_autocast(dtype=model_dtype):
                                         # Call the model's forward method correctly
                                         outputs = model.forward(
                                             input_ids=inputs["input_ids"],
@@ -2072,7 +2111,7 @@ def train_with_unsloth(args):
                                         )
                                 else:
                                     # Use automatic mixed precision with the model's dtype
-                                    with torch.cuda.amp.autocast(dtype=model_dtype):
+                                    with safe_autocast(dtype=model_dtype):
                                         outputs = model(
                                             input_ids=inputs["input_ids"],
                                             use_cache=False,
@@ -2442,7 +2481,7 @@ def train_with_unsloth(args):
                         # Recompute the forward pass with explicit gradient tracking
                         with torch.enable_grad():
                             # Use automatic mixed precision with the model's dtype
-                            with torch.cuda.amp.autocast(dtype=model_dtype):
+                            with safe_autocast(dtype=model_dtype):
                                 # Check if we have a PeftModel
                                 is_peft_model = hasattr(model, 'base_model') and 'Peft' in model.__class__.__name__
 
@@ -2794,7 +2833,7 @@ def train_with_unsloth(args):
                     logger.info("Setting return_dict=True to avoid tuple unpacking issues")
 
                 # Use automatic mixed precision with the model's dtype
-                with torch.cuda.amp.autocast(dtype=model_dtype):
+                with safe_autocast(dtype=model_dtype):
                     outputs = original_forward(*new_args, **new_kwargs)
             except Exception as e:
                 logger.error(f"Error in original forward: {e}")
@@ -2843,7 +2882,7 @@ def train_with_unsloth(args):
                         # This ensures we get a single object back instead of a tuple
 
                     # Use automatic mixed precision with the model's dtype
-                    with torch.cuda.amp.autocast(dtype=model_dtype):
+                    with safe_autocast(dtype=model_dtype):
                         # Call forward with explicit arguments and minimal parameters
                         # CRITICAL FIX: Always use return_dict=True to avoid tuple unpacking issues
                         outputs = original_forward(
@@ -2870,7 +2909,7 @@ def train_with_unsloth(args):
                             labels = labels.to(dtype=torch.long)
 
                         # Use automatic mixed precision with the model's dtype
-                        with torch.cuda.amp.autocast(dtype=model_dtype):
+                        with safe_autocast(dtype=model_dtype):
                             # CRITICAL FIX: Always use return_dict=True to avoid tuple unpacking issues
                             outputs = original_forward(
                                 input_ids=input_ids,

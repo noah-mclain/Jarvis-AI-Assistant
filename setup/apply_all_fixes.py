@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""
+""""
 Unified fix script that applies all attention mask fixes in the correct order.
 This script addresses the specific error:
 "The size of tensor a (6) must match the size of tensor b (2048) at non-singleton dimension 2"
-"""
+""""
 
 import sys
 import logging
@@ -92,9 +92,9 @@ def apply_all_fixes():
             # Define a patched function that handles the specific error
             @staticmethod
             def patched_unmask_unattended(attention_mask, indices_k=None, indices_q=None, unmasked_value=True):
-                """
+                """"
                 Patched version of _unmask_unattended that handles the specific tensor size mismatch error.
-                """
+                """"
                 # Get the device of the attention mask
                 device = attention_mask.device
 

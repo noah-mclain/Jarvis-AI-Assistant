@@ -22,7 +22,7 @@ def find_unterminated_strings(file_path):
 
     for i, line in enumerate(lines):
         # Check for single quotes
-        single_quotes = line.count("'")'
+        single_quotes = line.count("'")
         if single_quotes % 2 != 0 and not line.strip().startswith('#'):
             issues.append((i+1, line))
 
@@ -55,16 +55,16 @@ def fix_unterminated_strings(file_path):
 
         # Check for print statements with unterminated strings
         if "print('" in line_content and not line_content.endswith("')"):
-            fixed_line = line_content + "')"'
+            fixed_line = line_content + "')"
             print(f"Fixed to: {fixed_line}")
             lines[line_num-1] = fixed_line + '\n'
             fixed = True
 
         # Check for other unterminated strings
-        elif "'" in line_content:'
+        elif "'" in line_content:
             # Count single quotes
-            if line_content.count("'") % 2 != 0:'
-                fixed_line = line_content + "'"'
+            if line_content.count("'") % 2 != 0:
+                fixed_line = line_content + "'"
                 print(f"Fixed to: {fixed_line}")
                 lines[line_num-1] = fixed_line + '\n'
                 fixed = True

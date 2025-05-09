@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-""""
+"""
 Fix for the attention mask issue in transformers library.
 
 This script applies patches to fix the attention mask handling in transformers library,
@@ -8,7 +8,7 @@ with DeepSeek and LLaMA models.
 
 The fix ensures that attention masks are always in the correct shape (2D) and on the
 correct device before being processed by the model.
-""""
+"""
 
 import os
 import sys
@@ -59,10 +59,10 @@ def fix_transformers_attention_mask():
 
             # Define patched function with a flexible signature to handle different versions
             def patched_prepare_4d(*args, **kwargs):
-                """"
+                """
                 Patched version that ensures attention_mask is 2D before processing.
                 Handles different function signatures across transformers versions.
-                """"
+                """
                 # Extract attention_mask from args or kwargs
                 attention_mask = None
                 if len(args) > 0:
@@ -137,13 +137,13 @@ def fix_transformers_attention_mask():
             # Define patched function with a flexible signature
             @staticmethod
             def patched_unmask_unattended(*args, **kwargs):
-                """"
+                """
                 Patched version of _unmask_unattended that keeps tensors on the same device.
 
                 The original function has a call to .cpu() which causes device mismatch errors.
                 This patch ensures all operations happen on the same device and handles the
                 specific tensor size mismatch error.
-                """"
+                """
                 # Extract attention_mask from args or kwargs
                 attention_mask = None
                 if len(args) > 0:
@@ -313,10 +313,10 @@ def fix_transformers_attention_mask():
 
             # Define a patched forward method that properly handles attention masks
             def patched_forward(self, *args, **kwargs):
-                """"
+                """
                 Patched forward method for LlamaModel that properly handles attention masks.
                 This version is more flexible and can handle different function signatures.
-                """"
+                """
                 # Extract input_ids and inputs_embeds from kwargs
                 input_ids = kwargs.get('input_ids', None)
                 inputs_embeds = kwargs.get('inputs_embeds', None)
@@ -397,10 +397,10 @@ def fix_transformers_attention_mask():
 
             # Define a patched function with a flexible signature
             def patched_llama_prepare_4d(*args, **kwargs):
-                """"
+                """
                 Patched version of _prepare_4d_causal_attention_mask_for_sdpa in LlamaModel.
                 This handles the specific signature used in the LlamaModel implementation.
-                """"
+                """
                 # Extract attention_mask from args or kwargs
                 attention_mask = None
                 if len(args) > 0:
@@ -505,10 +505,10 @@ def fix_transformers_attention_mask():
 
             # Define a patched forward method with flexible signature
             def patched_forward(self, *args, **kwargs):
-                """"
+                """
                 Patched forward method that fixes attention mask issues.
                 This version is more flexible and can handle different function signatures.
-                """"
+                """
                 # Extract input_ids and inputs_embeds from kwargs
                 input_ids = kwargs.get('input_ids', None)
                 inputs_embeds = kwargs.get('inputs_embeds', None)
