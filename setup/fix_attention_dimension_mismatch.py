@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-""""
+"""
 Fix for the specific tensor dimension mismatch in DeepSeek models.
 
 This script specifically addresses the error:
 "The size of tensor a (6) must match the size of tensor b (2048) at non-singleton dimension 2"
 
 It directly patches the attention mechanism to handle this specific error.
-""""
+"""
 
 import sys
 import logging
@@ -50,9 +50,9 @@ def fix_attention_dimension_mismatch():
                 use_cache: bool = False,
                 **kwargs
             ):
-                """"
+                """
                 Patched forward method for LlamaAttention that handles tensor dimension mismatches.
-                """"
+                """
                 try:
                     # Try the original forward method first
                     return original_forward(
@@ -80,9 +80,9 @@ def fix_attention_dimension_mismatch():
                             # Define a patched function that handles the specific error
                             @staticmethod
                             def patched_unmask_unattended(attention_mask, indices_k=None, indices_q=None, unmasked_value=True):
-                                """"
+                                """
                                 Patched version of _unmask_unattended that handles the specific tensor size mismatch error.
-                                """"
+                                """
                                 # Get the device of the attention mask
                                 device = attention_mask.device
 

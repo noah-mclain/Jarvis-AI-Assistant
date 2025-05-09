@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-""""
+"""
 Check and fix bitsandbytes version for 4-bit quantization compatibility.
-""""
+"""
 import sys
 import logging
 import importlib

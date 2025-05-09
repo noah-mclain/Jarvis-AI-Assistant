@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-""""
+"""
 Comprehensive fix for all attention mask and tuple unpacking issues in transformers models.
 
 This script applies patches to fix:
@@ -9,7 +9,7 @@ This script applies patches to fix:
 4. "too many values to unpack (expected 2)" error in model forward pass
 
 Run this script before training to ensure all issues are fixed.
-""""
+"""
 
 import os
 import sys
@@ -28,21 +28,21 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def fix_all_attention_issues():
-    """"
+    """
     Apply all fixes for attention mask and tuple unpacking issues.
-    
+
     Returns:
         bool: True if all fixes were applied successfully, False otherwise.
-    """"
+    """
     success = True
-    
+
     # Run all fix scripts
     try:
         # Add the setup directory to sys.path
         setup_dir = os.path.dirname(os.path.abspath(__file__))
         if setup_dir not in sys.path:
             sys.path.insert(0, setup_dir)
-        
+
         # Import and run fix_transformers_attention_mask
         try:
             from fix_transformers_attention_mask import fix_transformers_attention_mask
@@ -54,7 +54,7 @@ def fix_all_attention_issues():
         except ImportError:
             logger.warning("⚠️ Could not import fix_transformers_attention_mask")
             success = False
-        
+
         # Import and run fix_attention_mask_params
         try:
             from fix_attention_mask_params import fix_attention_mask_params
@@ -66,7 +66,7 @@ def fix_all_attention_issues():
         except ImportError:
             logger.warning("⚠️ Could not import fix_attention_mask_params")
             success = False
-        
+
         # Import and run fix_tensor_size_mismatch
         try:
             from fix_tensor_size_mismatch import fix_tensor_size_mismatch
@@ -78,7 +78,7 @@ def fix_all_attention_issues():
         except ImportError:
             logger.warning("⚠️ Could not import fix_tensor_size_mismatch")
             success = False
-        
+
         # Import and run fix_attention_dimension_mismatch
         try:
             from fix_attention_dimension_mismatch import fix_attention_dimension_mismatch
@@ -90,7 +90,7 @@ def fix_all_attention_issues():
         except ImportError:
             logger.warning("⚠️ Could not import fix_attention_dimension_mismatch")
             success = False
-        
+
         # Import and run fix_tuple_unpacking_error
         try:
             from fix_tuple_unpacking_error import fix_tuple_unpacking_error
@@ -102,7 +102,7 @@ def fix_all_attention_issues():
         except ImportError:
             logger.warning("⚠️ Could not import fix_tuple_unpacking_error")
             success = False
-        
+
         # Import and run comprehensive_attention_mask_fix
         try:
             from comprehensive_attention_mask_fix import apply_comprehensive_fix
@@ -117,28 +117,28 @@ def fix_all_attention_issues():
     except Exception as e:
         logger.error(f"❌ Error running fix scripts: {e}")
         success = False
-    
+
     # Apply direct fixes to transformers library
     try:
         # Fix PreTrainedModel.forward to handle tuple outputs
         try:
             from transformers import PreTrainedModel
-            
+
             # Store the original forward method
             original_forward = PreTrainedModel.forward
-            
+
             # Define a patched forward method
             def patched_forward(self, *args, **kwargs):
-                """"
+                """
                 Patched forward method that ensures outputs are always ModelOutput objects.
-                """"
+                """
                 # Always set return_dict=True to avoid tuple outputs
                 if "return_dict" not in kwargs:
                     kwargs["return_dict"] = True
-                
+
                 # Call the original forward method
                 outputs = original_forward(self, *args, **kwargs)
-                
+
                 # Handle tuple outputs
                 if isinstance(outputs, tuple):
                     # Import ModelOutput
@@ -151,13 +151,13 @@ def fix_all_attention_issues():
                             def __init__(self, *args, **kwargs):
                                 super().__init__(*args, **kwargs)
                                 self.__dict__ = self
-                    
+
                     # Convert tuple to a dictionary-like object
                     outputs_dict = {}
-                    
+
                     # Check if we have labels in the kwargs to determine if first element is loss
                     has_labels = kwargs.get("labels") is not None
-                    
+
                     if len(outputs) >= 1:
                         # First element is typically the loss or logits
                         if has_labels:
@@ -169,18 +169,18 @@ def fix_all_attention_issues():
                         else:
                             # If no labels, first element is likely the logits
                             outputs_dict["logits"] = outputs[0]
-                        
+
                         # Add any remaining elements with generic names
                         for i in range(1, len(outputs)):
                             if i == 1 and "logits" in outputs_dict:
                                 continue  # Skip if we already assigned logits
                             outputs_dict[f"hidden_states_{i}"] = outputs[i]
-                        
+
                         # Convert to ModelOutput
                         outputs = ModelOutput(outputs_dict)
-                
+
                 return outputs
-            
+
             # Apply the patch
             PreTrainedModel.forward = patched_forward
             logger.info("✅ Successfully patched PreTrainedModel.forward")
@@ -190,7 +190,7 @@ def fix_all_attention_issues():
     except Exception as e:
         logger.error(f"❌ Error applying direct fixes: {e}")
         success = False
-    
+
     return success
 
 if __name__ == "__main__":

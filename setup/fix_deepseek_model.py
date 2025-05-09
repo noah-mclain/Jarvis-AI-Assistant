@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-""""
+"""
 Fix for DeepSeek model in transformers.
 
 This script ensures that the DeepSeek model is available in the transformers package
 by creating the necessary files and directories.
-""""
+"""
 
 import os
 import sys
@@ -43,7 +43,7 @@ def create_deepseek_module(transformers_dir):
     # Create __init__.py
     init_path = os.path.join(deepseek_dir, "__init__.py")
     with open(init_path, "w") as f:
-        f.write(""""
+        f.write("""
 # DeepSeek model implementation
 from typing import TYPE_CHECKING
 
@@ -100,16 +100,16 @@ else:
     # Create configuration_deepseek.py
     config_path = os.path.join(deepseek_dir, "configuration_deepseek.py")
     with open(config_path, "w") as f:
-        f.write(""""
+        f.write("""
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
 class DeepSeekConfig(PretrainedConfig):
-    """"
+    """
     Configuration class for DeepSeek model.
-    """"
+    """
     model_type = "deepseek"
 
     def __init__(
@@ -160,7 +160,7 @@ class DeepSeekConfig(PretrainedConfig):
     # Create modeling_deepseek.py
     modeling_path = os.path.join(deepseek_dir, "modeling_deepseek.py")
     with open(modeling_path, "w") as f:
-        f.write(""""
+        f.write("""
 import torch
 from torch import nn
 from ...modeling_utils import PreTrainedModel
@@ -345,7 +345,7 @@ class DeepSeekForSequenceClassification(DeepSeekPreTrainedModel):
             hidden_states=None,
             attentions=None,
         )
-""")"
+""")""
     logger.info(f"Created file: {modeling_path}")
     
     # Update models/__init__.py to include deepseek

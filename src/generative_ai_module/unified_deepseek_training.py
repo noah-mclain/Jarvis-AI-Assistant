@@ -3213,14 +3213,27 @@ def train_with_unsloth(args):
 
     # Try to use the ultimate fix first
     try:
-        from setup.ultimate_attention_fix import apply_ultimate_fix
-        apply_ultimate_fix()
-        logger.info("✅ Successfully applied ultimate attention fix")
+        # First try the new version of the fix
+        try:
+            from setup.ultimate_attention_fix_new import apply_ultimate_fix
+            apply_ultimate_fix()
+            logger.info("✅ Successfully applied new ultimate attention fix")
+        except ImportError:
+            # Fall back to the original version
+            from setup.ultimate_attention_fix import apply_ultimate_fix
+            apply_ultimate_fix()
+            logger.info("✅ Successfully applied original ultimate attention fix")
     except ImportError:
         try:
-            from src.setup.ultimate_attention_fix import apply_ultimate_fix
-            apply_ultimate_fix()
-            logger.info("✅ Successfully applied ultimate attention fix")
+            # Try src directory
+            try:
+                from src.setup.ultimate_attention_fix_new import apply_ultimate_fix
+                apply_ultimate_fix()
+                logger.info("✅ Successfully applied new ultimate attention fix from src")
+            except ImportError:
+                from src.setup.ultimate_attention_fix import apply_ultimate_fix
+                apply_ultimate_fix()
+                logger.info("✅ Successfully applied original ultimate attention fix from src")
         except ImportError:
             logger.warning("⚠️ Could not import ultimate_attention_fix module, trying other fixes")
 

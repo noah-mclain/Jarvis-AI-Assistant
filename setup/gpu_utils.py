@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-""""
+"""
 Comprehensive GPU utilities for Jarvis AI Assistant:
 1. Clear GPU memory
 2. Diagnose GPU memory usage
@@ -10,7 +10,7 @@ This script combines functionality from:
 - clear_gpu_memory.py
 - diagnose_gpu_memory.py
 - monitor_gpu.py
-""""
+"""
 
 import os
 import gc
@@ -276,13 +276,13 @@ def kill_gpu_processes():
 
 class GPUMonitor:
     def __init__(self, interval=1, log_file=None):
-        """"
+        """
         Initialize GPU monitor
         
         Args:
             interval: Polling interval in seconds
             log_file: File to save logs
-        """"
+        """
         self.interval = interval
         self.log_file = log_file or f"gpu_monitor_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
         self.running = False

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-""""
+"""
 Comprehensive Attention Mask Fix for Transformer Models
 
 This module provides a comprehensive solution to fix attention mask issues in transformer models,
@@ -13,7 +13,7 @@ particularly for DeepSeek and LLaMA models. It addresses various issues includin
 Usage:
     from setup.comprehensive_attention_mask_fix import apply_comprehensive_fix
     apply_comprehensive_fix()
-""""
+"""
 
 import sys
 import logging
@@ -29,13 +29,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def fix_dtype_mismatch():
-    """"
+    """
     Apply a comprehensive fix for dtype mismatches between BFloat16 and Half tensors.
     This is a common issue when using mixed precision training.
 
     Returns:
         bool: True if the fix was applied successfully, False otherwise
-    """"
+    """
     try:
         import torch
         import transformers
@@ -49,9 +49,9 @@ def fix_dtype_mismatch():
 
         # Define a patched forward method
         def patched_forward(self, *args, **kwargs):
-            """"
+            """
             Patched forward method that ensures consistent dtypes for all tensors.
-            """"
+            """
             # Get the model's dtype
             model_dtype = getattr(self, "dtype", None)
 
@@ -148,9 +148,9 @@ def fix_dtype_mismatch():
             original_prepare_inputs = PreTrainedModel.prepare_inputs_for_generation
 
             def patched_prepare_inputs(self, *args, **kwargs):
-                """"
+                """
                 Patched prepare_inputs_for_generation method that ensures consistent dtypes.
-                """"
+                """
                 # Call the original method
                 inputs = original_prepare_inputs(self, *args, **kwargs)
 
@@ -191,14 +191,14 @@ def fix_dtype_mismatch():
         return False
 
 def apply_comprehensive_fix():
-    """"
+    """
     Apply a comprehensive fix for attention mask issues in transformer models.
     This function patches various methods in the transformers library to handle
     attention mask issues properly.
 
     Returns:
         bool: True if the fix was applied successfully, False otherwise
-    """"
+    """
     try:
         import torch
         import transformers
@@ -221,9 +221,9 @@ def apply_comprehensive_fix():
 
             # Define a patched method
             def patched_prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
-                """"
+                """
                 Patched method that ensures the attention mask has the correct shape.
-                """"
+                """
                 try:
                     # Get batch size and sequence length
                     batch_size, seq_length = input_shape
@@ -314,9 +314,9 @@ def apply_comprehensive_fix():
 
                 # Define a patched method
                 def patched_deepseek_prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
-                    """"
+                    """
                     Patched method that ensures the attention mask has the correct shape for DeepSeek models.
-                    """"
+                    """
                     try:
                         # Get batch size and sequence length
                         batch_size, seq_length = input_shape
@@ -384,13 +384,13 @@ def apply_comprehensive_fix():
 
             @staticmethod
             def patched_unmask_unattended(*args, **kwargs):
-                """"
+                """
                 Patched version of _unmask_unattended that handles various issues:
                 1. Keeps tensors on the same device (no CPU conversion)
                 2. Handles tensor dimension mismatches
                 3. Properly handles the unmasked_value parameter
                 4. Creates compatible masks when expansion fails
-                """"
+                """
                 # Extract attention_mask from args or kwargs
                 attention_mask = None
                 if len(args) > 0:

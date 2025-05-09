@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-""""
+"""
 SpaCy Setup Script for Jarvis AI Assistant
 
 This script ensures spaCy is correctly installed with the en_core_web_sm model
@@ -10,7 +10,7 @@ Features:
 - Installation of en_core_web_sm model
 - Verification of installation
 - Automatic dependency resolution for common issues
-""""
+"""
 
 import os
 import sys

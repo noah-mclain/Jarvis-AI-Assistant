@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-""""
+"""
 Fix the transformers/models/__init__.py file to properly include the DeepSeek model.
 
 This script ensures that the DeepSeek model is properly imported in the transformers package
 by correctly updating the __init__.py file.
-""""
+"""
 
 import os
 import sys
@@ -129,7 +129,7 @@ def create_deepseek_files(transformers_dir):
     
     # Create __init__.py
     init_path = os.path.join(deepseek_dir, "__init__.py")
-    init_content = ''''
+    init_content = '''''
 # DeepSeek model implementation
 from typing import TYPE_CHECKING
 
@@ -187,16 +187,16 @@ else:
     
     # Create configuration_deepseek.py
     config_path = os.path.join(deepseek_dir, "configuration_deepseek.py")
-    config_content = ''''
+    config_content = '''''
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
 class DeepSeekConfig(PretrainedConfig):
-    """"
+    """
     Configuration class for DeepSeek model.
-    """"
+    """
     model_type = "deepseek"
 
     def __init__(
@@ -276,7 +276,7 @@ def main():
     modeling_path = os.path.join(deepseek_dir, "modeling_deepseek.py")
     
     with open(modeling_path, "w") as f:
-        f.write(''''
+        f.write('''''
 import torch
 from torch import nn
 from ...modeling_utils import PreTrainedModel

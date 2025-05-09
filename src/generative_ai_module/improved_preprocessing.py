@@ -294,12 +294,17 @@ def create_sequences(self, text: str, seq_length: int):
 
     return input_ids
 
-def create_improved_sequences(tokens, seq_length=256, stride=1):  # Reduced from 512 to 256
-    """Create sequences with stride for more efficient data usage"""
-    return [
-        (tokens[i : i + seq_length], tokens[i + seq_length])
-        for i in range(0, len(tokens) - seq_length - 1, stride)
-    ]
+def create_improved_sequences(tokens, tokenizer, seq_length=256, stride=1):  # Reduced from 512 to 256
+    """Create sequences with stride and padding"""
+    sequences = []
+    for i in range(0, len(tokens) - seq_length, stride):
+        chunk = tokens[i:i + seq_length]
+        # Pad if shorter than seq_length
+        if len(chunk) < seq_length:
+            chunk += [tokenizer.pad_idx] * (seq_length - len(chunk))
+        next_token = tokens[i + seq_length] if (i + seq_length) < len(tokens) else tokenizer.pad_idx
+        sequences.append((chunk, next_token))
+    return sequences
 
 def analyze_token_distribution(tokens, tokenizer):
     """Analyze token distribution and plot histogram"""
@@ -583,33 +588,36 @@ class ImprovedPreprocessor:
         if optimizer is not None:
             self.optimizer = optimizer
 
-        # Ensure we have model and optimizer
+        # Validate model/optimizer existence
         if not hasattr(self, 'model') or not hasattr(self, 'optimizer'):
-            raise ValueError("Model and optimizer must be provided either during initialization or when calling train_batch")
+            raise ValueError("Model and optimizer must be provided")
 
-        # Move to GPU with memory checks
-        if torch.cuda.is_available():
-            batch = batch.to(device='cuda', non_blocking=True)
+        # Unpack batch tuple into inputs and targets
+        inputs, targets = batch
 
-        # Verify input types before forward pass
-        if batch.dtype != torch.long:
-            batch = batch.to(torch.long)
+        # GPU Transfer with correct dtype handling
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        inputs = inputs.long().to(device, non_blocking=True)
+        targets = targets.long().to(device, non_blocking=True)
 
-        # Enable gradient checkpointing and mixed precision
+        # Mixed precision training
         with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
-            with torch.no_grad():
-                outputs = self.model(batch)
-                loss = outputs.loss
+            # Forward pass - assumes model takes inputs and returns logits
+            outputs = self.model(inputs)
+            
+            # Calculate loss (adjust based on model output structure)
+            # Example: CrossEntropyLoss for language modeling
+            loss_fn = torch.nn.CrossEntropyLoss()
+            loss = loss_fn(outputs.view(-1, outputs.size(-1)), targets.view(-1))
 
-        # Memory-optimized backward
+        # Backpropagation
         loss.backward()
         self.optimizer.step()
-        self.optimizer.zero_grad(set_to_none=True)  # Reduce memory fragmentation
+        self.optimizer.zero_grad(set_to_none=True)
 
-        # Force memory cleanup
-        del outputs
+        # Memory cleanup
         loss_value = loss.item()
-        del loss
+        del outputs, loss
         torch.cuda.empty_cache()
 
         return loss_value

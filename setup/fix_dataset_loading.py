@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-""""
+"""
 Fix for dataset loading issues in DeepSeek Coder training.
 This script provides a robust dataset loading solution that works on Paperspace.
-""""
+"""
 
 import os
 import sys
@@ -33,7 +33,7 @@ os.environ["HF_HOME"] = "/tmp/hf_cache"  # Use temporary directory for cache
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 def create_code_dataset(max_samples=1000, sequence_length=512):
-    """"
+    """
     Create a code dataset from scratch using GitHub code and code_search_net.
     This function loads each subset separately and combines them.
     
@@ -43,7 +43,7 @@ def create_code_dataset(max_samples=1000, sequence_length=512):
         
     Returns:
         DatasetDict with train and validation splits
-    """"
+    """
     print("Creating robust code dataset...")
     
     datasets = []
@@ -122,7 +122,7 @@ def create_code_dataset(max_samples=1000, sequence_length=512):
     return dataset_dict
 
 def tokenize_dataset(dataset_dict, tokenizer, sequence_length=512):
-    """"
+    """
     Tokenize the dataset without using device_map parameter.
     
     Args:
@@ -132,7 +132,7 @@ def tokenize_dataset(dataset_dict, tokenizer, sequence_length=512):
         
     Returns:
         DatasetDict with tokenized train and validation splits
-    """"
+    """
     print("Tokenizing dataset...")
     
     def tokenize_function(examples):
@@ -188,7 +188,7 @@ def tokenize_dataset(dataset_dict, tokenizer, sequence_length=512):
 
 # This function will be imported and used in the training script
 def get_fixed_datasets(tokenizer, max_samples=1000, sequence_length=512):
-    """"
+    """
     Get fixed datasets for training.
     
     Args:
@@ -198,7 +198,7 @@ def get_fixed_datasets(tokenizer, max_samples=1000, sequence_length=512):
         
     Returns:
         Tuple of (train_dataset, eval_dataset)
-    """"
+    """
     # Create the dataset
     dataset_dict = create_code_dataset(max_samples, sequence_length)
     

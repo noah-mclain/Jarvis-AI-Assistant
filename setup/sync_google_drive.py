@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-""""
+"""
 Sync files with Google Drive using rclone without mounting.
 
 This script provides functions to sync files between local directories and Google Drive
 using rclone's sync command instead of mounting.'
-""""
+"""
 
 import os
 import sys

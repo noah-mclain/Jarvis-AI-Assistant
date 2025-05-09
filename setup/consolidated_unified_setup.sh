@@ -4,6 +4,16 @@ echo "===================================================================="
 echo "Jarvis AI Assistant - Consolidated Setup Script"
 echo "===================================================================="
 
+# Fix all string literal issues first
+echo "Fixing all string literal issues in Python files..."
+chmod +x setup/fix_all_string_literals.py
+python setup/fix_all_string_literals.py
+
+# Copy the new ultimate attention fix to ensure it's available
+echo "Setting up new ultimate attention fix..."
+cp setup/ultimate_attention_fix_new.py setup/ultimate_attention_fix.py
+chmod +x setup/ultimate_attention_fix.py
+
 # Detect environment
 IN_COLAB=0
 IN_PAPERSPACE=0
@@ -247,6 +257,11 @@ chmod +x setup/consolidated_fix_unsloth.sh
 echo "Setting up spaCy with minimal tokenizer..."
 chmod +x setup/consolidated_fix_spacy.sh
 ./setup/consolidated_fix_spacy.sh
+
+# Fix TRL/PEFT and spaCy imports
+echo "Fixing TRL/PEFT and spaCy import issues..."
+chmod +x setup/fix_trl_spacy_imports.py
+python setup/fix_trl_spacy_imports.py
 
 # Fix transformers.utils issue
 echo "Fixing transformers.utils issue..."

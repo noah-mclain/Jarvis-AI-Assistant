@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-""""
+"""
 Fix for data collator issues in transformer models.
 
 This module provides a patched data collator that ensures:
 1. Attention masks have the correct 4D shape
 2. All tensors have consistent dtypes
 3. All tensors are on the correct device
-""""
+"""
 
 import sys
 import logging
@@ -22,12 +22,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def apply_data_collator_fix():
-    """"
+    """
     Apply a fix for data collator issues in transformer models.
     
     Returns:
         bool: True if the fix was applied successfully, False otherwise
-    """"
+    """
     try:
         import torch
         import transformers
@@ -40,12 +40,12 @@ def apply_data_collator_fix():
         
         # Define a patched __call__ method
         def patched_call(self, features, return_tensors=None):
-            """"
+            """
             Patched __call__ method that ensures:
             1. Attention masks have the correct 4D shape
             2. All tensors have consistent dtypes
             3. All tensors are on the correct device
-            """"
+            """
             try:
                 # Call the original method to get the batch
                 batch = original_call(self, features, return_tensors)
@@ -138,12 +138,12 @@ def apply_data_collator_fix():
                 
                 # Define a patched __call__ method
                 def patched_simple_call(self, features):
-                    """"
+                    """
                     Patched __call__ method for SimpleDataCollator that ensures:
                     1. Attention masks have the correct 4D shape
                     2. All tensors have consistent dtypes
                     3. All tensors are on the correct device
-                    """"
+                    """
                     try:
                         # Call the original method to get the batch
                         batch = original_simple_call(self, features)

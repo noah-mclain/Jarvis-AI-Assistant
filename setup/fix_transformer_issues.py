@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-""""
+"""
 Comprehensive fix for transformer model issues:
 1. Fixes the 'got multiple values for argument unmasked_value' error
 2. Fixes attention mask size errors
@@ -11,7 +11,7 @@ This script combines functionality from:
 - fix_attention_mask_error.py
 - fix_attention_mask_size.py
 - fix_tokenizer_memory.py
-""""
+"""
 
 import os
 import sys
@@ -79,10 +79,10 @@ def clear_gpu_memory():
         return False
 
 def patch_attention_mask_converter():
-    """"
+    """
     Patch the AttentionMaskConverter._unmask_unattended function to fix the
     'got multiple values for argument unmasked_value' error.
-    """"
+    """
     try:
         import transformers.modeling_attn_mask_utils as attn_utils
 
@@ -93,10 +93,10 @@ def patch_attention_mask_converter():
 
         # Define a completely new implementation that matches the original signature
         def fixed_unmask_unattended(self, attention_mask, unmasked_value=0.0):
-            """"
+            """
             Fixed implementation of _unmask_unattended that doesn't use CPU.'
             This function converts a causal attention mask to an unmasked attention mask.
-            """"
+            """
             # Get the device of the attention mask
             device = attention_mask.device
             
@@ -150,10 +150,10 @@ def patch_attention_mask_converter():
         return False
 
 def patch_prepare_4d_causal_attention_mask():
-    """"
+    """
     Patch the _prepare_4d_causal_attention_mask_for_sdpa function to fix the
     'got multiple values for argument unmasked_value' error.
-    """"
+    """
     try:
         import transformers.modeling_attn_mask_utils as attn_utils
 
@@ -168,10 +168,10 @@ def patch_prepare_4d_causal_attention_mask():
         def fixed_prepare_4d_causal_attention_mask_for_sdpa(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         ):
-            """"
+            """
             Fixed implementation of _prepare_4d_causal_attention_mask_for_sdpa.
             This function prepares a 4D causal attention mask for scaled dot product attention.
-            """"
+            """
             # Get the device and dtype from inputs_embeds
             device = inputs_embeds.device
             dtype = inputs_embeds.dtype
@@ -248,10 +248,10 @@ def patch_prepare_4d_causal_attention_mask():
         return False
 
 def patch_llama_model_forward():
-    """"
+    """
     Patch the LlamaModel.forward method to fix attention mask size errors and
     handle gradient checkpointing compatibility.
-    """"
+    """
     try:
         from transformers.models.llama.modeling_llama import LlamaModel
 
@@ -275,9 +275,9 @@ def patch_llama_model_forward():
             output_hidden_states=None,
             return_dict=None,
         ):
-            """"
+            """
             Patched forward method for LlamaModel that fixes attention mask issues.
-            """"
+            """
             # Force use_cache to False when using gradient checkpointing
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
                 if use_cache:
@@ -420,10 +420,10 @@ def patch_llama_model_forward():
         return False
 
 def patch_tokenizer():
-    """"
+    """
     Patch the tokenizer to ensure it uses CPU memory only.
     This function patches the tokenizer's __call__ method to move tensors to CPU.'
-    """"
+    """
     try:
         from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
         

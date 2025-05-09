@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
-""""
+"""
 Script to adjust Python files to use the minimal unsloth implementation.
 This script will scan Python files in a given directory and modify import statements
 for unsloth to use the custom minimal implementation.
-""""
+"""
 
 import os
 import sys
@@ -36,26 +36,26 @@ def adjust_file(file_path, custom_unsloth_path):
     create_backup(file_path)
     
     # Add sys.path modification at the top of the file
-    unsloth_path_insertion = f"""import sys"
+    unsloth_path_insertion = f"""import sys""
 import os
 # Use custom minimal unsloth implementation
 if "{custom_unsloth_path}" not in sys.path:
     sys.path.insert(0, "{custom_unsloth_path}")
-""""
+"""
     
     # Check if there are existing imports
     if re.search(r'import\s+sys', content):
         # If sys is already imported, we need to add just the path insertion
-        path_insertion = f""""
+        path_insertion = f"""
 # Use custom minimal unsloth implementation
 if "{custom_unsloth_path}" not in sys.path:
     sys.path.insert(0, "{custom_unsloth_path}")
-""""
+"""
         # Insert after existing sys import
         content = re.sub(r'(import\s+sys.*?\n)', r'\1' + path_insertion, content, count=1, flags=re.DOTALL)
     else:
         # Add at top of file (after docstring if exists)
-        if content.startswith('"""') or content.startswith("'''"):'
+        if content.startswith('"""') or content.startswith("'''"):'"'
             # Find end of docstring
             match = re.search(r'^(""".*?"""|\'\'\'.*?\'\'\')', content, re.DOTALL)
             if match:
@@ -119,4 +119,4 @@ def main():
     print("Backups were created with .bak extension")
 
 if __name__ == '__main__':
-    main() 
+    main() """

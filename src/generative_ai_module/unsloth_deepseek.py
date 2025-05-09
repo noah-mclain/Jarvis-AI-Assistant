@@ -114,6 +114,61 @@ try:
     TRANSFORMERS_AVAILABLE = True
     # Try to import from TRL with version compatibility handling
     try:
+        # First, try to fix the top_k_top_p_filtering import issue
+        try:
+            # Check if we need to add the function
+            try:
+                from transformers import top_k_top_p_filtering
+                logger.info("top_k_top_p_filtering is already available in transformers")
+            except ImportError:
+                # Add the function to transformers
+                logger.info("Adding top_k_top_p_filtering to transformers")
+
+                # Find transformers path
+                import transformers
+                import inspect
+                import os
+
+                transformers_path = os.path.dirname(inspect.getfile(transformers))
+
+                # Check if we have the generation utils module
+                try:
+                    from transformers.generation.logits_process import TopKLogitsWarper, TopPLogitsWarper
+
+                    # Define the missing function
+                    def top_k_top_p_filtering(
+                        logits,
+                        top_k=0,
+                        top_p=1.0,
+                        filter_value=-float("Inf"),
+                        min_tokens_to_keep=1,
+                    ):
+                        """Filter a distribution of logits using top-k and/or nucleus (top-p) filtering."""
+                        if top_k > 0:
+                            logits = TopKLogitsWarper(top_k=top_k, filter_value=filter_value,
+                                                     min_tokens_to_keep=min_tokens_to_keep)(None, logits)
+
+                        if 0 <= top_p < 1.0:
+                            logits = TopPLogitsWarper(top_p=top_p, filter_value=filter_value,
+                                                     min_tokens_to_keep=min_tokens_to_keep)(None, logits)
+
+                        return logits
+
+                    # Add the function to transformers namespace
+                    transformers.top_k_top_p_filtering = top_k_top_p_filtering
+
+                    # Also add to generation utils if it exists
+                    if hasattr(transformers, 'generation'):
+                        if hasattr(transformers.generation, 'utils'):
+                            transformers.generation.utils.top_k_top_p_filtering = top_k_top_p_filtering
+
+                    logger.info("Successfully added top_k_top_p_filtering to transformers")
+                except Exception as patch_error:
+                    logger.warning(f"Failed to add top_k_top_p_filtering: {patch_error}")
+        except Exception as fix_error:
+            logger.warning(f"Error fixing transformers imports: {fix_error}")
+
+        # Now try to import TRL
         import trl
         from trl import SFTTrainer
 

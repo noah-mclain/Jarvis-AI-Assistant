@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-""""
+"""
 Attention Mask Fix for DeepSeek and LLaMA models
 
 This script applies patches to fix the attention mask handling in transformers library,
@@ -8,7 +8,7 @@ with DeepSeek and LLaMA models.
 
 The fix ensures that attention masks are always in the correct shape (2D) and on the
 correct device before being processed by the model.
-""""
+"""
 
 import os
 import sys
@@ -42,12 +42,12 @@ def patch_attention_mask_converter():
             indices_k: Optional["torch.LongTensor"] = None,
             indices_q: Optional["torch.LongTensor"] = None,
         ):
-            """"
+            """
             Patched version of _unmask_unattended that keeps tensors on the same device.
             
             The original function has a call to .cpu() which causes device mismatch errors.
             This patch ensures all operations happen on the same device.
-            """"
+            """
             import torch
             
             # Get the device of the attention mask
@@ -102,9 +102,9 @@ def patch_prepare_4d_causal_attention_mask():
             sliding_window,
             dtype,
         ):
-            """"
+            """
             Patched version that ensures attention_mask is 2D before processing.
-            """"
+            """
             import torch
             
             # Fix attention_mask shape if needed

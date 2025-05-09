@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 
-""""
+"""
 Script to fix import errors in generative_ai_module/__init__.py
-""""
+"""
 
 import os
 import sys
 import shutil
 
 def fix_init_imports():
-    """"
+    """
     Fix the import error in __init__.py by updating the import statement
     from 'from .jarvis_unified import UnifiedModel' or 'from .jarvis_unified import JarvisUnified as UnifiedModel'
     to 'from .jarvis_unified import JarvisAI as UnifiedModel'
-    """"
+    """
     # Find the __init__.py file
     base_paths = [
         "/notebooks/src/generative_ai_module/__init__.py",  # Paperspace path

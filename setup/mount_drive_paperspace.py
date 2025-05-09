@@ -1,7 +1,7 @@
-""""
+"""
 Direct Google Drive mounting script for Paperspace.
 This script attempts multiple mounting methods to handle Paperspace environments.
-""""
+"""
 import os
 import sys
 import subprocess

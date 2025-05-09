@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-""""
+"""
 Comprehensive fix for DeepSeek Coder training issues.
 
 This script combines fixes for:
@@ -16,7 +16,7 @@ This script combines fixes for:
 
 Usage:
     python setup/fix_deepseek_training.py [--path /path/to/src/generative_ai_module/unified_deepseek_training.py]
-""""
+"""
 
 import os
 import sys
@@ -110,7 +110,7 @@ def fix_attention_mask(content):
     insertion_point = import_section_end.end()
 
     # Attention mask fix function
-    attention_mask_fix = """"
+    attention_mask_fix = """
 # Apply attention mask fix
 def apply_attention_mask_fix():
     """Apply the attention mask fix for DeepSeek models"""
@@ -194,7 +194,7 @@ def apply_attention_mask_fix():
     except Exception as e:
         logger.error(f"Error applying attention mask fix: {e}")
         return False
-""""
+"""
 
     # Insert the attention mask fix function
     content = content[:insertion_point] + attention_mask_fix + content[insertion_point:]
@@ -259,7 +259,7 @@ def fix_custom_unsloth(custom_unsloth_path):
         filtered_kwargs_str = '\n'.join(filtered_kwargs)
 
         # Add a comment explaining the change
-        comment = f"{indent}# device_map is handled by FastLanguageModel, so we don't pass it here\n"'
+        comment = f\"{indent}# device_map is handled by FastLanguageModel, so we don't pass it here\n\"
 
         # Return the fixed code
         return f"{comment}{indent}model = AutoModelForCausalLM.from_pretrained(\n{indent}    {model_name},\n{filtered_kwargs_str})"
