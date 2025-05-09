@@ -1170,56 +1170,65 @@ class CNNTextGenerator(TextGenerator):
 
         # Create enhanced CNN layers for pattern extraction with attention-like features
         self.cnn_layers_list = nn.ModuleList()
-        for i in range(self.cnn_layers):
-            kernel_size = self.cnn_kernel_sizes[i] if i < len(self.cnn_kernel_sizes) else 3
-            padding = kernel_size // 2  # Same padding to maintain sequence length
+        self.layer_norms = nn.ModuleList()
 
-            # Calculate dilation rate for increasing receptive field
-            # First layer has dilation=1, subsequent layers have increasing dilation
-            dilation = 2**i if i > 0 else 1
-            effective_padding = padding * dilation
+        # Check if CNN layers are disabled (cnn_layers = 0)
+        if self.cnn_layers <= 0:
+            print("CNN layers disabled - using base model directly")
+            # Create a dummy adapter that just passes through the input
+            self.adapter = nn.Identity()
+        else:
+            # Create CNN layers
+            for i in range(self.cnn_layers):
+                kernel_size = self.cnn_kernel_sizes[i] if i < len(self.cnn_kernel_sizes) else 3
+                padding = kernel_size // 2  # Same padding to maintain sequence length
 
-            # Create enhanced convolutional layer with batch normalization and dropout
-            cnn_layer = nn.Sequential(
-                # Main convolutional layer with dilation for larger receptive field
-                nn.Conv1d(
-                    in_channels=self.hidden_size,
-                    out_channels=self.hidden_size,
-                    kernel_size=kernel_size,
-                    padding=effective_padding,
-                    dilation=dilation
-                ),
-                nn.BatchNorm1d(self.hidden_size),
+                # Calculate dilation rate for increasing receptive field
+                # First layer has dilation=1, subsequent layers have increasing dilation
+                dilation = 2**i if i > 0 else 1
+                effective_padding = padding * dilation
+
+                # Create enhanced convolutional layer with batch normalization and dropout
+                cnn_layer = nn.Sequential(
+                    # Main convolutional layer with dilation for larger receptive field
+                    nn.Conv1d(
+                        in_channels=self.hidden_size,
+                        out_channels=self.hidden_size,
+                        kernel_size=kernel_size,
+                        padding=effective_padding,
+                        dilation=dilation
+                    ),
+                    nn.BatchNorm1d(self.hidden_size),
+                    nn.ReLU(),  # Using ReLU for compatibility
+                    nn.Dropout(self.cnn_dropout),
+
+                    # Add a 1x1 convolution to act as a position-wise feed-forward network
+                    nn.Conv1d(
+                        in_channels=self.hidden_size,
+                        out_channels=self.hidden_size * 2,  # Expand dimension like in transformer FFN
+                        kernel_size=1
+                    ),
+                    nn.ReLU(),  # Using ReLU for compatibility
+                    nn.Dropout(self.cnn_dropout),
+                    nn.Conv1d(
+                        in_channels=self.hidden_size * 2,
+                        out_channels=self.hidden_size,  # Project back to original dimension
+                        kernel_size=1
+                    ),
+                )
+
+                self.cnn_layers_list.append(cnn_layer)
+
+            # Create layer normalization for each CNN layer output (similar to transformer)
+            self.layer_norms = nn.ModuleList([nn.LayerNorm(self.hidden_size) for _ in range(self.cnn_layers)])
+
+            # Create adapter to transform CNN outputs back to transformer format
+            self.adapter = nn.Sequential(
+                nn.Linear(self.hidden_size, self.hidden_size * 2),
                 nn.ReLU(),  # Using ReLU for compatibility
                 nn.Dropout(self.cnn_dropout),
-
-                # Add a 1x1 convolution to act as a position-wise feed-forward network
-                nn.Conv1d(
-                    in_channels=self.hidden_size,
-                    out_channels=self.hidden_size * 2,  # Expand dimension like in transformer FFN
-                    kernel_size=1
-                ),
-                nn.ReLU(),  # Using ReLU for compatibility
-                nn.Dropout(self.cnn_dropout),
-                nn.Conv1d(
-                    in_channels=self.hidden_size * 2,
-                    out_channels=self.hidden_size,  # Project back to original dimension
-                    kernel_size=1
-                ),
+                nn.Linear(self.hidden_size * 2, self.hidden_size)
             )
-
-            self.cnn_layers_list.append(cnn_layer)
-
-        # Create layer normalization for each CNN layer output (similar to transformer)
-        self.layer_norms = nn.ModuleList([nn.LayerNorm(self.hidden_size) for _ in range(self.cnn_layers)])
-
-        # Create adapter to transform CNN outputs back to transformer format
-        self.adapter = nn.Sequential(
-            nn.Linear(self.hidden_size, self.hidden_size * 2),
-            nn.ReLU(),  # Using ReLU for compatibility
-            nn.Dropout(self.cnn_dropout),
-            nn.Linear(self.hidden_size * 2, self.hidden_size)
-        )
 
         # Move model to appropriate device
         self.device = (
@@ -1274,7 +1283,7 @@ class CNNTextGenerator(TextGenerator):
             Transformer model outputs with logits
         """
         # Memory optimization: truncate sequences if too long to prevent OOM
-        max_seq_len = 256  # Hard limit to prevent OOM errors
+        max_seq_len = 128  # Hard limit to prevent OOM errors (reduced from 256 to 128)
         original_seq_len = input_ids.shape[1] if hasattr(input_ids, 'shape') and len(input_ids.shape) > 1 else 0
 
         if original_seq_len > max_seq_len:
@@ -1289,6 +1298,57 @@ class CNNTextGenerator(TextGenerator):
         if input_ids.dtype != torch.long:
             print(f"Warning in forward(): input_ids has incorrect dtype: {input_ids.dtype}. Converting to torch.long.")
             input_ids = input_ids.long()
+
+        # Check if we should bypass CNN layers completely
+        if len(self.cnn_layers_list) == 0:
+            # Skip all CNN processing and use base model directly
+            print("CNN layers disabled - using base model directly")
+
+            # Handle different model types
+            if self.model_type == "seq2seq":
+                # For T5/FLAN models (encoder-decoder)
+                try:
+                    # Prepare decoder inputs for seq2seq models
+                    if decoder_input_ids is None and labels is not None:
+                        # Create decoder_input_ids by shifting labels right
+                        decoder_input_ids = self._shift_right(labels)
+
+                    # Use base model directly
+                    return self.base_model(
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        labels=labels,
+                        decoder_input_ids=decoder_input_ids,
+                        **kwargs
+                    )
+                except Exception as e:
+                    print(f"Error in seq2seq direct forward pass: {e}")
+                    # Try fallback approach
+                    if hasattr(self.base_model, "prepare_decoder_input_ids_from_labels") and labels is not None:
+                        decoder_input_ids = self.base_model.prepare_decoder_input_ids_from_labels(labels)
+                        return self.base_model(
+                            input_ids=input_ids,
+                            attention_mask=attention_mask,
+                            labels=labels,
+                            decoder_input_ids=decoder_input_ids,
+                            **kwargs
+                        )
+                    else:
+                        # Last resort
+                        return self.base_model(
+                            input_ids=input_ids,
+                            attention_mask=attention_mask,
+                            labels=labels,
+                            **kwargs
+                        )
+            else:
+                # For causal language models (GPT-style)
+                return self.base_model(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    labels=labels,
+                    **kwargs
+                )
 
         # Get embeddings from base model
         try:
@@ -1339,7 +1399,7 @@ class CNNTextGenerator(TextGenerator):
 
             # Apply CNN layer with gradient checkpointing
             if self.gradient_checkpointing and hasattr(torch.utils, 'checkpoint'):
-                x = torch.utils.checkpoint.checkpoint(self.cnn_layers_list[0], x)
+                x = torch.utils.checkpoint.checkpoint(self.cnn_layers_list[0], x, use_reentrant=False)
             else:
                 x = self.cnn_layers_list[0](x)
 
@@ -1356,7 +1416,7 @@ class CNNTextGenerator(TextGenerator):
 
         # Apply adapter with gradient checkpointing
         if self.gradient_checkpointing and hasattr(torch.utils, 'checkpoint'):
-            adapter_output = torch.utils.checkpoint.checkpoint(self.adapter, x)
+            adapter_output = torch.utils.checkpoint.checkpoint(self.adapter, x, use_reentrant=False)
         else:
             adapter_output = self.adapter(x)
 
@@ -1695,29 +1755,71 @@ class CNNTextGenerator(TextGenerator):
                                 import gc
                                 gc.collect()
 
-                            # Try with smaller sequence length
+                            # Try with smaller sequence length and direct embedding access
                             if hasattr(input_batch, 'shape') and len(input_batch.shape) > 1 and input_batch.shape[1] > 128:
                                 print(f"Trying with reduced sequence length (128 tokens)...")
-                                input_batch_small = input_batch[:, :128]
-                                target_batch_small = target_batch[:, :128] if hasattr(target_batch, 'shape') and len(target_batch.shape) > 1 else target_batch
 
-                                # Use mixed precision with smaller batch if enabled
-                                if use_mixed_precision and torch.cuda.is_available():
-                                    with torch.cuda.amp.autocast(dtype=amp_dtype):
+                                try:
+                                    # Clear CUDA cache first
+                                    if torch.cuda.is_available():
+                                        torch.cuda.empty_cache()
+                                        import gc
+                                        gc.collect()
+
+                                    # Create smaller input batch
+                                    input_batch_small = input_batch[:, :128].clone().detach()
+
+                                    # Ensure input_batch is of type Long
+                                    if input_batch_small.dtype != torch.long:
+                                        input_batch_small = input_batch_small.long()
+
+                                    # Create smaller target batch if needed
+                                    if hasattr(target_batch, 'shape') and len(target_batch.shape) > 1 and target_batch.shape[1] > 128:
+                                        target_batch_small = target_batch[:, :128].clone().detach()
+                                    else:
+                                        target_batch_small = target_batch
+
+                                    # Skip CNN layers and use base model directly to avoid dimension issues
+                                    print("Using base model directly (bypassing CNN layers) for recovery")
+
+                                    # Use mixed precision with smaller batch if enabled
+                                    if use_mixed_precision and torch.cuda.is_available():
+                                        with torch.cuda.amp.autocast(dtype=amp_dtype):
+                                            if self.model_type == "seq2seq":
+                                                decoder_input_ids = self._shift_right(target_batch_small)
+                                                # Use base model directly
+                                                outputs = self.base_model(
+                                                    input_ids=input_batch_small,
+                                                    labels=target_batch_small,
+                                                    decoder_input_ids=decoder_input_ids
+                                                )
+                                            else:
+                                                # Use base model directly
+                                                outputs = self.base_model(
+                                                    input_ids=input_batch_small,
+                                                    labels=target_batch_small
+                                                )
+                                    else:
+                                        # Regular forward pass without mixed precision
                                         if self.model_type == "seq2seq":
                                             decoder_input_ids = self._shift_right(target_batch_small)
-                                            outputs = self.forward(input_batch_small, labels=target_batch_small, decoder_input_ids=decoder_input_ids)
+                                            # Use base model directly
+                                            outputs = self.base_model(
+                                                input_ids=input_batch_small,
+                                                labels=target_batch_small,
+                                                decoder_input_ids=decoder_input_ids
+                                            )
                                         else:
-                                            outputs = self.forward(input_batch_small, labels=target_batch_small)
-                                else:
-                                    # Regular forward pass without mixed precision
-                                    if self.model_type == "seq2seq":
-                                        decoder_input_ids = self._shift_right(target_batch_small)
-                                        outputs = self.forward(input_batch_small, labels=target_batch_small, decoder_input_ids=decoder_input_ids)
-                                    else:
-                                        outputs = self.forward(input_batch_small, labels=target_batch_small)
+                                            # Use base model directly
+                                            outputs = self.base_model(
+                                                input_ids=input_batch_small,
+                                                labels=target_batch_small
+                                            )
 
-                                print("✅ Successfully recovered with smaller sequence length")
+                                    print("✅ Successfully recovered with smaller sequence length and direct model access")
+                                except Exception as e:
+                                    print(f"Error during recovery with smaller sequence: {e}")
+                                    raise
                             else:
                                 # Fallback approach for seq2seq models
                                 if self.model_type == "seq2seq":

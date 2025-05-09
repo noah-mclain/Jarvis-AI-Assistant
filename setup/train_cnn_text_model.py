@@ -27,20 +27,20 @@ def train_cnn_text_model(gpu_type, vram_size, use_improved_preprocessor=False):
 
         # Create and train the CNN-enhanced text generator with extreme memory optimization for A6000 48GB GPU
         model = create_cnn_text_generator(
-            model_name='google/flan-ul2',
+            model_name='google/flan-t5-base',  # Use a smaller model (base instead of UL2)
             force_gpu=True,
             gpu_type=gpu_type,
             vram_size=int(vram_size),
-            cnn_layers=1,  # Use only 1 CNN layer to minimize memory usage
+            cnn_layers=0,  # Disable CNN layers completely to save memory
             load_in_4bit=True,  # Use 4-bit quantization for maximum memory efficiency
             use_flash_attention_2=False,  # Disable Flash Attention completely
             gradient_checkpointing=True,  # Enable gradient checkpointing for memory efficiency
-            lora_rank=8,  # Minimal LoRA rank to save memory
-            lora_alpha=16,  # Reduced LoRA alpha to save memory
+            lora_rank=4,  # Minimal LoRA rank to save memory
+            lora_alpha=8,  # Reduced LoRA alpha to save memory
             lora_dropout=0.1,  # Keep dropout for regularization
-            max_length=256,  # Reduced sequence length to prevent OOM errors
+            max_length=128,  # Further reduced sequence length to prevent OOM errors
             batch_size=1,  # Absolute minimum batch size
-            gradient_accumulation_steps=16,  # Reduced to 16 as requested
+            gradient_accumulation_steps=8,  # Further reduced to 8 for memory savings
             num_workers=0,  # No parallel workers to minimize memory usage
             warmup_ratio=0.03,  # Keep optimal warmup
             weight_decay=0.01,  # Keep weight decay for regularization
@@ -61,11 +61,14 @@ def train_cnn_text_model(gpu_type, vram_size, use_improved_preprocessor=False):
 
         # Print memory optimization message
         print("⚠️ Using extreme memory optimization settings - training will be slower but more stable")
-        print("⚠️ Sequence length reduced to 256 tokens to prevent OOM errors")
+        print("⚠️ Using smaller model (flan-t5-base instead of flan-ul2)")
+        print("⚠️ Disabled CNN layers completely to save memory")
+        print("⚠️ Sequence length reduced to 128 tokens to prevent OOM errors")
         print("⚠️ Using 4-bit quantization and gradient checkpointing")
         print("⚠️ Using mixed precision training (FP16/BF16)")
-        print("⚠️ Gradient accumulation steps reduced to 16")
+        print("⚠️ Gradient accumulation steps reduced to 8")
         print("⚠️ Using Adafactor optimizer for memory efficiency")
+        print("⚠️ LoRA rank reduced to 4 (minimal fine-tuning)")
 
         # Monitor GPU memory usage
         if torch.cuda.is_available():
