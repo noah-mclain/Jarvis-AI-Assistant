@@ -1,236 +1,136 @@
-Certainly! Here's a comprehensive README that integrates the **Conversation Module** into the existing documentation for the Jarvis AI Assistant project. This unified document encompasses the **Image Generation**, **Text Generation**, and **Conversational AI** modules.
-
----
-
-# Jarvis AI Assistant – Unified Generative AI Modules
+# Intent Classification with BERT
 
 ## Overview
-
-The Jarvis AI Assistant is a multifaceted project integrating advanced AI capabilities, including image generation, text generation, and conversational AI. This documentation provides a detailed overview of the Generative AI modules:
-
-* **Image Generation Module**: Transforms textual prompts into high-quality images using state-of-the-art diffusion models.
-* **Text Generation Module**: Produces coherent and contextually relevant text based on user inputs, leveraging advanced language models.
-* **Conversational AI Module**: Engages in dynamic, context-aware conversations with users, maintaining session histories and allowing for session management.
+This project focuses on intent classification using the BERT (Bidirectional Encoder Representations from Transformers) model. The goal is to classify user queries into predefined intents (e.g., "share location," "set alarm," "play music"). The model is trained on a dataset of 21,769 labeled examples across 148 unique intents.
 
 ---
 
-## Table of Contents
+## Key Components
 
-1. [Image Generation Module](#image-generation-module)
+### 1. **Dataset**
+- **Source**: Custom dataset (`pre_intent.csv`) with 2 columns:
+  - `text`: User query (e.g., "send my location to my husband").
+  - `label`: Intent label (e.g., `sharecurrentlocation`).
+- **Size**: 21,769 examples.
+- **Unique Intents**: 148 (e.g., `gettime`, `playmusic`, `managegroupchat`).
 
-   * [Features](#features)
-   * [Setup & Installation](#setup--installation)
-   * [Usage](#usage)
-   * [Sample Outputs](#sample-outputs)
-2. [Text Generation Module](#text-generation-module)
+### 2. **Preprocessing**
+- **Tokenization**: Split text into tokens using `wordsegment` to handle concatenated words.
+- **Stopword Removal**: Eliminate common English stopwords via `nltk.corpus.stopwords`.
+- **Lemmatization**: Reduce words to base forms using `WordNetLemmatizer`.
+- **Label Encoding**: Convert string labels to numerical values with `LabelEncoder`.
 
-   * [Features](#features-1)
-   * [Setup & Installation](#setup--installation-1)
-   * [Usage](#usage-1)
-3. [Conversational AI Module](#conversational-ai-module)
+### 3. **Model Architecture**
+- **Base Model**: `bert-base-uncased` (12-layer, 768-hidden, 12-heads, 110M parameters).
+- **Fine-Tuning**:
+  - Added a classification head for 148 intents.
+  - Trained for **100 epochs** with `AdamW` optimizer (learning rate = 3e-5).
+  - Batch size = 16, max sequence length = 32.
 
-   * [Features](#features-2)
-   * [Setup & Installation](#setup--installation-2)
-   * [Usage](#usage-2)
-4. [Contributors](#contributors)
-5. [License](#license)
-6. [Converting Documentation to PDF](#converting-documentation-to-pdf)
+### 4. **Training**
+- **Train/Test Split**: 80/20 split (`train_test_split`).
+- **Loss Function**: Cross-entropy loss.
+- **Hardware**: GPU acceleration (Google Colab L4 GPU).
+
+### 5. **Evaluation**
+- **Metrics**: Precision, recall, F1-score (micro/macro averages).
+- **Challenges**:
+  - Class imbalance (some intents had limited examples).
+  - Warnings due to missing labels in test/train splits.
+
+### 6. **Inference**
+- **Gradio Interface**: Deployed a web app for real-time predictions.
+- **Example Prediction**:
+  ```python
+  Input: "What's the weather today?"
+  Output: "weatherquery"
+  ```
 
 ---
 
-## Image Generation Module
+## Code Workflow
 
-### Features
+### 1. **Data Loading & Inspection**
+- Load `pre_intent.csv` and display unique labels.
 
-* **High-Quality Image Synthesis**: Generates images from textual descriptions using the Stable Diffusion XL model.
-* **Asynchronous Processing**: Utilizes asynchronous programming to handle multiple image generation requests efficiently.
-* **Automated Display**: Automatically opens and displays generated images upon completion.
+### 2. **Text Preprocessing**
+- Tokenize, remove stopwords, and lemmatize text/labels.
 
-### Setup & Installation
+### 3. **Train/Test Split**
+- Split data into 80% training and 20% testing.
 
-1. **Clone the Repository**:
+### 4. **Model Setup**
+- Load pre-trained BERT, add classification layer, and move to GPU.
 
-   ```bash
-   git clone https://github.com/noah-mclain/Jarvis-AI-Assistant.git
-   cd Jarvis-AI-Assistant
-   ```
+### 5. **Training Loop**
+- Train for 100 epochs with progress tracking.
 
-2. **Install Dependencies**:
-   Ensure you have Python 3.7 or higher installed. Then, install the required packages:
+### 6. **Evaluation**
+- Generate predictions and calculate classification metrics.
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+### 7. **Saving the Model**
+- Save weights and full checkpoint for deployment.
 
-3. **Configure API Access**:
+### 8. **Deployment**
+- Create a Gradio interface for interactive predictions.
 
-   * Obtain an API key from [Hugging Face](https://huggingface.co/).
-   * Create a `.env` file in the project root directory and add your API key:
+---
 
-     ```
-     HuggingFaceAPIKey=your_api_key_here
-     ```
+## Results
+- Achieved **~46% weighted F1-score** on the test set.
+- High performance on common intents (e.g., `bookrestaurant`: 96% F1).
+- Struggled with rare intents due to limited examples.
 
-### Usage
+---
 
-Run the image generation script:
+## How to Use
 
+### 1. **Install Dependencies**
 ```bash
-python ImageGeneration.py
+pip install torch transformers pandas nltk wordsegment gradio
 ```
 
-The script monitors for image generation requests and processes them accordingly. Generated images are saved in the `Data` directory and displayed automatically.
+### 2. **Run Inference**
+```python
+from transformers import BertTokenizer, BertForSequenceClassification
+import torch
 
-### Sample Outputs
+# Load model and tokenizer
+model = BertForSequenceClassification.from_pretrained("bert-base-uncased", num_labels=148)
+model.load_state_dict(torch.load("model_weights.pth"))
+tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 
-Below are examples of images generated by the module:
-
-![Sample Image 1](Data/sample_image_1.jpg)
-![Sample Image 2](Data/sample_image_2.jpg)
-![Sample Image 3](Data/sample_image_3.jpg)
-![Sample Image 4](Data/sample_image_4.jpg)
-
-*Note: Replace the above image paths with the actual paths to your generated images.*
-
----
-
-## Text Generation Module
-
-### Features
-
-* **Contextual Text Generation**: Produces text that is coherent and contextually aligned with the input prompt.
-* **Customizable Parameters**: Allows adjustment of generation parameters such as temperature and maximum length.
-* **Integration Ready**: Designed for easy integration into larger applications or conversational agents.
-
-### Setup & Installation
-
-1. **Navigate to the Text Module Directory**:
-
-   ```bash
-   cd Jarvis-AI-Assistant/gen-ai-text
-   ```
-
-2. **Install Dependencies**:
-   Ensure you have Python 3.7 or higher installed. Then, install the required packages:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Configure API Access**:
-
-   * Obtain an API key from [OpenAI](https://openai.com/).
-   * Create a `.env` file in the `gen-ai-text` directory and add your API key:
-
-     ```
-     OpenAI_API_Key=your_api_key_here
-     ```
-
-### Usage
-
-Run the text generation script:
-
-```bash
-python text_generation.py
+# Predict
+text = "set an alarm for 6 AM"
+inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True)
+outputs = model(**inputs)
+predicted_class = torch.argmax(outputs.logits, dim=1).item()
 ```
 
-Upon running, the script will prompt you to enter a text prompt. It will then generate and display the corresponding output.
+### 3. **Launch Gradio App**
+```python
+import gradio as gr
 
----
-
-## Conversational AI Module
-
-### Features
-
-* **Gemini-2.0-Flash Integration**: Utilizes Google's latest Gemini Flash model for rapid and context-aware responses.
-* **Contextual Conversations**: Maintains context within each chat session, allowing for coherent multi-turn dialogues.
-* **Session Management**:
-
-  * Create multiple named chat sessions.
-  * Switch between active sessions.
-  * Delete existing sessions.
-  * Save/load sessions to JSON files.
-* **Conversation History**:
-
-  * Edit previous inputs/responses.
-  * View complete conversation history.
-  * Automatic timestamping of interactions.
-* **Advanced Features**:
-
-  * Session Merging: Combine loaded sessions with existing chats.
-  * Error Handling: Robust mechanisms to handle API errors and invalid inputs.
-
-### Setup & Installation
-
-1. **Navigate to the Conversation Module Directory**:
-
-   ```bash
-   cd Jarvis-AI-Assistant/conversation
-   ```
-
-2. **Install Dependencies**:
-   Ensure you have Python 3.7 or higher installed. Then, install the required packages:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Configure API Access**:
-
-   * Obtain an API key from [Google Cloud Console](https://console.cloud.google.com/).
-   * Set up authentication as per Google's Gemini API requirements.
-
-### Usage
-
-Run the conversational interface:
-
-```bash
-python conversation_interface.py
+iface = gr.Interface(
+    fn=predict_text,
+    inputs=gr.Textbox(lines=2, placeholder="Enter your message..."),
+    outputs="text",
+    title="Intent Classifier"
+)
+iface.launch()
 ```
 
-Follow the on-screen prompts to interact with the assistant. You can create new sessions, switch between sessions, and manage conversation histories.
+---
+
+## Future Improvements
+1. **Data Augmentation**: Generate synthetic examples for rare intents.
+2. **Hyperparameter Tuning**: Optimize learning rate, batch size, and epochs.
+3. **Multilingual Support**: Add support for non-English queries.
+4. **Error Analysis**: Investigate misclassified examples to refine the model.
 
 ---
 
-## Contributors
-
-* **Ahmed**: Developed the NLP component using bag-of-words and neural networks.
-* **Hamza**: Built the speech recognition module with GRU/CTC and MFCC features.
-* **Nada**: Implemented the generative text module using character-level LSTM.
-* **Amr**: Created the generative image module with a simple GAN.
-
----
-
-## License
-
-This project is licensed under the [MIT License](LICENSE).
-
----
-
-## Converting Documentation to PDF
-
-To convert this README into a PDF, follow these steps:
-
-1. **Install Markdown to PDF Converter**:
-   You can use tools like `pandoc` or `markdown-pdf`. For example, to install `markdown-pdf`:
-
-   ```bash
-   npm install -g markdown-pdf
-   ```
-
-2. **Convert README to PDF**:
-   Navigate to the directory containing the `README.md` file and run:
-
-   ```bash
-   markdown-pdf README.md
-   ```
-
-   This will generate a `README.pdf` file in the same directory.
-
-*Note: Ensure that all image paths in the markdown file are correct and accessible to have them included in the PDF.*
-
----
-
-For more details and updates, please refer to the [Jarvis AI Assistant GitHub Repository](https://github.com/noah-mclain/Jarvis-AI-Assistant).
-
----
+## Files
+- `intent_classification.ipynb`: Jupyter notebook with full code.
+- `pre_intent.csv`: Dataset (not included in repo).
+- `model_weights.pth`: Saved model weights.
