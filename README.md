@@ -1,134 +1,115 @@
-Certainly! Here's a comprehensive README for the `intent_classification.ipynb` notebook from the [Jarvis-AI-Assistant](https://github.com/noah-mclain/Jarvis-AI-Assistant) repository. This document explains the code's workflow, the model architecture, datasets used, and how to run the notebook from start to finish.
+Here's a comprehensive README for your Jarvis AI Assistant project:
 
----
-
-# Jarvis AI Assistant – Intent Classification Module
+# Jarvis AI Assistant - Conversational Interface
 
 ## Overview
+Jarvis is a conversational AI assistant built using Google's Gemini API. This Python implementation focuses on text-based conversations with advanced session management capabilities, allowing users to maintain multiple chat contexts and manipulate conversation history.
 
-This notebook implements an intent classification system, a crucial component of the Jarvis AI Assistant. The goal is to classify user input into predefined intent categories, enabling the assistant to understand and respond appropriately.
+## Features
 
-## Table of Contents
+### Core Functionality
+- **Gemini-2.0-Flash Integration**: Uses Google's latest Gemini Flash model for quick responses
+- **Contextual Conversations**: Maintains context within each chat session
+- **Session Management**:
+  - Create multiple named chat sessions
+  - Switch between active sessions
+  - Delete existing sessions
+  - Save/load sessions to JSON files
+- **Conversation History**:
+  - Edit previous inputs/responses
+  - View complete conversation history
+  - Automatic timestamping of interactions
 
-* [Dataset](#dataset)
-* [Data Preprocessing](#data-preprocessing)
-* [Model Architecture](#model-architecture)
-* [Training](#training)
-* [Evaluation](#evaluation)
-* [Usage](#usage)
-* [Contributors](#contributors)
-* [References](#references)
+### Advanced Features
+- **Session Merging**: Combine loaded sessions with existing chats
+- **Error Handling**: Robust input validation and error recovery
+- **Thinking Indicator**: Visual feedback during response generation
+- **History Preprocessing**: Input sanitization and validation
 
-## Dataset
+## Model Used
+- **Google Gemini 2.0 Flash**
+  - Fast response generation
+  - Optimized for conversational AI
+  - Accessed via Google's GenAI API
+  - System instruction: "You are an AI assistant. Your name is Jarvis. You can do anything."
 
-The notebook utilizes a custom dataset comprising user input phrases labeled with corresponding intents. Each entry in the dataset includes:
+## Dependencies
+```python
+google-generativeai>=0.3.0
+python-dotenv>=0.19.0  # Optional for environment variables
+```
 
-* **Text**: A user input sentence (e.g., "What's the weather like today?")
-* **Intent**: The category of the user's intent (e.g., `weather_query`)
+## Installation
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/Jarvis-AI-Assistant.git
+cd Jarvis-AI-Assistant
+```
 
-The dataset is structured in a JSON format with the following schema:
+2. Install requirements:
+```bash
+pip install google-generativeai python-dotenv
+```
 
-```json
+3. Obtain Gemini API key:
+   - Visit [Google AI Studio](https://aistudio.google.com/)
+   - Create API key under "Get API Key" section
+
+## Usage
+```bash
+python F_conversation.py
+```
+
+### Runtime Options
+1. **Edit Last Input**: Modify your previous message and regenerate response
+2. **View History**: Show current session's conversation timeline
+3. **Session Management**:
+   - Create new named sessions
+   - Switch between active sessions
+   - Delete existing sessions
+4. **Persistence**:
+   - Save all sessions to timestamped JSON file
+   - Load previous sessions from file
+   - Merge multiple session files
+
+## Code Structure
+
+### Key Functions
+1. `call_gemini()`: Handles Gemini API communication
+2. `session_manager`: Manages multiple chat contexts
+3. `history_editor`: Allows conversation history modification
+4. `file_operations`: Handles session saving/loading
+
+### Data Flow
+1. Input → Preprocessing → API Call → Response Generation
+2. Session Data Structure:
+```python
 {
-  "intents": [
+  "session_id": [
     {
-      "tag": "greeting",
-      "patterns": ["Hi", "Hello", "How are you?"],
-      "responses": ["Hello!", "Hi there!", "Greetings!"]
-    },
-    ...
+      "user_input": "message",
+      "response": "AI response",
+      "timestamp": "ISO-8601"
+    }
   ]
 }
 ```
 
-## Data Preprocessing
+## Limitations
+- Requires active internet connection
+- Subject to Gemini API rate limits
+- Session files stored in plain JSON format
 
-The preprocessing steps include:
+## License
+[MIT License](LICENSE)
 
-1. **Tokenization**: Breaking down sentences into individual words.
-2. **Stemming**: Reducing words to their root form using the PorterStemmer from the NLTK library.
-3. **Vocabulary Creation**: Building a sorted list of unique stemmed words from the patterns.
-4. **Bag-of-Words Encoding**: Converting each pattern into a binary vector indicating the presence of vocabulary words.
-
-These steps transform textual data into numerical form suitable for model training.
-
-## Model Architecture
-
-The model is a simple feedforward neural network implemented using PyTorch. The architecture consists of:
-
-* **Input Layer**: Size equal to the length of the vocabulary.
-* **Hidden Layer**: A fully connected layer with ReLU activation.
-* **Output Layer**: Size equal to the number of unique intents, with a softmax activation to produce probability distributions over intents.
-
-The model class is defined as follows:
-
-```python
-class NeuralNet(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size):
-        super(NeuralNet, self).__init__()
-        self.l1 = nn.Linear(input_size, hidden_size) 
-        self.l2 = nn.Linear(hidden_size, output_size)
-    
-    def forward(self, x):
-        out = F.relu(self.l1(x))
-        out = self.l2(out)
-        return out
-```
-
-## Training
-
-Training involves the following steps:
-
-1. **Loss Function**: CrossEntropyLoss is used to measure the discrepancy between predicted and actual intents.
-2. **Optimizer**: Adam optimizer is employed for efficient gradient descent.
-3. **Epochs**: The model is trained over multiple epochs (e.g., 1000) to minimize the loss function.
-4. **Batch Processing**: Data is loaded in batches using PyTorch's DataLoader for efficient computation.
-
-The training loop updates model weights to minimize the loss on the training data.
-
-## Evaluation
-
-After training, the model's performance is evaluated by:
-
-* **Accuracy**: Measuring the proportion of correctly predicted intents on a validation set.
-* **Testing**: Running the model on unseen inputs to assess generalization.
-
-The model's predictions are compared against true labels to compute accuracy metrics.
-
-## Usage
-
-To use the trained model for intent classification:
-
-1. **Load the Model**: Deserialize the trained model parameters.
-2. **Preprocess Input**: Tokenize and stem the user input, then convert it into a bag-of-words vector.
-3. **Predict Intent**: Pass the vector through the model to obtain intent probabilities.
-4. **Select Response**: Choose an appropriate response based on the predicted intent.
-
-Example usage:
-
-```python
-sentence = "Hello, how can you assist me?"
-tokens = tokenize(sentence)
-X = bag_of_words(tokens, all_words)
-X = torch.from_numpy(X).float()
-output = model(X)
-_, predicted = torch.max(output, dim=0)
-intent = tags[predicted.item()]
-```
-
-## Contributors
-
-* **Ahmed**: Developed the NLP component using bag-of-words and neural networks.
-* **Hamza**: Built the speech recognition module with GRU/CTC and MFCC features.
-* **Nada**: Implemented the generative text module using character-level LSTM.
-* **Amr**: Created the generative image module with a simple GAN.
-
-## References
-
-* [PyTorch Documentation](https://pytorch.org/docs/stable/index.html)
-* [NLTK Documentation](https://www.nltk.org/)
-* [Original Repository](https://github.com/noah-mclain/Jarvis-AI-Assistant)
+## Contributing
+1. Fork the repository
+2. Create feature branch (`git checkout -b feature/improvement`)
+3. Commit changes (`git commit -am 'Add new feature'`)
+4. Push to branch (`git push origin feature/improvement`)
+5. Create new Pull Request
 
 ---
 
-This README provides a detailed explanation of the intent classification module, covering all aspects from data preprocessing to model deployment.
+This implementation demonstrates advanced conversation management techniques while leveraging Google's cutting-edge Gemini AI capabilities. The focus on session management makes it particularly useful for research in conversational AI and long-term interaction patterns.
