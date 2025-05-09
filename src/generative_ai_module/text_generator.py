@@ -760,15 +760,16 @@ class CNNTextGenerator(TextGenerator):
         # Set batch size and gradient accumulation steps based on GPU type if not specified
         if self.batch_size is None or self.gradient_accumulation_steps is None or self.num_workers is None:
             if self.gpu_type == "A6000" and self.vram_size >= 48:
-                # A6000 with 48+ GiB VRAM - maximize parameters while staying within constraints
+                # A6000 with 48+ GiB VRAM - optimize for stability and memory efficiency
                 print("Using optimized settings for A6000 with 48+ GiB VRAM")
-                self.batch_size = self.batch_size or 3  # Reduced to ensure stability with large models
-                self.gradient_accumulation_steps = self.gradient_accumulation_steps or 8
-                self.max_length = 2048  # Reduced from 4096 to ensure stability with FLAN-UL2
-                self.lora_rank = 32     # Increase LoRA rank for better quality
-                self.lora_alpha = 64    # Increase LoRA alpha for better adaptation
-                self.lora_dropout = 0.05  # Optimal dropout for stability
-                self.num_workers = self.num_workers if self.num_workers is not None else 8  # Match your 8 CPU cores
+                self.batch_size = self.batch_size or 1  # Minimum batch size to prevent OOM errors
+                self.gradient_accumulation_steps = self.gradient_accumulation_steps or 32  # Increased to maintain effective batch size
+                self.max_length = 1024  # Reduced from 2048 to prevent OOM errors
+                self.cnn_layers = min(self.cnn_layers, 2)  # Limit to 2 CNN layers maximum
+                self.lora_rank = 16     # Reduced LoRA rank to save memory
+                self.lora_alpha = 32    # Reduced LoRA alpha to save memory
+                self.lora_dropout = 0.1  # Increased dropout for better regularization
+                self.num_workers = self.num_workers if self.num_workers is not None else 2  # Reduced to avoid memory pressure
                 self.warmup_ratio = 0.03  # Optimal warmup for large models
                 self.weight_decay = 0.01  # Prevent overfitting
                 self.adam_beta1 = 0.9   # Standard beta1 for AdamW
@@ -777,6 +778,10 @@ class CNNTextGenerator(TextGenerator):
                 self.max_grad_norm = 1.0  # Prevent gradient explosion
                 # Memory optimization
                 self.load_in_4bit = True  # Use 4-bit quantization for maximum memory efficiency
+                self.gradient_checkpointing = True  # Enable gradient checkpointing for memory efficiency
+                # Disable Flash Attention 2 for T5/FLAN models as it's not supported
+                if self.model_type == "seq2seq" or "flan" in self.model_name_or_path.lower():
+                    self.use_flash_attention_2 = False
 
             elif self.gpu_type == "A6000" and self.vram_size >= 40:
                 # A6000 with 40-48 GiB VRAM
@@ -1316,18 +1321,55 @@ class CNNTextGenerator(TextGenerator):
         # Handle different model types
         if self.model_type == "seq2seq":
             # For T5/FLAN models (encoder-decoder)
-            if decoder_input_ids is None and labels is not None:
-                # Use labels as decoder_input_ids if not provided (common practice)
-                decoder_input_ids = labels
+            try:
+                # Prepare decoder inputs for seq2seq models
+                if decoder_input_ids is None:
+                    # For T5/FLAN models, we need to prepare decoder_input_ids
+                    if labels is not None:
+                        # Shift labels to create decoder_input_ids (standard practice for T5/FLAN)
+                        # This creates the decoder input by shifting the labels right and prepending the pad token
+                        decoder_input_ids = self._shift_right(labels)
+                    else:
+                        # If no labels are provided, we need to create decoder_input_ids from scratch
+                        # Use the tokenizer to create a batch of empty strings with just the pad token
+                        batch_size = input_ids.shape[0]
+                        decoder_input_ids = torch.full(
+                            (batch_size, 1),
+                            self.tokenizer.pad_token_id if self.tokenizer.pad_token_id is not None else 0,
+                            dtype=torch.long,
+                            device=input_ids.device
+                        )
 
-            # Pass through the seq2seq model with enhanced embeddings
-            outputs = self.base_model(
-                inputs_embeds=enhanced_embeddings,
-                attention_mask=attention_mask,
-                labels=labels,
-                decoder_input_ids=decoder_input_ids,
-                **kwargs
-            )
+                # Pass through the seq2seq model with enhanced embeddings
+                outputs = self.base_model(
+                    inputs_embeds=enhanced_embeddings,
+                    attention_mask=attention_mask,
+                    labels=labels,
+                    decoder_input_ids=decoder_input_ids,
+                    **kwargs
+                )
+            except Exception as e:
+                print(f"Error in seq2seq forward pass: {e}")
+                # Fallback approach: use the base model's prepare_decoder_input_ids_from_labels method if available
+                if hasattr(self.base_model, "prepare_decoder_input_ids_from_labels") and labels is not None:
+                    decoder_input_ids = self.base_model.prepare_decoder_input_ids_from_labels(labels)
+                    outputs = self.base_model(
+                        inputs_embeds=enhanced_embeddings,
+                        attention_mask=attention_mask,
+                        labels=labels,
+                        decoder_input_ids=decoder_input_ids,
+                        **kwargs
+                    )
+                else:
+                    # Last resort: try without decoder_input_ids but with decoder_inputs_embeds=None
+                    # This signals to the model to generate its own decoder inputs
+                    outputs = self.base_model(
+                        inputs_embeds=enhanced_embeddings,
+                        attention_mask=attention_mask,
+                        labels=labels,
+                        decoder_inputs_embeds=None,  # Explicitly set to None to force model to handle it
+                        **kwargs
+                    )
         else:
             # For causal language models (GPT-style)
             outputs = self.base_model(
@@ -1338,6 +1380,33 @@ class CNNTextGenerator(TextGenerator):
             )
 
         return outputs
+
+    def _shift_right(self, input_ids):
+        """
+        Shift input_ids right for T5/FLAN models to create decoder_input_ids
+
+        Args:
+            input_ids: Input token IDs to shift
+
+        Returns:
+            Shifted input_ids for decoder input
+        """
+        # Get pad token ID, default to 0 if not available
+        pad_token_id = self.tokenizer.pad_token_id if self.tokenizer.pad_token_id is not None else 0
+
+        # Create shifted input by prepending pad token and removing last token
+        shifted_input_ids = torch.zeros_like(input_ids)
+        shifted_input_ids[:, 0] = pad_token_id
+        shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
+
+        # Where the original input was padding, keep it as padding
+        if pad_token_id != 0:
+            # Create a mask where original input was padding
+            pad_mask = (input_ids == pad_token_id)
+            # Apply the mask to keep padding in the shifted input
+            shifted_input_ids = shifted_input_ids.masked_fill(pad_mask, pad_token_id)
+
+        return shifted_input_ids
 
     def train(self, data, epochs=3, gradient_accumulation_steps=None, eval_steps=None, save_steps=None, checkpoint_dir=None):
         """
@@ -1444,7 +1513,29 @@ class CNNTextGenerator(TextGenerator):
                         input_batch = input_batch.long()
 
                     # Forward pass through hybrid model
-                    outputs = self.forward(input_batch)
+                    try:
+                        # For seq2seq models, ensure decoder_input_ids are properly created
+                        if self.model_type == "seq2seq":
+                            # Create decoder_input_ids by shifting target_batch right
+                            decoder_input_ids = self._shift_right(target_batch)
+                            outputs = self.forward(input_batch, labels=target_batch, decoder_input_ids=decoder_input_ids)
+                        else:
+                            outputs = self.forward(input_batch, labels=target_batch)
+                    except Exception as e:
+                        print(f"Error in forward pass: {e}")
+                        # Fallback approach for seq2seq models
+                        if self.model_type == "seq2seq":
+                            # Try using the base model's prepare_decoder_input_ids_from_labels method
+                            if hasattr(self.base_model, "prepare_decoder_input_ids_from_labels"):
+                                decoder_input_ids = self.base_model.prepare_decoder_input_ids_from_labels(target_batch)
+                                outputs = self.forward(input_batch, labels=target_batch, decoder_input_ids=decoder_input_ids)
+                            else:
+                                # Last resort: try with decoder_inputs_embeds=None
+                                outputs = self.forward(input_batch, labels=target_batch, decoder_inputs_embeds=None)
+                        else:
+                            # Re-raise if it's not a seq2seq model
+                            raise
+
                     logits = outputs.logits
 
                     # Calculate loss
@@ -1506,7 +1597,24 @@ class CNNTextGenerator(TextGenerator):
                                 val_input = val_input.to(self.device)
                                 val_target = val_target.to(self.device)
 
-                                val_outputs = self.forward(val_input)
+                                # For seq2seq models, ensure decoder_input_ids are properly created
+                                try:
+                                    if self.model_type == "seq2seq":
+                                        # Create decoder_input_ids by shifting target right
+                                        decoder_input_ids = self._shift_right(val_target)
+                                        val_outputs = self.forward(val_input, labels=val_target, decoder_input_ids=decoder_input_ids)
+                                    else:
+                                        val_outputs = self.forward(val_input, labels=val_target)
+                                except Exception as e:
+                                    print(f"Error in validation forward pass: {e}")
+                                    # Fallback approach
+                                    if self.model_type == "seq2seq":
+                                        # Try with decoder_inputs_embeds=None
+                                        val_outputs = self.forward(val_input, labels=val_target, decoder_inputs_embeds=None)
+                                    else:
+                                        # Re-raise if it's not a seq2seq model
+                                        raise
+
                                 val_logits = val_outputs.logits
 
                                 batch_loss = torch.nn.functional.cross_entropy(
@@ -1538,14 +1646,44 @@ class CNNTextGenerator(TextGenerator):
                         print(f"Checkpoint saved at step {global_step}")
 
                 except RuntimeError as e:
-                    if "CUDA out of memory" in str(e):
-                        print(f"CUDA OOM error. Clearing cache and skipping batch.")
+                    if "CUDA out of memory" in str(e) or "out of memory" in str(e).lower():
+                        print(f"❌ CUDA OOM error. Attempting recovery...")
+
+                        # Clear CUDA cache
                         if torch.cuda.is_available():
                             torch.cuda.empty_cache()
+                            print(f"GPU memory after clearing cache: {torch.cuda.memory_allocated() / 1024**2:.2f} MB allocated")
+
+                        # Reset optimizer state
                         steps_since_update = 0
                         self.optimizer.zero_grad()
+
+                        # Try to reduce batch size dynamically if possible
+                        if hasattr(self, 'batch_size') and self.batch_size > 1:
+                            old_batch_size = self.batch_size
+                            self.batch_size = max(1, self.batch_size // 2)
+                            print(f"Reduced batch size from {old_batch_size} to {self.batch_size}")
+
+                            # Increase gradient accumulation to compensate
+                            if hasattr(self, 'gradient_accumulation_steps'):
+                                old_grad_accum = self.gradient_accumulation_steps
+                                self.gradient_accumulation_steps = self.gradient_accumulation_steps * 2
+                                print(f"Increased gradient accumulation steps from {old_grad_accum} to {self.gradient_accumulation_steps}")
+                                print(f"Effective batch size remains: {self.batch_size * self.gradient_accumulation_steps}")
+                        else:
+                            # If batch size is already 1, try reducing sequence length
+                            if hasattr(self, 'max_length') and self.max_length > 512:
+                                old_max_length = self.max_length
+                                self.max_length = max(512, self.max_length // 2)
+                                print(f"Reduced max sequence length from {old_max_length} to {self.max_length}")
+                            else:
+                                print("Cannot reduce batch size or sequence length further. Will skip problematic batches.")
                     else:
                         print(f"Error in training: {e}")
+                        import traceback
+                        traceback.print_exc()
+
+                    # Continue with next batch
                     continue
 
             # Perform final optimization step if needed
