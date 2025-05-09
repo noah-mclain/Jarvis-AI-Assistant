@@ -838,8 +838,1140 @@ python -c "
 import os
 import sys
 import torch
+import sys
 
-model_type = os.environ.get('MODEL_TYPE', '')
+if not torch.cuda.is_available():
+    print('❌ ERROR: CUDA is not available. Cannot proceed with GPU training.')
+    sys.exit(1)
+else:
+    device_name = torch.cuda.get_device_name(0)
+    device_capability = torch.cuda.get_device_capability(0)
+    free_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+    print(f'✓ Using GPU: {device_name} with CUDA capability {device_capability[0]}.{device_capability[1]}')
+    print(f'✓ Available GPU memory: {free_memory:.2f} GiB')
+
+    # Verify minimum memory requirements
+    if free_memory < 10:
+        print(f'❌ ERROR: Not enough GPU memory. Need at least 10 GiB, but only {free_memory:.2f} GiB available.')
+        sys.exit(1)
+
+    # Clear CUDA cache
+    torch.cuda.empty_cache()
+    print('✓ CUDA cache cleared')
+"
+
+        # Check exit code of the GPU verification
+        if [ $? -ne 0 ]; then
+            echo "❌ GPU verification failed. Cannot proceed with training."
+            exit 1
+        fi
+
+        # Apply additional safeguards for GPU training
+        export PYTORCH_NO_CUDA_MEMORY_CACHING=1  # Disable CUDA memory caching
+
+        python -c "
+import sys
+import os
+import torch
+from src.generative_ai_module.text_generator import create_cnn_text_generator
+
+try:
+    print('Starting text generation model training...')
+
+    # Ensure we're using GPU
+    if not torch.cuda.is_available():
+        print('❌ ERROR: CUDA is not available. Cannot proceed with GPU training.')
+        sys.exit(1)
+
+    # Create and train the text generator with optimized parameters for GPU
+    model = create_cnn_text_generator(
+        model_name='google/flan-ul2',
+        force_gpu=True,
+        gpu_type='$GPU_TYPE',
+        vram_size=$VRAM_SIZE,
+        load_in_4bit=True,
+        use_flash_attention_2=True,
+        gradient_checkpointing=True,
+        lora_rank=32,
+        lora_alpha=64,
+        lora_dropout=0.05,
+        max_length=2048,  # Reduced from 4096 to ensure stability with FLAN-UL2
+        batch_size=3,  # Explicitly set for stability
+        gradient_accumulation_steps=8,  # Explicitly set for stability
+        num_workers=0,  # Set to 0 to avoid multiprocessing issues with CUDA
+        warmup_ratio=0.03,
+        weight_decay=0.01,
+        adam_beta1=0.9,
+        adam_beta2=0.999,
+        adam_epsilon=1e-8,
+        max_grad_norm=1.0
+    )
+
+    # Verify model is on GPU
+    if not next(model.parameters()).is_cuda:
+        print('❌ WARNING: Model is not on GPU. Moving model to GPU...')
+        model = model.cuda()
+
+    # Ensure datasets directory exists
+    datasets_dir = 'notebooks/Jarvis_AI_Assistant/datasets'
+    os.makedirs(datasets_dir, exist_ok=True)
+
+    # Import dataset processor
+    from src.generative_ai_module.dataset_processor import DatasetProcessor
+
+    # Create processor
+    processor = DatasetProcessor(model)
+
+    # Define datasets to preprocess
+    datasets = ['persona_chat', 'writing_prompts', 'pile', 'openassistant', 'gpteacher']
+    preprocessed_paths = {}
+
+    # Preprocess all datasets
+    print('Preprocessing datasets...')
+    for dataset_name in datasets:
+        preprocessed_path = os.path.join(datasets_dir, f'preprocessed_{dataset_name}.pt')
+        preprocessed_paths[dataset_name] = preprocessed_path
+
+        # Check if dataset is already preprocessed
+        if os.path.exists(preprocessed_path):
+            print(f'Dataset {dataset_name} already preprocessed at {preprocessed_path}')
+            continue
+
+        print(f'Preprocessing {dataset_name}...')
+        try:
+            # Prepare dataset with appropriate parameters
+            if dataset_name == 'persona_chat':
+                sequence_length = 512
+                batch_size = 16
+                raw_text = processor.load_persona_chat(split='train', max_samples=5000)
+            elif dataset_name == 'writing_prompts':
+                sequence_length = 1024
+                batch_size = 8
+                raw_text = processor.load_writing_prompts(split='train', max_samples=5000)
+            elif dataset_name == 'pile':
+                sequence_length = 1024
+                batch_size = 8
+                raw_text = processor.load_pile_dataset(split='train', max_samples=5000)
+            elif dataset_name == 'openassistant':
+                sequence_length = 512
+                batch_size = 16
+                raw_text = processor.load_openassistant_dataset(split='train', max_samples=5000)
+            elif dataset_name == 'gpteacher':
+                sequence_length = 768
+                batch_size = 12
+                raw_text = processor.load_gpteacher_dataset(split='train', max_samples=5000)
+
+            # Create sequences and batches
+            print(f'Creating sequences with length {sequence_length}...')
+            sequences = processor.create_sequences(raw_text, sequence_length)
+
+            print(f'Creating batches with batch size {batch_size}...')
+            batches = processor.create_batches(sequences, batch_size=batch_size)
+
+            # Create dataset dictionary
+            dataset = {
+                'batches': batches,
+                'metadata': {
+                    'dataset_name': dataset_name,
+                    'split': 'train',
+                    'sequence_length': sequence_length,
+                    'batch_size': batch_size,
+                    'sample_count': len(sequences),
+                    'batch_count': len(batches)
+                }
+            }
+
+            # Save preprocessed data
+            print(f'Saving preprocessed {dataset_name} to {preprocessed_path}...')
+            torch.save(dataset, preprocessed_path)
+            print(f'✓ Successfully preprocessed {dataset_name}')
+
+        except Exception as e:
+            print(f'❌ Error preprocessing {dataset_name}: {e}')
+            import traceback
+            traceback.print_exc()
+
+    # Train the model with all available datasets
+    print('Starting training...')
+
+    # Check which datasets were successfully preprocessed
+    available_datasets = []
+    for dataset_name, path in preprocessed_paths.items():
+        if os.path.exists(path):
+            available_datasets.append(dataset_name)
+
+    if len(available_datasets) > 1:
+        print(f'Training with multiple datasets: {available_datasets}')
+        model.train_from_multiple_datasets(
+            dataset_names=available_datasets,
+            epochs=3,
+            dataset_paths=preprocessed_paths
+        )
+    else:
+        # Fall back to single dataset training
+        print(f'Training with single dataset: persona_chat')
+        model.train_from_preprocessed(
+            dataset_name='persona_chat',
+            epochs=3,
+            preprocessed_path=preprocessed_paths.get('persona_chat')
+        )
+
+    # Save the model
+    output_dir = 'notebooks/Jarvis_AI_Assistant/models/flan-ul2-finetuned'
+    os.makedirs(output_dir, exist_ok=True)
+    model.save_model(f'{output_dir}/model.pt')
+
+    # Verify saved model
+    if os.path.exists(f'{output_dir}/model.pt'):
+        print(f'✓ Model successfully saved to {output_dir}/model.pt')
+    else:
+        print(f'❌ ERROR: Failed to save model to {output_dir}/model.pt')
+        sys.exit(1)
+
+    print('✓ Text generation model training completed successfully')
+
+except Exception as e:
+    print(f'❌ ERROR during text model training: {e}')
+
+    # Try to save partial results
+    try:
+        backup_dir = f'notebooks/Jarvis_AI_Assistant/models/backup_text_model_{int(torch.cuda.current_device())}'
+        os.makedirs(backup_dir, exist_ok=True)
+
+        if 'model' in locals():
+            model.save_model(f'{backup_dir}/partial_model.pt')
+            print(f'✓ Partial model saved to {backup_dir}/partial_model.pt')
+    except Exception as save_error:
+        print(f'❌ Failed to save partial results: {save_error}')
+
+    sys.exit(1)
+"
+
+        # Check if training was successful
+        if [ $? -ne 0 ]; then
+            echo "❌ Text model training failed. See logs for details."
+            exit 1
+        else
+            echo "✓ Text model training completed successfully!"
+        fi
+        ;;
+    cnn-text)
+        echo "Running CNN-based text generation model training with enhanced GPU handling..."
+
+        # Verify GPU availability before starting training
+        python -c "
+import torch
+import sys
+
+if not torch.cuda.is_available():
+    print('❌ ERROR: CUDA is not available. Cannot proceed with GPU training.')
+    sys.exit(1)
+else:
+    device_name = torch.cuda.get_device_name(0)
+    device_capability = torch.cuda.get_device_capability(0)
+    free_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+    print(f'✓ Using GPU: {device_name} with CUDA capability {device_capability[0]}.{device_capability[1]}')
+    print(f'✓ Available GPU memory: {free_memory:.2f} GiB')
+
+    # Verify minimum memory requirements - CNN models need more memory
+    if free_memory < 15:
+        print(f'❌ ERROR: Not enough GPU memory. Need at least 15 GiB for CNN model, but only {free_memory:.2f} GiB available.')
+        sys.exit(1)
+
+    # Clear CUDA cache
+    torch.cuda.empty_cache()
+    print('✓ CUDA cache cleared')
+"
+
+        # Check exit code of the GPU verification
+        if [ $? -ne 0 ]; then
+            echo "❌ GPU verification failed. Cannot proceed with training."
+            exit 1
+        fi
+
+        # Apply additional safeguards for GPU training
+        export PYTORCH_NO_CUDA_MEMORY_CACHING=1  # Disable CUDA memory caching
+
+        python -c "
+import sys
+import os
+import torch
+from src.generative_ai_module.text_generator import create_cnn_text_generator
+
+try:
+    print('Starting CNN-based text generation model training...')
+
+    # Ensure we're using GPU
+    if not torch.cuda.is_available():
+        print('❌ ERROR: CUDA is not available. Cannot proceed with GPU training.')
+        sys.exit(1)
+
+    # Create and train the CNN-enhanced text generator with optimized attention mechanisms
+    model = create_cnn_text_generator(
+        model_name='google/flan-ul2',
+        force_gpu=True,
+        gpu_type='$GPU_TYPE',
+        vram_size=$VRAM_SIZE,
+        cnn_layers=3,  # Use 3 CNN layers with enhanced attention-like features
+        load_in_4bit=True,
+        use_flash_attention_2=True,  # This will trigger our enhanced attention mechanisms for T5/FLAN models
+        gradient_checkpointing=True,
+        lora_rank=32,
+        lora_alpha=64,
+        lora_dropout=0.1,  # Increased dropout for better regularization
+        max_length=2048,  # Reduced from 4096 to ensure stability with FLAN-UL2
+        batch_size=2,  # Further reduced for CNN layers which use more memory
+        gradient_accumulation_steps=12,  # Increased to maintain effective batch size
+        num_workers=0,  # Set to 0 to avoid multiprocessing issues with CUDA
+        warmup_ratio=0.05,  # Increased warmup for better convergence
+        weight_decay=0.01,
+        adam_beta1=0.9,
+        adam_beta2=0.999,
+        adam_epsilon=1e-8,
+        max_grad_norm=1.0
+    )
+
+    # Verify model is on GPU
+    if not next(model.parameters()).is_cuda:
+        print('❌ WARNING: Model is not on GPU. Moving model to GPU...')
+        model = model.cuda()
+
+    # Ensure datasets directory exists
+    datasets_dir = 'notebooks/Jarvis_AI_Assistant/datasets'
+    os.makedirs(datasets_dir, exist_ok=True)
+
+    # Import dataset processor
+    from src.generative_ai_module.dataset_processor import DatasetProcessor
+
+    # Create processor
+    processor = DatasetProcessor(model)
+
+    # Define datasets to preprocess
+    datasets = ['persona_chat', 'writing_prompts', 'pile', 'openassistant', 'gpteacher']
+    preprocessed_paths = {}
+
+    # Preprocess all datasets
+    print('Preprocessing datasets...')
+
+    # Check if we should use the ImprovedPreprocessor with dataset-specific settings
+    if os.environ.get('USE_IMPROVED_PREPROCESSOR') == '1':
+        print('Using ImprovedPreprocessor with dataset-specific settings')
+        from src.generative_ai_module.improved_preprocessing import ImprovedPreprocessor
+        improved_processor = ImprovedPreprocessor()
+
+        for dataset_name in datasets:
+            preprocessed_path = os.path.join(datasets_dir, f'preprocessed_{dataset_name}.pt')
+            preprocessed_paths[dataset_name] = preprocessed_path
+
+            # Check if dataset is already preprocessed
+            if os.path.exists(preprocessed_path):
+                print(f'Dataset {dataset_name} already preprocessed at {preprocessed_path}')
+                continue
+
+            print(f'Preprocessing {dataset_name} with ImprovedPreprocessor...')
+            try:
+                # Process dataset with dataset-specific settings
+                # writing_prompts will use special memory-optimized settings
+                data = improved_processor.process_dataset(dataset_name, max_samples=5000)
+
+                # Save preprocessed data
+                print(f'Saving preprocessed {dataset_name} to {preprocessed_path}...')
+                torch.save(data, preprocessed_path)
+                print(f'✓ Successfully preprocessed {dataset_name}')
+
+                # Log the dataset-specific parameters used
+                print(f'{dataset_name} parameters:')
+                print(f"  - Batch size: {data['params']['batch_size']}")
+                print(f"  - Sequence length: {data['params']['max_sequence_length']}")
+                print(f"  - Stride: {data['params']['stride']}")
+                print(f"  - Gradient accumulation steps: {data['params']['grad_accum_steps']}")
+                print(f"  - Number of batches: {len(data['batches'])}")
+
+            except Exception as e:
+                print(f'❌ Error preprocessing {dataset_name}: {e}')
+                import traceback
+                traceback.print_exc()
+    else:
+        # Use the standard DatasetProcessor
+        for dataset_name in datasets:
+            preprocessed_path = os.path.join(datasets_dir, f'preprocessed_{dataset_name}.pt')
+            preprocessed_paths[dataset_name] = preprocessed_path
+
+            # Check if dataset is already preprocessed
+            if os.path.exists(preprocessed_path):
+                print(f'Dataset {dataset_name} already preprocessed at {preprocessed_path}')
+                continue
+
+            print(f'Preprocessing {dataset_name}...')
+            try:
+                # Prepare dataset with appropriate parameters
+                if dataset_name == 'persona_chat':
+                    sequence_length = 512
+                    batch_size = 16
+                    raw_text = processor.load_persona_chat(split='train', max_samples=5000)
+                elif dataset_name == 'writing_prompts':
+                    sequence_length = 1024
+                    batch_size = 8
+                    raw_text = processor.load_writing_prompts(split='train', max_samples=5000)
+                elif dataset_name == 'pile':
+                    sequence_length = 1024
+                    batch_size = 8
+                    raw_text = processor.load_pile_dataset(split='train', max_samples=5000)
+                elif dataset_name == 'openassistant':
+                    sequence_length = 512
+                    batch_size = 16
+                    raw_text = processor.load_openassistant_dataset(split='train', max_samples=5000)
+                elif dataset_name == 'gpteacher':
+                    sequence_length = 768
+                    batch_size = 12
+                    raw_text = processor.load_gpteacher_dataset(split='train', max_samples=5000)
+
+                # Create sequences and batches
+                print(f'Creating sequences with length {sequence_length}...')
+                sequences = processor.create_sequences(raw_text, sequence_length)
+
+                print(f'Creating batches with batch size {batch_size}...')
+                batches = processor.create_batches(sequences, batch_size=batch_size)
+
+                # Create dataset dictionary
+                dataset = {
+                    'batches': batches,
+                    'metadata': {
+                        'dataset_name': dataset_name,
+                        'split': 'train',
+                        'sequence_length': sequence_length,
+                        'batch_size': batch_size,
+                        'sample_count': len(sequences),
+                        'batch_count': len(batches)
+                    }
+                }
+
+                # Save preprocessed data
+                print(f'Saving preprocessed {dataset_name} to {preprocessed_path}...')
+                torch.save(dataset, preprocessed_path)
+                print(f'✓ Successfully preprocessed {dataset_name}')
+
+            except Exception as e:
+                print(f'❌ Error preprocessing {dataset_name}: {e}')
+                import traceback
+                traceback.print_exc()
+
+    # Train the model with all available datasets
+    print('Starting training...')
+
+    # Check which datasets were successfully preprocessed
+    available_datasets = []
+    for dataset_name, path in preprocessed_paths.items():
+        if os.path.exists(path):
+            available_datasets.append(dataset_name)
+
+    if len(available_datasets) > 1:
+        print(f'Training with multiple datasets: {available_datasets}')
+        model.train_from_multiple_datasets(
+            dataset_names=available_datasets,
+            epochs=3,
+            dataset_paths=preprocessed_paths
+        )
+    else:
+        # Fall back to single dataset training
+        print(f'Training with single dataset: persona_chat')
+        model.train_from_preprocessed(
+            dataset_name='persona_chat',
+            epochs=3,
+            preprocessed_path=preprocessed_paths.get('persona_chat')
+        )
+
+    # Save the model
+    output_dir = 'notebooks/Jarvis_AI_Assistant/models/cnn-flan-ul2-finetuned'
+    os.makedirs(output_dir, exist_ok=True)
+    model.save_model(f'{output_dir}/model.pt')
+
+    # Verify saved model
+    if os.path.exists(f'{output_dir}/model.pt'):
+        print(f'✓ Model successfully saved to {output_dir}/model.pt')
+    else:
+        print(f'❌ ERROR: Failed to save model to {output_dir}/model.pt')
+        sys.exit(1)
+
+    print('✓ CNN-enhanced text generation model training completed successfully')
+
+except Exception as e:
+    print(f'❌ ERROR during CNN text model training: {e}')
+
+    # Try to save partial results
+    try:
+        backup_dir = f'notebooks/Jarvis_AI_Assistant/models/backup_cnn_model_{int(torch.cuda.current_device())}'
+        os.makedirs(backup_dir, exist_ok=True)
+
+        if 'model' in locals():
+            model.save_model(f'{backup_dir}/partial_model.pt')
+            print(f'✓ Partial model saved to {backup_dir}/partial_model.pt')
+    except Exception as save_error:
+        print(f'❌ Failed to save partial results: {save_error}')
+
+    sys.exit(1)
+"
+
+        # Check if training was successful
+        if [ $? -ne 0 ]; then
+            echo "❌ CNN text model training failed. See logs for details."
+            exit 1
+        else
+            echo "✓ CNN text model training completed successfully!"
+        fi
+        ;;
+    custom-model)
+        echo "Running custom encoder-decoder model training with CNN model enhancement..."
+
+        # First check if the CNN model exists
+        CNN_MODEL_PATH="/notebooks/Jarvis_AI_Assistant/models/cnn-flan-ul2-finetuned/model.pt"
+        if [ ! -f "$CNN_MODEL_PATH" ]; then
+            echo "❌ ERROR: CNN model not found at $CNN_MODEL_PATH"
+            echo "Please run train_jarvis.sh with --model-type cnn-text first"
+            exit 1
+        fi
+
+        # Verify GPU availability before starting training
+        python -c "
+import torch
+import sys
+
+if not torch.cuda.is_available():
+    print('❌ ERROR: CUDA is not available. Cannot proceed with GPU training.')
+    sys.exit(1)
+else:
+    device_name = torch.cuda.get_device_name(0)
+    device_capability = torch.cuda.get_device_capability(0)
+    free_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+    print(f'✓ Using GPU: {device_name} with CUDA capability {device_capability[0]}.{device_capability[1]}')
+    print(f'✓ Available GPU memory: {free_memory:.2f} GiB')
+
+    # Verify minimum memory requirements - Custom models need more memory
+    if free_memory < 20:
+        print(f'❌ ERROR: Not enough GPU memory. Need at least 20 GiB for custom model, but only {free_memory:.2f} GiB available.')
+        sys.exit(1)
+
+    # Clear CUDA cache
+    torch.cuda.empty_cache()
+    print('✓ CUDA cache cleared')
+"
+
+        # Check exit code of the GPU verification
+        if [ $? -ne 0 ]; then
+            echo "❌ GPU verification failed. Cannot proceed with training."
+            exit 1
+        fi
+
+        # Apply additional safeguards for GPU training
+        export PYTORCH_NO_CUDA_MEMORY_CACHING=1  # Disable CUDA memory caching
+
+        # Set default values for custom model training
+        OUTPUT_DIR="/notebooks/Jarvis_AI_Assistant/models/custom-encoder-decoder"
+        EPOCHS=3
+        BATCH_SIZE=4
+        MAX_SAMPLES=5000
+        LEARNING_RATE=5e-5
+        WEIGHT_DECAY=0.01
+        HIDDEN_SIZE=768
+        NUM_ENCODER_LAYERS=3
+        NUM_DECODER_LAYERS=3
+        DROPOUT=0.1
+        LOG_EVERY=10
+
+        # Create output directory if it doesn't exist
+        mkdir -p "$OUTPUT_DIR"
+
+        # Print training parameters
+        echo "===== Custom Encoder-Decoder Model Training ====="
+        echo "CNN Model Path: $CNN_MODEL_PATH"
+        echo "Output Directory: $OUTPUT_DIR"
+        echo "Epochs: $EPOCHS"
+        echo "Batch Size: $BATCH_SIZE"
+        echo "Max Samples: $MAX_SAMPLES"
+        echo "Learning Rate: $LEARNING_RATE"
+        echo "Weight Decay: $WEIGHT_DECAY"
+        echo "Hidden Size: $HIDDEN_SIZE"
+        echo "Encoder Layers: $NUM_ENCODER_LAYERS"
+        echo "Decoder Layers: $NUM_DECODER_LAYERS"
+        echo "Dropout: $DROPOUT"
+        echo "Log Every: $LOG_EVERY"
+        echo "=============================================="
+
+        # Run the training script
+        python -c "
+import sys
+import os
+import torch
+import logging
+import argparse
+from typing import List, Dict, Optional, Union, Tuple
+from pathlib import Path
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger(__name__)
+
+# Import local modules
+try:
+    from src.generative_ai_module.text_generator import CNNTextGenerator
+    from src.generative_ai_module.unified_dataset_handler import UnifiedDatasetHandler
+except ImportError as e:
+    logger.error(f'Failed to import required modules: {e}')
+    sys.exit(1)
+
+class CustomEncoderDecoder(torch.nn.Module):
+    """
+    Custom encoder-decoder model that leverages the fine-tuned CNN-enhanced FLAN-UL2 model.
+
+    This model uses the CNN-enhanced FLAN-UL2 model as a feature extractor and adds
+    custom encoder-decoder layers on top.
+    """
+
+    def __init__(
+        self,
+        cnn_model_path: str,
+        hidden_size: int = 768,
+        num_encoder_layers: int = 3,
+        num_decoder_layers: int = 3,
+        dropout: float = 0.1,
+        force_gpu: bool = True
+    ):
+        super().__init__()
+
+        # Load the CNN-enhanced FLAN-UL2 model
+        logger.info(f'Loading CNN-enhanced FLAN-UL2 model from {cnn_model_path}')
+        self.cnn_model = self._load_cnn_model(cnn_model_path)
+
+        # Freeze the CNN model parameters
+        for param in self.cnn_model.parameters():
+            param.requires_grad = False
+
+        # Get the hidden size from the CNN model
+        self.feature_size = self.cnn_model.hidden_size
+
+        # Create encoder layers
+        self.encoder = torch.nn.TransformerEncoder(
+            torch.nn.TransformerEncoderLayer(
+                d_model=self.feature_size,
+                nhead=8,
+                dim_feedforward=hidden_size,
+                dropout=dropout,
+                batch_first=True
+            ),
+            num_layers=num_encoder_layers
+        )
+
+        # Create decoder layers
+        self.decoder = torch.nn.TransformerDecoder(
+            torch.nn.TransformerDecoderLayer(
+                d_model=self.feature_size,
+                nhead=8,
+                dim_feedforward=hidden_size,
+                dropout=dropout,
+                batch_first=True
+            ),
+            num_layers=num_decoder_layers
+        )
+
+        # Output projection
+        self.output_projection = torch.nn.Linear(self.feature_size, self.cnn_model.tokenizer.vocab_size)
+
+        # Set device
+        self.device = torch.device('cuda' if torch.cuda.is_available() and force_gpu else 'cpu')
+        self.to(self.device)
+
+        logger.info(f'Initialized custom encoder-decoder model on {self.device}')
+
+    def _load_cnn_model(self, model_path: str) -> CNNTextGenerator:
+        """Load the CNN-enhanced FLAN-UL2 model"""
+        # Check if the model path exists
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f'Model path {model_path} does not exist')
+
+        # Load the model
+        model_dir = os.path.dirname(model_path)
+        tokenizer_path = os.path.join(model_dir, 'tokenizer')
+
+        # Create a new CNN model with enhanced attention mechanisms
+        cnn_model = CNNTextGenerator(
+            model_name_or_path='google/flan-ul2',
+            force_gpu=True,
+            cnn_layers=3,
+            load_in_4bit=True,
+            use_flash_attention_2=True,  # This will trigger our enhanced attention mechanisms for T5/FLAN models
+            lora_dropout=0.1,  # Increased dropout for better regularization
+            warmup_ratio=0.05  # Increased warmup for better convergence
+        )
+
+        # Load the saved model
+        state_dict = torch.load(model_path, map_location='cpu')
+        cnn_model.base_model.load_state_dict(state_dict['base_model'])
+
+        # Load CNN layers
+        for i, layer_state in enumerate(state_dict['cnn_layers']):
+            if i < len(cnn_model.cnn_layers_list):
+                cnn_model.cnn_layers_list[i].load_state_dict(layer_state)
+
+        # Load adapter
+        cnn_model.adapter.load_state_dict(state_dict['adapter'])
+
+        return cnn_model
+
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        decoder_input_ids: torch.Tensor,
+        decoder_attention_mask: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Forward pass through the encoder-decoder model
+
+        Args:
+            input_ids: Input token IDs [batch_size, seq_len]
+            attention_mask: Attention mask for input [batch_size, seq_len]
+            decoder_input_ids: Decoder input token IDs [batch_size, target_len]
+            decoder_attention_mask: Attention mask for decoder [batch_size, target_len]
+
+        Returns:
+            Logits for next token prediction [batch_size, target_len, vocab_size]
+        """
+        # Get embeddings from CNN model
+        with torch.no_grad():
+            # Get embeddings from base model
+            if hasattr(self.cnn_model.base_model, 'transformer') and hasattr(self.cnn_model.base_model.transformer, 'wte'):
+                # GPT-2 style models
+                embeddings = self.cnn_model.base_model.transformer.wte(input_ids)
+            elif hasattr(self.cnn_model.base_model, 'get_input_embeddings'):
+                # Generic approach for most models
+                embedding_layer = self.cnn_model.base_model.get_input_embeddings()
+                embeddings = embedding_layer(input_ids)
+            else:
+                raise ValueError('Could not get embeddings from model')
+
+            # Apply CNN layers for feature extraction
+            # First, transpose for CNN (batch_size, hidden_size, seq_len)
+            x = embeddings.transpose(1, 2)
+
+            # Pass through each CNN layer
+            for cnn_layer in self.cnn_model.cnn_layers_list:
+                x = cnn_layer(x)
+
+            # Transpose back to transformer format (batch_size, seq_len, hidden_size)
+            x = x.transpose(1, 2)
+
+            # Apply adapter to ensure compatibility with transformer
+            enhanced_embeddings = self.cnn_model.adapter(x)
+
+            # Add residual connection to preserve original embeddings
+            enhanced_embeddings = enhanced_embeddings + embeddings
+
+        # Pass through encoder
+        encoder_output = self.encoder(enhanced_embeddings, src_key_padding_mask=~attention_mask.bool())
+
+        # Get decoder embeddings
+        if hasattr(self.cnn_model.base_model, 'transformer') and hasattr(self.cnn_model.base_model.transformer, 'wte'):
+            # GPT-2 style models
+            decoder_embeddings = self.cnn_model.base_model.transformer.wte(decoder_input_ids)
+        elif hasattr(self.cnn_model.base_model, 'get_input_embeddings'):
+            # Generic approach for most models
+            embedding_layer = self.cnn_model.base_model.get_input_embeddings()
+            decoder_embeddings = embedding_layer(decoder_input_ids)
+        else:
+            raise ValueError('Could not get embeddings from model')
+
+        # Pass through decoder
+        decoder_output = self.decoder(
+            decoder_embeddings,
+            encoder_output,
+            tgt_key_padding_mask=~decoder_attention_mask.bool()
+        )
+
+        # Project to vocabulary
+        logits = self.output_projection(decoder_output)
+
+        return logits
+
+def train_custom_model():
+    """Train the custom encoder-decoder model"""
+    # Set parameters
+    cnn_model_path = '$CNN_MODEL_PATH'
+    output_dir = '$OUTPUT_DIR'
+    epochs = $EPOCHS
+    batch_size = $BATCH_SIZE
+    max_samples = $MAX_SAMPLES
+    learning_rate = $LEARNING_RATE
+    weight_decay = $WEIGHT_DECAY
+    hidden_size = $HIDDEN_SIZE
+    num_encoder_layers = $NUM_ENCODER_LAYERS
+    num_decoder_layers = $NUM_DECODER_LAYERS
+    dropout = $DROPOUT
+    log_every = $LOG_EVERY
+    force_gpu = True
+    save_checkpoints = True
+
+    # Initialize the dataset handler
+    dataset_handler = UnifiedDatasetHandler()
+
+    # Load all preprocessed datasets
+    datasets_dir = 'notebooks/Jarvis_AI_Assistant/datasets'
+    os.makedirs(datasets_dir, exist_ok=True)
+    dataset_names = ['writing_prompts', 'persona_chat', 'pile', 'openassistant', 'gpteacher']
+    preprocessed_paths = {name: os.path.join(datasets_dir, f'preprocessed_{name}.pt') for name in dataset_names}
+
+    # Check which datasets are available
+    available_datasets = []
+    for dataset_name, path in preprocessed_paths.items():
+        if os.path.exists(path):
+            available_datasets.append(dataset_name)
+
+    if not available_datasets:
+        logger.warning("No preprocessed datasets found. Running preprocessing...")
+
+        # Check if we should use the ImprovedPreprocessor with dataset-specific settings
+        if os.environ.get('USE_IMPROVED_PREPROCESSOR') == '1':
+            logger.info('Using ImprovedPreprocessor with dataset-specific settings')
+            from src.generative_ai_module.improved_preprocessing import ImprovedPreprocessor
+
+            # Create improved processor for preprocessing
+            improved_processor = ImprovedPreprocessor()
+
+            # Preprocess all datasets
+            logger.info('Preprocessing datasets with ImprovedPreprocessor...')
+            for dataset_name in dataset_names:
+                preprocessed_path = preprocessed_paths[dataset_name]
+
+                logger.info(f'Preprocessing {dataset_name} with ImprovedPreprocessor...')
+                try:
+                    # Process dataset with dataset-specific settings
+                    # writing_prompts will use special memory-optimized settings
+                    data = improved_processor.process_dataset(dataset_name, max_samples=max_samples // 5)
+
+                    # Save preprocessed data
+                    logger.info(f'Saving preprocessed {dataset_name} to {preprocessed_path}...')
+                    os.makedirs(os.path.dirname(preprocessed_path), exist_ok=True)
+                    torch.save(data, preprocessed_path)
+                    logger.info(f'Successfully preprocessed {dataset_name}')
+
+                    # Log the dataset-specific parameters used
+                    logger.info(f'{dataset_name} parameters:')
+                    logger.info(f"  - Batch size: {data['params']['batch_size']}")
+                    logger.info(f"  - Sequence length: {data['params']['max_sequence_length']}")
+                    logger.info(f"  - Stride: {data['params']['stride']}")
+                    logger.info(f"  - Gradient accumulation steps: {data['params']['grad_accum_steps']}")
+                    logger.info(f"  - Number of batches: {len(data['batches'])}")
+
+                    # Add to available datasets
+                    available_datasets.append(dataset_name)
+
+                except Exception as e:
+                    logger.error(f'Error preprocessing {dataset_name}: {e}')
+                    import traceback
+                    logger.error(traceback.format_exc())
+        else:
+            # Import standard dataset processor
+            from src.generative_ai_module.dataset_processor import DatasetProcessor
+
+            # Create processor for preprocessing
+            processor = DatasetProcessor()
+
+            # Preprocess all datasets
+            logger.info('Preprocessing datasets...')
+            for dataset_name in dataset_names:
+                preprocessed_path = preprocessed_paths[dataset_name]
+
+                logger.info(f'Preprocessing {dataset_name}...')
+                try:
+                    # Prepare dataset with appropriate parameters
+                    if dataset_name == 'persona_chat':
+                        sequence_length = 512
+                        batch_size = 16
+                        raw_text = processor.load_persona_chat(split='train', max_samples=max_samples // 5)
+                    elif dataset_name == 'writing_prompts':
+                        sequence_length = 1024
+                        batch_size = 8
+                        raw_text = processor.load_writing_prompts(split='train', max_samples=max_samples // 5)
+                    elif dataset_name == 'pile':
+                        sequence_length = 1024
+                        batch_size = 8
+                        raw_text = processor.load_pile_dataset(split='train', max_samples=max_samples // 5)
+                    elif dataset_name == 'openassistant':
+                        sequence_length = 512
+                        batch_size = 16
+                        raw_text = processor.load_openassistant_dataset(split='train', max_samples=max_samples // 5)
+                    elif dataset_name == 'gpteacher':
+                        sequence_length = 768
+                        batch_size = 12
+                        raw_text = processor.load_gpteacher_dataset(split='train', max_samples=max_samples // 5)
+
+                    # Create sequences and batches
+                    logger.info(f'Creating sequences with length {sequence_length}...')
+                    sequences = processor.create_sequences(raw_text, sequence_length)
+
+                    logger.info(f'Creating batches with batch size {batch_size}...')
+                    batches = processor.create_batches(sequences, batch_size=batch_size)
+
+                    # Create dataset dictionary
+                    dataset = {
+                        'batches': batches,
+                        'metadata': {
+                            'dataset_name': dataset_name,
+                            'split': 'train',
+                            'sequence_length': sequence_length,
+                            'batch_size': batch_size,
+                            'sample_count': len(sequences),
+                            'batch_count': len(batches)
+                        }
+                    }
+
+                    # Save preprocessed data
+                    logger.info(f'Saving preprocessed {dataset_name} to {preprocessed_path}...')
+                    os.makedirs(os.path.dirname(preprocessed_path), exist_ok=True)
+                    torch.save(dataset, preprocessed_path)
+                    logger.info(f'Successfully preprocessed {dataset_name}')
+
+                    # Add to available datasets
+                    available_datasets.append(dataset_name)
+
+                except Exception as e:
+                    logger.error(f'Error preprocessing {dataset_name}: {e}')
+                    import traceback
+                    logger.error(traceback.format_exc())
+
+    # Load the preprocessed datasets
+    datasets = []
+    for dataset_name in available_datasets:
+        logger.info(f'Loading preprocessed dataset: {dataset_name}')
+        try:
+            dataset = torch.load(preprocessed_paths[dataset_name])
+            datasets.append(dataset)
+        except Exception as e:
+            logger.warning(f'Failed to load dataset {dataset_name}: {e}')
+
+    # Combine datasets
+    combined_batches = []
+    for dataset in datasets:
+        combined_batches.extend(dataset.get('batches', []))
+
+    logger.info(f'Combined {len(combined_batches)} batches from all datasets')
+
+    # Initialize the custom model
+    model = CustomEncoderDecoder(
+        cnn_model_path=cnn_model_path,
+        hidden_size=hidden_size,
+        num_encoder_layers=num_encoder_layers,
+        num_decoder_layers=num_decoder_layers,
+        dropout=dropout,
+        force_gpu=force_gpu
+    )
+
+    # Set up optimizer
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=learning_rate,
+        weight_decay=weight_decay
+    )
+
+    # Set up loss function
+    loss_fn = torch.nn.CrossEntropyLoss(ignore_index=-100)
+
+    # Training loop
+    logger.info(f'Starting training for {epochs} epochs')
+    for epoch in range(epochs):
+        model.train()
+        total_loss = 0
+
+        # Track dataset-specific parameters
+        current_dataset = None
+        prev_dataset = None
+        grad_accum_steps = 1  # Default
+        step_count = 0
+
+        # Process batches
+        for i, (input_batch, target_batch) in enumerate(combined_batches):
+            # Skip invalid batches
+            if input_batch is None or target_batch is None:
+                continue
+
+            # Determine which dataset this batch is from
+            # This is a heuristic based on batch size
+            batch_size = input_batch.shape[0]
+            if batch_size <= 2:
+                # Likely writing_prompts with special settings
+                current_dataset = "writing_prompts"
+                grad_accum_steps = 4  # Use writing_prompts grad accumulation
+                use_mixed_precision = True
+            else:
+                # Other datasets with default settings
+                current_dataset = "other"
+                grad_accum_steps = 1
+                use_mixed_precision = False
+
+            # Log dataset change
+            if i == 0 or (i > 0 and current_dataset != prev_dataset):
+                logger.info(f"Processing batch from {current_dataset} dataset")
+                logger.info(f"  - Batch size: {batch_size}")
+                logger.info(f"  - Gradient accumulation steps: {grad_accum_steps}")
+                prev_dataset = current_dataset
+
+            # Move to device
+            input_batch = input_batch.to(model.device)
+            target_batch = target_batch.to(model.device)
+
+            # Create attention masks
+            input_attention_mask = (input_batch != model.cnn_model.tokenizer.pad_token_id).float()
+            target_attention_mask = (target_batch != model.cnn_model.tokenizer.pad_token_id).float()
+
+            # Create decoder input IDs (shift right)
+            decoder_input_ids = torch.zeros_like(target_batch)
+            decoder_input_ids[:, 1:] = target_batch[:, :-1]
+            decoder_input_ids[:, 0] = model.cnn_model.tokenizer.bos_token_id if model.cnn_model.tokenizer.bos_token_id is not None else model.cnn_model.tokenizer.pad_token_id
+
+            # Use mixed precision for writing_prompts dataset
+            if use_mixed_precision and torch.cuda.is_available():
+                with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+                    # Forward pass
+                    logits = model(
+                        input_ids=input_batch,
+                        attention_mask=input_attention_mask,
+                        decoder_input_ids=decoder_input_ids,
+                        decoder_attention_mask=target_attention_mask
+                    )
+
+                    # Calculate loss
+                    loss = loss_fn(logits.view(-1, logits.size(-1)), target_batch.view(-1))
+
+                    # Scale loss for gradient accumulation
+                    if grad_accum_steps > 1:
+                        loss = loss / grad_accum_steps
+            else:
+                # Forward pass
+                logits = model(
+                    input_ids=input_batch,
+                    attention_mask=input_attention_mask,
+                    decoder_input_ids=decoder_input_ids,
+                    decoder_attention_mask=target_attention_mask
+                )
+
+                # Calculate loss
+                loss = loss_fn(logits.view(-1, logits.size(-1)), target_batch.view(-1))
+
+                # Scale loss for gradient accumulation
+                if grad_accum_steps > 1:
+                    loss = loss / grad_accum_steps
+
+            # Backward pass
+            loss.backward()
+
+            # Update step counter
+            step_count += 1
+
+            # Step optimizer based on gradient accumulation
+            if grad_accum_steps == 1 or step_count % grad_accum_steps == 0:
+                optimizer.step()
+                optimizer.zero_grad(set_to_none=True)
+
+            # Update total loss (scale back for reporting)
+            total_loss += loss.item() * (grad_accum_steps if grad_accum_steps > 1 else 1)
+
+            # Log progress
+            if (i + 1) % log_every == 0:
+                logger.info(f'Epoch {epoch+1}/{epochs}, Batch {i+1}/{len(combined_batches)}, Loss: {loss.item() * (grad_accum_steps if grad_accum_steps > 1 else 1):.4f}')
+
+            # Memory cleanup for writing_prompts dataset
+            if current_dataset == "writing_prompts" and torch.cuda.is_available():
+                del logits
+                torch.cuda.empty_cache()
+
+        # Log epoch results
+        avg_loss = total_loss / len(combined_batches)
+        logger.info(f'Epoch {epoch+1}/{epochs}, Average Loss: {avg_loss:.4f}')
+
+        # Save checkpoint
+        if save_checkpoints:
+            checkpoint_path = os.path.join(output_dir, f'checkpoint_epoch_{epoch+1}.pt')
+            torch.save({
+                'epoch': epoch + 1,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': avg_loss
+            }, checkpoint_path)
+            logger.info(f'Saved checkpoint to {checkpoint_path}')
+
+    # Save final model
+    final_model_path = os.path.join(output_dir, 'custom_encoder_decoder.pt')
+    torch.save(model.state_dict(), final_model_path)
+    logger.info(f'Saved final model to {final_model_path}')
+
+    return model
+
+try:
+    print('Starting custom encoder-decoder model training...')
+
+    # Ensure we're using GPU
+    if not torch.cuda.is_available():
+        print('❌ ERROR: CUDA is not available. Cannot proceed with GPU training.')
+        sys.exit(1)
+
+    # Train the model
+    model = train_custom_model()
+
+    # Verify saved model
+    final_model_path = os.path.join('$OUTPUT_DIR', 'custom_encoder_decoder.pt')
+    if os.path.exists(final_model_path):
+        print(f'✓ Model successfully saved to {final_model_path}')
+    else:
+        print(f'❌ ERROR: Failed to save model to {final_model_path}')
+        sys.exit(1)
+
+    print('✓ Custom encoder-decoder model training completed successfully')
+
+except Exception as e:
+    print(f'❌ ERROR during custom model training: {e}')
+
+    # Try to save partial results
+    try:
+        backup_dir = f'notebooks/Jarvis_AI_Assistant/models/backup_custom_model_{int(torch.cuda.current_device())}'
+        os.makedirs(backup_dir, exist_ok=True)
+
+        if 'model' in locals():
+            torch.save(model.state_dict(), f'{backup_dir}/partial_model.pt')
+            print(f'✓ Partial model saved to {backup_dir}/partial_model.pt')
+    except Exception as save_error:
+        print(f'❌ Failed to save partial results: {save_error}')
+
+    sys.exit(1)
+"
+
+        # Check if training was successful
+        if [ $? -ne 0 ]; then
+            echo "❌ Custom model training failed. See logs for details."
+            exit 1
+        else
+            echo "✓ Custom model training completed successfully!"
+        fi
+        ;;
+    *)
+        echo "Unknown model type: $MODEL_TYPE"
+        echo "Available model types: code, text, cnn-text, custom-model"
+        exit 1
+        ;;
+esac
+
+# Perform final verification and cleanup
+echo "Performing final verification and cleanup..."
+
+# Verify that models were saved correctly
+python -c "
+import os
+import sys
+import torch
+
+# Define expected model directories based on model type
 model_dirs = {
     'code': '/notebooks/Jarvis_AI_Assistant/models/deepseek-coder-6.7b-finetuned',
     'text': '/notebooks/Jarvis_AI_Assistant/models/flan-ul2-finetuned',
