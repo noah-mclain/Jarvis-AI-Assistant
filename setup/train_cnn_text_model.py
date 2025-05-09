@@ -25,22 +25,29 @@ def train_cnn_text_model(gpu_type, vram_size, use_improved_preprocessor=False):
             print('❌ ERROR: CUDA is not available. Cannot proceed with GPU training.')
             sys.exit(1)
 
-        # Create and train the CNN-enhanced text generator with extreme memory optimization for A6000 48GB GPU
+        # Clear CUDA cache before model creation
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            print(f"✅ Cleared CUDA cache before model creation")
+
+        # Create and train the CNN-enhanced text generator with multiple memory-efficient CNN layers
         model = create_cnn_text_generator(
-            model_name='google/flan-t5-base',  # Use a smaller model (base instead of UL2)
+            model_name='google/flan-ul2',  # Use the original model
             force_gpu=True,
             gpu_type=gpu_type,
             vram_size=int(vram_size),
-            cnn_layers=0,  # Disable CNN layers completely to save memory
-            load_in_4bit=True,  # Use 4-bit quantization for maximum memory efficiency
-            use_flash_attention_2=False,  # Disable Flash Attention completely
+            cnn_layers=3,  # Increased to 3 lightweight CNN layers for better learning
+            cnn_kernel_sizes=[3, 5, 7],  # Use different kernel sizes for multi-scale feature extraction
+            cnn_dropout=0.1,  # Keep dropout for regularization
+            load_in_4bit=True,  # Use 4-bit quantization for memory efficiency
+            use_flash_attention_2=False,  # Disable Flash Attention
             gradient_checkpointing=True,  # Enable gradient checkpointing for memory efficiency
-            lora_rank=4,  # Minimal LoRA rank to save memory
-            lora_alpha=8,  # Reduced LoRA alpha to save memory
+            lora_rank=8,  # Use moderate LoRA rank for better fine-tuning
+            lora_alpha=16,  # Moderate LoRA alpha
             lora_dropout=0.1,  # Keep dropout for regularization
-            max_length=128,  # Further reduced sequence length to prevent OOM errors
-            batch_size=1,  # Absolute minimum batch size
-            gradient_accumulation_steps=8,  # Further reduced to 8 for memory savings
+            max_length=128,  # Reduced sequence length to prevent OOM errors
+            batch_size=1,  # Minimum batch size
+            gradient_accumulation_steps=16,  # Use moderate gradient accumulation
             num_workers=0,  # No parallel workers to minimize memory usage
             warmup_ratio=0.03,  # Keep optimal warmup
             weight_decay=0.01,  # Keep weight decay for regularization
@@ -60,15 +67,17 @@ def train_cnn_text_model(gpu_type, vram_size, use_improved_preprocessor=False):
         os.environ["MIXED_PRECISION_TRAINING"] = "1"
 
         # Print memory optimization message
-        print("⚠️ Using extreme memory optimization settings - training will be slower but more stable")
-        print("⚠️ Using smaller model (flan-t5-base instead of flan-ul2)")
-        print("⚠️ Disabled CNN layers completely to save memory")
+        print("⚠️ Using memory-efficient CNN layers for improved learning")
+        print("⚠️ Using original flan-ul2 model with 3 lightweight CNN layers")
+        print("⚠️ Using multi-scale feature extraction with kernel sizes [3, 5, 7]")
         print("⚠️ Sequence length reduced to 128 tokens to prevent OOM errors")
         print("⚠️ Using 4-bit quantization and gradient checkpointing")
         print("⚠️ Using mixed precision training (FP16/BF16)")
-        print("⚠️ Gradient accumulation steps reduced to 8")
+        print("⚠️ Using grouped convolutions to reduce CNN parameters")
         print("⚠️ Using Adafactor optimizer for memory efficiency")
-        print("⚠️ LoRA rank reduced to 4 (minimal fine-tuning)")
+        print("⚠️ Clearing CUDA cache at strategic points")
+        print("⚠️ Properly converting input batch types for datasets")
+        print("⚠️ Progressive CNN layer fallback for OOM recovery")
 
         # Monitor GPU memory usage
         if torch.cuda.is_available():

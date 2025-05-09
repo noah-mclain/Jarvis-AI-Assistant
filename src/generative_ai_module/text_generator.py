@@ -1172,63 +1172,56 @@ class CNNTextGenerator(TextGenerator):
         self.cnn_layers_list = nn.ModuleList()
         self.layer_norms = nn.ModuleList()
 
-        # Check if CNN layers are disabled (cnn_layers = 0)
-        if self.cnn_layers <= 0:
-            print("CNN layers disabled - using base model directly")
-            # Create a dummy adapter that just passes through the input
-            self.adapter = nn.Identity()
-        else:
-            # Create CNN layers
-            for i in range(self.cnn_layers):
-                kernel_size = self.cnn_kernel_sizes[i] if i < len(self.cnn_kernel_sizes) else 3
-                padding = kernel_size // 2  # Same padding to maintain sequence length
+        # Create multiple lightweight CNN layers for improved learning with multi-scale feature extraction
+        print(f"Creating {self.cnn_layers} lightweight CNN layers with multi-scale feature extraction")
 
-                # Calculate dilation rate for increasing receptive field
-                # First layer has dilation=1, subsequent layers have increasing dilation
-                dilation = 2**i if i > 0 else 1
-                effective_padding = padding * dilation
+        # Create CNN layers with different kernel sizes for multi-scale feature extraction
+        for i in range(self.cnn_layers):
+            kernel_size = self.cnn_kernel_sizes[i] if i < len(self.cnn_kernel_sizes) else 3
+            padding = kernel_size // 2  # Same padding to maintain sequence length
 
-                # Create enhanced convolutional layer with batch normalization and dropout
-                cnn_layer = nn.Sequential(
-                    # Main convolutional layer with dilation for larger receptive field
-                    nn.Conv1d(
-                        in_channels=self.hidden_size,
-                        out_channels=self.hidden_size,
-                        kernel_size=kernel_size,
-                        padding=effective_padding,
-                        dilation=dilation
-                    ),
-                    nn.BatchNorm1d(self.hidden_size),
-                    nn.ReLU(),  # Using ReLU for compatibility
-                    nn.Dropout(self.cnn_dropout),
+            # Calculate groups based on kernel size to balance parameters vs. expressiveness
+            # Smaller kernels can have more groups (more parameter efficient)
+            groups = 32 if kernel_size <= 3 else 16 if kernel_size <= 5 else 8
 
-                    # Add a 1x1 convolution to act as a position-wise feed-forward network
-                    nn.Conv1d(
-                        in_channels=self.hidden_size,
-                        out_channels=self.hidden_size * 2,  # Expand dimension like in transformer FFN
-                        kernel_size=1
-                    ),
-                    nn.ReLU(),  # Using ReLU for compatibility
-                    nn.Dropout(self.cnn_dropout),
-                    nn.Conv1d(
-                        in_channels=self.hidden_size * 2,
-                        out_channels=self.hidden_size,  # Project back to original dimension
-                        kernel_size=1
-                    ),
-                )
+            print(f"  - CNN Layer {i+1}: kernel_size={kernel_size}, groups={groups}")
 
-                self.cnn_layers_list.append(cnn_layer)
-
-            # Create layer normalization for each CNN layer output (similar to transformer)
-            self.layer_norms = nn.ModuleList([nn.LayerNorm(self.hidden_size) for _ in range(self.cnn_layers)])
-
-            # Create adapter to transform CNN outputs back to transformer format
-            self.adapter = nn.Sequential(
-                nn.Linear(self.hidden_size, self.hidden_size * 2),
-                nn.ReLU(),  # Using ReLU for compatibility
-                nn.Dropout(self.cnn_dropout),
-                nn.Linear(self.hidden_size * 2, self.hidden_size)
+            # Use a memory-efficient CNN architecture
+            cnn_layer = nn.Sequential(
+                # Lightweight convolutional layer with grouped convolutions
+                nn.Conv1d(
+                    in_channels=self.hidden_size,
+                    out_channels=self.hidden_size,
+                    kernel_size=kernel_size,
+                    padding=padding,
+                    groups=groups,  # Use grouped convolutions to reduce parameters
+                    bias=False  # Disable bias to save memory
+                ),
+                # Use batch normalization for better training stability
+                nn.BatchNorm1d(self.hidden_size),
+                nn.ReLU(),
+                nn.Dropout(self.cnn_dropout)
             )
+
+            self.cnn_layers_list.append(cnn_layer)
+
+        # Create layer normalization for each CNN layer output
+        self.layer_norms = nn.ModuleList([nn.LayerNorm(self.hidden_size) for _ in range(self.cnn_layers)])
+
+        # Create a lightweight adapter with skip connection capability
+        self.adapter = nn.Sequential(
+            nn.Linear(self.hidden_size, self.hidden_size, bias=False),  # Simplified adapter
+            nn.ReLU(),
+            nn.Dropout(self.cnn_dropout)
+        )
+
+        # Track active CNN layers for progressive fallback
+        self.active_cnn_layers = self.cnn_layers
+
+        # Add explicit CUDA cache clearing
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            print("✅ Cleared CUDA cache after model initialization")
 
         # Move model to appropriate device
         self.device = (
@@ -1388,43 +1381,94 @@ class CNNTextGenerator(TextGenerator):
                 # Re-raise if it's not a dtype or OOM issue
                 raise
 
-        # Memory optimization: use only 1 CNN layer for extreme memory savings
+        # Memory-efficient multi-layer CNN processing with progressive fallback
         # First, transpose for CNN (batch_size, hidden_size, seq_len)
         x = embeddings.transpose(1, 2)
+        original_x = x  # Store original input for residual connections
 
-        # Use only the first CNN layer if we have multiple
-        if len(self.cnn_layers_list) > 0:
-            # Store the input for residual connection
-            residual = x
+        # Process with CNN layers if available
+        if len(self.cnn_layers_list) > 0 and self.active_cnn_layers > 0:
+            # Clear CUDA cache before CNN processing
+            if torch.cuda.is_available() and torch.cuda.memory_allocated() > 1e9:  # If using more than 1GB
+                torch.cuda.empty_cache()
 
-            # Apply CNN layer with gradient checkpointing
-            if self.gradient_checkpointing and hasattr(torch.utils, 'checkpoint'):
-                x = torch.utils.checkpoint.checkpoint(self.cnn_layers_list[0], x, use_reentrant=False)
-            else:
-                x = self.cnn_layers_list[0](x)
+            # Apply multiple CNN layers with progressive fallback
+            try:
+                # Process through each active CNN layer
+                for i in range(min(self.active_cnn_layers, len(self.cnn_layers_list))):
+                    # Store the input for residual connection
+                    residual = x
 
-            # Add residual connection
-            x = x + residual
+                    # Apply CNN layer with gradient checkpointing
+                    if self.gradient_checkpointing and hasattr(torch.utils, 'checkpoint'):
+                        # Use checkpoint with use_reentrant=False for better memory efficiency
+                        x = torch.utils.checkpoint.checkpoint(self.cnn_layers_list[i], x, use_reentrant=False)
+                    else:
+                        x = self.cnn_layers_list[i](x)
 
-            # Apply layer normalization (after transposing back and forth)
-            x_norm = x.transpose(1, 2)  # (batch_size, seq_len, hidden_size)
-            x_norm = self.layer_norms[0](x_norm)
-            x = x_norm.transpose(1, 2)  # Back to (batch_size, hidden_size, seq_len)
+                    # Add residual connection
+                    x = x + residual
+
+                    # Apply layer normalization (after transposing back and forth)
+                    x_norm = x.transpose(1, 2)  # (batch_size, seq_len, hidden_size)
+                    x_norm = self.layer_norms[i](x_norm)
+                    x = x_norm.transpose(1, 2)  # Back to (batch_size, hidden_size, seq_len)
+
+                    # Clear CUDA cache periodically during multi-layer processing
+                    if (i + 1) % 2 == 0 and torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+
+                print(f"Successfully processed through {min(self.active_cnn_layers, len(self.cnn_layers_list))} CNN layers")
+
+            except RuntimeError as e:
+                if "out of memory" in str(e).lower():
+                    # Progressive fallback: reduce active CNN layers for next forward pass
+                    if self.active_cnn_layers > 1:
+                        self.active_cnn_layers -= 1
+                        print(f"OOM in CNN layer, reducing to {self.active_cnn_layers} active CNN layers for future passes")
+                    else:
+                        self.active_cnn_layers = 0
+                        print(f"OOM in CNN layer, disabling CNN layers for future passes")
+
+                    # Fall back to using the original embeddings for this pass
+                    x = original_x
+
+                    # Clear CUDA cache
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                else:
+                    raise
 
         # Transpose back to transformer format (batch_size, seq_len, hidden_size)
         x = x.transpose(1, 2)
 
         # Apply adapter with gradient checkpointing
-        if self.gradient_checkpointing and hasattr(torch.utils, 'checkpoint'):
-            adapter_output = torch.utils.checkpoint.checkpoint(self.adapter, x, use_reentrant=False)
-        else:
-            adapter_output = self.adapter(x)
+        try:
+            if self.gradient_checkpointing and hasattr(torch.utils, 'checkpoint'):
+                adapter_output = torch.utils.checkpoint.checkpoint(self.adapter, x, use_reentrant=False)
+            else:
+                adapter_output = self.adapter(x)
 
-        # Add residual connection to preserve original embeddings
-        enhanced_embeddings = adapter_output + embeddings
+            # Add residual connection to preserve original embeddings
+            enhanced_embeddings = adapter_output + embeddings
+        except RuntimeError as e:
+            if "out of memory" in str(e).lower():
+                print(f"OOM in adapter layer, falling back to base embeddings")
+                # Fall back to using the original embeddings
+                enhanced_embeddings = embeddings
+            else:
+                raise
 
-        # Memory optimization: simplified feature scaling
-        enhanced_embeddings = enhanced_embeddings * 1.0  # Skip complex scaling to save memory
+        # Clear intermediate tensors to save memory
+        del x, original_x
+        if 'residual' in locals():
+            del residual
+        if 'adapter_output' in locals():
+            del adapter_output
+        if 'x_norm' in locals():
+            del x_norm
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         # Handle different model types
         if self.model_type == "seq2seq":
@@ -1681,19 +1725,29 @@ class CNNTextGenerator(TextGenerator):
                 torch.cuda.empty_cache()
 
             # Training loop
-            for input_batch, target_batch in iterator:
+            for batch_idx, (input_batch, target_batch) in enumerate(iterator):
                 if input_batch is None or target_batch is None:
                     self.logger.warning("Skipping invalid batch")
                     continue
                 try:
+                    # Clear CUDA cache periodically
+                    if batch_idx % 50 == 0 and torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                        print(f"Cleared CUDA cache at batch {batch_idx}")
+
+                        # Print memory usage
+                        allocated = torch.cuda.memory_allocated() / (1024 ** 3)
+                        reserved = torch.cuda.memory_reserved() / (1024 ** 3)
+                        print(f"📊 GPU Memory: {allocated:.2f} GB allocated, {reserved:.2f} GB reserved")
+
                     # Ensure input_batch is of type Long before moving to device
                     if input_batch.dtype != torch.long:
-                        print(f"Warning: Input batch has incorrect dtype: {input_batch.dtype}. Converting to torch.long.")
+                        print(f"Converting input batch from {input_batch.dtype} to torch.long in batch {batch_idx}")
                         input_batch = input_batch.to(torch.long)
 
                     # Ensure target_batch is of type Long before moving to device
                     if target_batch.dtype != torch.long:
-                        print(f"Warning: Target batch has incorrect dtype: {target_batch.dtype}. Converting to torch.long.")
+                        print(f"Converting target batch from {target_batch.dtype} to torch.long in batch {batch_idx}")
                         target_batch = target_batch.to(torch.long)
 
                     # Move data to device, ensuring they remain LongTensors
