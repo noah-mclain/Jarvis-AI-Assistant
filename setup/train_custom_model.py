@@ -335,13 +335,102 @@ def train_custom_model(cnn_model_path, output_dir, epochs=3, batch_size=4, max_s
 
         # Load the preprocessed datasets
         datasets = []
+        datasets_to_reprocess = []
+
+        # First pass: Try to load preprocessed datasets
         for dataset_name in available_datasets:
             logger.info(f'Loading preprocessed dataset: {dataset_name}')
             try:
                 dataset = torch.load(preprocessed_paths[dataset_name])
-                datasets.append(dataset)
+                if 'batches' in dataset and dataset['batches']:
+                    datasets.append(dataset)
+                    logger.info(f'Successfully loaded {len(dataset["batches"])} batches from {dataset_name}')
+                else:
+                    logger.warning(f'Warning: No batches found in preprocessed data: {preprocessed_paths[dataset_name]}')
+                    logger.info(f'Will re-preprocess {dataset_name} dataset')
+                    datasets_to_reprocess.append(dataset_name)
             except Exception as e:
                 logger.warning(f'Failed to load dataset {dataset_name}: {e}')
+                logger.info(f'Will re-preprocess {dataset_name} dataset')
+                datasets_to_reprocess.append(dataset_name)
+
+        # Second pass: Re-preprocess datasets with missing or invalid batches
+        for dataset_name in datasets_to_reprocess:
+            logger.info(f'Re-preprocessing {dataset_name} dataset...')
+            try:
+                # Check if we should use the ImprovedPreprocessor
+                if use_improved_preprocessor:
+                    logger.info(f'Using ImprovedPreprocessor for {dataset_name}')
+                    from src.generative_ai_module.improved_preprocessing import ImprovedPreprocessor
+                    improved_processor = ImprovedPreprocessor()
+                    data = improved_processor.process_dataset(dataset_name, max_samples=max_samples // 5)
+                else:
+                    # Use standard preprocessing
+                    logger.info(f'Using standard preprocessing for {dataset_name}')
+                    from src.generative_ai_module.dataset_processor import DatasetProcessor
+                    processor = DatasetProcessor()
+
+                    # Prepare dataset with appropriate parameters
+                    if dataset_name == 'persona_chat':
+                        sequence_length = 512
+                        batch_size = 16
+                        raw_text = processor.load_persona_chat(split='train', max_samples=max_samples // 5)
+                    elif dataset_name == 'writing_prompts':
+                        sequence_length = 1024
+                        batch_size = 8
+                        raw_text = processor.load_writing_prompts(split='train', max_samples=max_samples // 5)
+                    elif dataset_name == 'pile':
+                        sequence_length = 1024
+                        batch_size = 8
+                        raw_text = processor.load_pile_dataset(split='train', max_samples=max_samples // 5)
+                    elif dataset_name == 'openassistant':
+                        sequence_length = 512
+                        batch_size = 16
+                        raw_text = processor.load_openassistant_dataset(split='train', max_samples=max_samples // 5)
+                    elif dataset_name == 'gpteacher':
+                        sequence_length = 768
+                        batch_size = 12
+                        raw_text = processor.load_gpteacher_dataset(split='train', max_samples=max_samples // 5)
+                    else:
+                        logger.warning(f'Unknown dataset: {dataset_name}, skipping')
+                        continue
+
+                    # Create sequences and batches
+                    logger.info(f'Creating sequences with length {sequence_length}...')
+                    sequences = processor.create_sequences(raw_text, sequence_length)
+
+                    logger.info(f'Creating batches with batch size {batch_size}...')
+                    batches = processor.create_batches(sequences, batch_size=batch_size)
+
+                    # Create dataset dictionary
+                    data = {
+                        'batches': batches,
+                        'metadata': {
+                            'dataset_name': dataset_name,
+                            'split': 'train',
+                            'sequence_length': sequence_length,
+                            'batch_size': batch_size,
+                            'sample_count': len(sequences),
+                            'batch_count': len(batches)
+                        }
+                    }
+
+                # Save preprocessed data
+                preprocessed_path = preprocessed_paths[dataset_name]
+                logger.info(f'Saving re-preprocessed {dataset_name} to {preprocessed_path}...')
+                os.makedirs(os.path.dirname(preprocessed_path), exist_ok=True)
+                torch.save(data, preprocessed_path)
+
+                # Add to datasets list
+                if 'batches' in data and data['batches']:
+                    datasets.append(data)
+                    logger.info(f'Added {len(data["batches"])} batches from re-preprocessed {dataset_name}')
+                else:
+                    logger.warning(f'Warning: No valid batches in re-preprocessed {dataset_name}')
+            except Exception as e:
+                logger.error(f'Error re-preprocessing {dataset_name}: {e}')
+                import traceback
+                logger.error(traceback.format_exc())
 
         # Combine datasets
         combined_batches = []
@@ -349,6 +438,9 @@ def train_custom_model(cnn_model_path, output_dir, epochs=3, batch_size=4, max_s
             combined_batches.extend(dataset.get('batches', []))
 
         logger.info(f'Combined {len(combined_batches)} batches from all datasets')
+
+        if not combined_batches:
+            raise ValueError("No valid batches found in any of the datasets, even after re-preprocessing")
 
         # Initialize the custom model
         model = CustomEncoderDecoder(

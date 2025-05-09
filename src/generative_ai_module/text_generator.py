@@ -472,7 +472,9 @@ class TextGenerator(nn.Module):
         # Collect all batches from available datasets
         all_batches = []
         loaded_datasets = []
+        datasets_to_reprocess = []
 
+        # First pass: Try to load preprocessed datasets
         for dataset_name in dataset_names:
             path = dataset_paths.get(dataset_name)
             if path and os.path.exists(path):
@@ -485,14 +487,84 @@ class TextGenerator(nn.Module):
                         loaded_datasets.append(dataset_name)
                         print(f"Added {len(data['batches'])} batches from {dataset_name}")
                     else:
-                        print(f"Warning: No valid batches found in {dataset_name}")
+                        print(f"Warning: No batches found in preprocessed data: {path}")
+                        print(f"Will re-preprocess {dataset_name} dataset")
+                        datasets_to_reprocess.append(dataset_name)
                 except Exception as e:
                     print(f"Error loading {dataset_name}: {e}")
+                    print(f"Will re-preprocess {dataset_name} dataset")
+                    datasets_to_reprocess.append(dataset_name)
             else:
-                print(f"Dataset {dataset_name} not found at {path}")
+                print(f"Dataset {dataset_name} not found at {path}, will preprocess it")
+                datasets_to_reprocess.append(dataset_name)
+
+        # Second pass: Re-preprocess datasets with missing or invalid batches
+        for dataset_name in datasets_to_reprocess:
+            try:
+                print(f"Re-preprocessing {dataset_name} dataset...")
+
+                # Check if we should use the ImprovedPreprocessor
+                try:
+                    from .improved_preprocessing import ImprovedPreprocessor
+                    print(f"Using ImprovedPreprocessor for {dataset_name}")
+                    improved_processor = ImprovedPreprocessor()
+                    data = improved_processor.process_dataset(dataset_name, max_samples=5000)
+                except ImportError:
+                    # Fall back to standard preprocessing
+                    print(f"ImprovedPreprocessor not available, using standard preprocessing for {dataset_name}")
+                    if dataset_name == 'persona_chat':
+                        raw_text = processor.load_persona_chat(split='train', max_samples=5000)
+                    elif dataset_name == 'writing_prompts':
+                        raw_text = processor.load_writing_prompts(split='train', max_samples=5000)
+                    elif dataset_name == 'pile':
+                        raw_text = processor.load_pile_dataset(split='train', max_samples=5000)
+                    elif dataset_name == 'openassistant':
+                        raw_text = processor.load_openassistant_dataset(split='train', max_samples=5000)
+                    elif dataset_name == 'gpteacher':
+                        raw_text = processor.load_gpteacher_dataset(split='train', max_samples=5000)
+                    else:
+                        print(f"Unknown dataset: {dataset_name}, skipping")
+                        continue
+
+                    # Create sequences and batches
+                    print(f"Creating sequences...")
+                    sequences = processor.create_sequences(raw_text, 512)  # Default sequence length
+
+                    print(f"Creating batches...")
+                    batches = processor.create_batches(sequences, batch_size=16)  # Default batch size
+
+                    data = {
+                        'batches': batches,
+                        'metadata': {
+                            'dataset_name': dataset_name,
+                            'split': 'train',
+                            'sequence_length': 512,
+                            'batch_size': 16,
+                            'sample_count': len(sequences),
+                            'batch_count': len(batches)
+                        }
+                    }
+
+                # Save the preprocessed data
+                path = dataset_paths.get(dataset_name)
+                print(f"Saving re-preprocessed {dataset_name} to {path}")
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                torch.save(data, path)
+
+                # Add the batches to our collection
+                if 'batches' in data and data['batches']:
+                    all_batches.extend(data['batches'])
+                    loaded_datasets.append(dataset_name)
+                    print(f"Added {len(data['batches'])} batches from re-preprocessed {dataset_name}")
+                else:
+                    print(f"Warning: No valid batches in re-preprocessed {dataset_name}")
+            except Exception as e:
+                print(f"Error re-preprocessing {dataset_name}: {e}")
+                import traceback
+                traceback.print_exc()
 
         if not all_batches:
-            raise ValueError("No valid batches found in any of the datasets")
+            raise ValueError("No valid batches found in any of the datasets, even after re-preprocessing")
 
         print(f"Training on {len(all_batches)} total batches from {len(loaded_datasets)} datasets: {loaded_datasets}")
         return self.train(all_batches, epochs=epochs)

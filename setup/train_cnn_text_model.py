@@ -11,7 +11,7 @@ from src.generative_ai_module.text_generator import create_cnn_text_generator
 def train_cnn_text_model(gpu_type, vram_size, use_improved_preprocessor=False):
     """
     Create and train the CNN-enhanced text generator with optimized parameters for GPU.
-    
+
     Args:
         gpu_type (str): Type of GPU (e.g., 'A6000')
         vram_size (int): VRAM size in GiB
@@ -180,10 +180,108 @@ def train_cnn_text_model(gpu_type, vram_size, use_improved_preprocessor=False):
 
         # Check which datasets were successfully preprocessed
         available_datasets = []
+        datasets_to_reprocess = []
+
+        # First pass: Check which datasets exist
         for dataset_name, path in preprocessed_paths.items():
             if os.path.exists(path):
-                available_datasets.append(dataset_name)
+                try:
+                    # Try to load the dataset to verify it has valid batches
+                    data = torch.load(path)
+                    if 'batches' in data and data['batches']:
+                        available_datasets.append(dataset_name)
+                        print(f'Dataset {dataset_name} has {len(data["batches"])} valid batches')
+                    else:
+                        print(f'Warning: No batches found in preprocessed data: {path}')
+                        print(f'Will re-preprocess {dataset_name} dataset')
+                        datasets_to_reprocess.append(dataset_name)
+                except Exception as e:
+                    print(f'Error loading dataset {dataset_name}: {e}')
+                    print(f'Will re-preprocess {dataset_name} dataset')
+                    datasets_to_reprocess.append(dataset_name)
+            else:
+                print(f'Dataset {dataset_name} not found at {path}, will preprocess it')
+                datasets_to_reprocess.append(dataset_name)
 
+        # Second pass: Re-preprocess datasets with missing or invalid batches
+        for dataset_name in datasets_to_reprocess:
+            print(f'Re-preprocessing {dataset_name} dataset...')
+            try:
+                # Check if we should use the ImprovedPreprocessor
+                if use_improved_preprocessor:
+                    print(f'Using ImprovedPreprocessor for {dataset_name}')
+                    from src.generative_ai_module.improved_preprocessing import ImprovedPreprocessor
+                    improved_processor = ImprovedPreprocessor()
+                    data = improved_processor.process_dataset(dataset_name, max_samples=5000)
+                else:
+                    # Use standard preprocessing
+                    print(f'Using standard preprocessing for {dataset_name}')
+                    from src.generative_ai_module.dataset_processor import DatasetProcessor
+                    processor = DatasetProcessor(model)
+
+                    # Prepare dataset with appropriate parameters
+                    if dataset_name == 'persona_chat':
+                        sequence_length = 512
+                        batch_size = 16
+                        raw_text = processor.load_persona_chat(split='train', max_samples=5000)
+                    elif dataset_name == 'writing_prompts':
+                        sequence_length = 1024
+                        batch_size = 8
+                        raw_text = processor.load_writing_prompts(split='train', max_samples=5000)
+                    elif dataset_name == 'pile':
+                        sequence_length = 1024
+                        batch_size = 8
+                        raw_text = processor.load_pile_dataset(split='train', max_samples=5000)
+                    elif dataset_name == 'openassistant':
+                        sequence_length = 512
+                        batch_size = 16
+                        raw_text = processor.load_openassistant_dataset(split='train', max_samples=5000)
+                    elif dataset_name == 'gpteacher':
+                        sequence_length = 768
+                        batch_size = 12
+                        raw_text = processor.load_gpteacher_dataset(split='train', max_samples=5000)
+                    else:
+                        print(f'Unknown dataset: {dataset_name}, skipping')
+                        continue
+
+                    # Create sequences and batches
+                    print(f'Creating sequences with length {sequence_length}...')
+                    sequences = processor.create_sequences(raw_text, sequence_length)
+
+                    print(f'Creating batches with batch size {batch_size}...')
+                    batches = processor.create_batches(sequences, batch_size=batch_size)
+
+                    # Create dataset dictionary
+                    data = {
+                        'batches': batches,
+                        'metadata': {
+                            'dataset_name': dataset_name,
+                            'split': 'train',
+                            'sequence_length': sequence_length,
+                            'batch_size': batch_size,
+                            'sample_count': len(sequences),
+                            'batch_count': len(batches)
+                        }
+                    }
+
+                # Save preprocessed data
+                path = preprocessed_paths[dataset_name]
+                print(f'Saving re-preprocessed {dataset_name} to {path}...')
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                torch.save(data, path)
+
+                # Add to available datasets
+                if 'batches' in data and data['batches']:
+                    available_datasets.append(dataset_name)
+                    print(f'Added {dataset_name} with {len(data["batches"])} batches to available datasets')
+                else:
+                    print(f'Warning: No valid batches in re-preprocessed {dataset_name}')
+            except Exception as e:
+                print(f'Error re-preprocessing {dataset_name}: {e}')
+                import traceback
+                traceback.print_exc()
+
+        # Train with available datasets
         if len(available_datasets) > 1:
             print(f'Training with multiple datasets: {available_datasets}')
             model.train_from_multiple_datasets(
@@ -191,14 +289,18 @@ def train_cnn_text_model(gpu_type, vram_size, use_improved_preprocessor=False):
                 epochs=3,
                 dataset_paths=preprocessed_paths
             )
-        else:
-            # Fall back to single dataset training
-            print(f'Training with single dataset: persona_chat')
+        elif len(available_datasets) == 1:
+            # Train with the single available dataset
+            dataset_name = available_datasets[0]
+            print(f'Training with single dataset: {dataset_name}')
             model.train_from_preprocessed(
-                dataset_name='persona_chat',
+                dataset_name=dataset_name,
                 epochs=3,
-                preprocessed_path=preprocessed_paths.get('persona_chat')
+                preprocessed_path=preprocessed_paths.get(dataset_name)
             )
+        else:
+            # No valid datasets available, even after re-preprocessing
+            raise ValueError("No valid datasets available for training, even after re-preprocessing")
 
         # Save the model
         output_dir = 'notebooks/Jarvis_AI_Assistant/models/cnn-flan-ul2-finetuned'
@@ -242,5 +344,5 @@ if __name__ == "__main__":
         gpu_type = "A6000"
         vram_size = 50
         use_improved_preprocessor = False
-    
+
     train_cnn_text_model(gpu_type, vram_size, use_improved_preprocessor)
