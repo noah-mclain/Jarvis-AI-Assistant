@@ -481,107 +481,274 @@ def segment_by_dialogue_turns(text):
     return segments
 
 class ImprovedPreprocessor:
-    """Wrapper class for preprocessing functionality"""
+    """Enhanced with dataset-specific memory controls"""
     def __init__(self, min_length=10, max_length=100, analyze=False, batch_size=4):
         self.min_length = min_length
         self.max_length = max_length
         self.analyze = analyze
         self.tokenizer = ImprovedCharTokenizer(add_special_tokens=True)
         self.batch_size = batch_size
-        self.config = {
-            "max_sequence_length": 2048,  # Reduce from 4096
-            "batch_size": batch_size,  # Start with smaller batches
-            "gradient_accumulation_steps": 8,
-            "use_mixed_precision": True,
-            "enable_gradient_checkpointing": True,
-            "cpu_offload": True,
-            "memory_cleanup_interval": 100  # Steps between explicit cleanup
+
+        # Dataset-specific configuration
+        self.dataset_params = {
+            "writing_prompts": {
+                "max_sequence_length": 1024,
+                "batch_size": 2,
+                "max_text_length": 2048,
+                "stride": 512,
+                "grad_accum_steps": 4,
+                "use_mixed_precision": True,
+                "memory_efficient": True
+            },
+            "persona_chat": {
+                "max_sequence_length": 512,
+                "batch_size": 16,
+                "max_text_length": None,
+                "stride": 256,
+                "grad_accum_steps": 1,
+                "use_mixed_precision": False,
+                "memory_efficient": False
+            },
+            "pile": {
+                "max_sequence_length": 1024,
+                "batch_size": 8,
+                "max_text_length": None,
+                "stride": 512,
+                "grad_accum_steps": 2,
+                "use_mixed_precision": False,
+                "memory_efficient": True
+            },
+            "openassistant": {
+                "max_sequence_length": 512,
+                "batch_size": 16,
+                "max_text_length": None,
+                "stride": 256,
+                "grad_accum_steps": 1,
+                "use_mixed_precision": False,
+                "memory_efficient": False
+            },
+            "gpteacher": {
+                "max_sequence_length": 768,
+                "batch_size": 12,
+                "max_text_length": None,
+                "stride": 384,
+                "grad_accum_steps": 1,
+                "use_mixed_precision": False,
+                "memory_efficient": False
+            },
+            "default": {
+                "max_sequence_length": 512,
+                "batch_size": 8,
+                "max_text_length": None,
+                "stride": 256,
+                "grad_accum_steps": 1,
+                "use_mixed_precision": False,
+                "memory_efficient": False
+            }
         }
-        self.seq_length = self.config.get('max_sequence_length', 2048)
+
+        self.config = {
+            "max_sequence_length": 2048,
+            "batch_size": batch_size,
+            "use_mixed_precision": True,
+            "cpu_offload": True
+        }
+
+        # Track current dataset for training
+        self.current_dataset = "default"
+        self.step_count = 0
 
     def process_dataset(self, dataset_name, max_samples=100):
-        """Process a dataset with the given parameters"""
-        # Load and preprocess the dataset
-        data = load_and_preprocess_dataset(
-            dataset_name=dataset_name,
-            tokenizer=self.tokenizer,
-            max_samples=max_samples
-        )
+        """Modified with dataset-specific processing"""
+        # Get dataset parameters
+        params = self.dataset_params.get(dataset_name, self.dataset_params["default"])
 
-        # Validate dataset
-        data = self.validate_dataset(data)
+        # Load dataset with dataset-specific processing
+        try:
+            # Import dataset processor for loading
+            from src.generative_ai_module.dataset_processor import DatasetProcessor
+            processor = DatasetProcessor()
 
-        # Create sequences
-        sequences = create_improved_sequences(
-            data['tokens'],
-            seq_length=self.max_length,
-            stride=1
-        )
+            # Load raw text based on dataset name
+            print(f"Loading {dataset_name} dataset...")
+            if dataset_name == 'persona_chat':
+                raw_text = processor.load_persona_chat(split='train', max_samples=max_samples)
+                # Apply persona chat specific preprocessing
+                raw_text = self._preprocess_persona_chat(raw_text)
+            elif dataset_name == 'writing_prompts':
+                raw_text = processor.load_writing_prompts(split='train', max_samples=max_samples)
+                # Apply writing prompts specific preprocessing
+                raw_text = self._preprocess_writing_prompts(raw_text, max_length=params.get("max_text_length"))
+            elif dataset_name == 'pile':
+                raw_text = processor.load_pile_dataset(split='train', max_samples=max_samples)
+                # Apply pile specific preprocessing
+                raw_text = self._preprocess_pile(raw_text)
+            elif dataset_name == 'openassistant':
+                raw_text = processor.load_openassistant_dataset(split='train', max_samples=max_samples)
+                # Apply openassistant specific preprocessing
+                raw_text = self._preprocess_openassistant(raw_text)
+            elif dataset_name == 'gpteacher':
+                raw_text = processor.load_gpteacher_dataset(split='train', max_samples=max_samples)
+                # Apply gpteacher specific preprocessing
+                raw_text = self._preprocess_gpteacher(raw_text)
+            else:
+                print(f"Unknown dataset: {dataset_name}, using sample data")
+                return get_sample_data(dataset_name, self.tokenizer)
 
-        # Create batches using memory-optimized method
-        if hasattr(data, 'tensor_sequences'):
-            batches = create_batches(data['tensor_sequences'], self.batch_size)
-        else:
-            # Fall back to original method
-            batches = create_and_verify_batches(sequences, batch_size=self.batch_size)
+            # Clean and normalize text
+            cleaned_text = clean_and_normalize_text(raw_text)
 
-        # Add batches to data
-        data['batches'] = batches
+            # Tokenize text
+            tokens = self.tokenizer.encode(cleaned_text)
 
-        # Clear memory aggressively
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+            # Create data dictionary
+            data = {
+                'dataset_name': dataset_name,
+                'raw_text': raw_text,
+                'tokens': tokens,
+                'vocab_size': self.tokenizer.vocab_size
+            }
 
-        return data
+            # Apply dataset-specific sequence creation
+            sequences = create_improved_sequences(
+                data['tokens'],
+                self.tokenizer,
+                seq_length=params["max_sequence_length"],
+                stride=params["stride"]
+            )
 
-    def validate_dataset(self, data):
-        """Check for minimum length requirements and handle short sequences"""
-        # Check for minimum length requirements
-        min_length = self.config.get('min_sequence_length', 64)
+            # Create memory-optimized batches
+            batches = self.create_dataset_batches(
+                sequences,
+                batch_size=params["batch_size"],
+                dataset_name=dataset_name
+            )
 
-        if 'raw_texts' in data:
-            valid_texts = []
-            for text in data['raw_texts']:
-                if len(text) < min_length:
-                    # Handle short samples by combining with next if possible
-                    text = self._handle_short_sequence(text, data['raw_texts'])
-                valid_texts.append(text)
+            # Update data with sequences and batches
+            data.update({
+                'sequences': sequences,
+                'batches': batches,
+                'params': params
+            })
 
-            # Update the data with validated texts
-            data['raw_texts'] = valid_texts
+            # Set current dataset for training
+            self.current_dataset = dataset_name
 
-            # Re-tokenize if needed
-            if len(valid_texts) != len(data.get('tokens', [])):
-                # Tokenize all texts
-                tokens = []
-                for text in tqdm(valid_texts, desc="Re-tokenizing validated texts"):
-                    tokens.extend(self.tokenizer.encode(text))
-                data['tokens'] = tokens
+            return data
 
-        return data
+        except Exception as e:
+            print(f"Error loading {dataset_name}: {e}")
+            import traceback
+            traceback.print_exc()
+            data = get_sample_data(dataset_name, self.tokenizer)
+            return data
 
-    def _handle_short_sequence(self, text, all_texts):
-        """Implement sequence combination logic for short texts"""
-        # Try to find another text to combine with
-        if len(all_texts) > 1:
-            # Get a random text from the dataset to combine with
-            additional_text = random.choice(all_texts)
-            text += f"\n{additional_text}"
+    def _preprocess_persona_chat(self, text):
+        """Apply persona chat specific preprocessing."""
+        # Ensure consistent formatting
+        text = text.replace("USER:", "USER: ").replace("ASSISTANT:", "ASSISTANT: ")
 
-        # Ensure it doesn't exceed max length
-        return text[:self.seq_length]
+        # Ensure proper spacing around special tokens
+        for token in ["<PERSONA>", "<DIALOGUE>", "<END>"]:
+            text = text.replace(token, f"\n{token}\n")
 
-    def analyze_token_distribution(self, data):
-        """Analyze token distribution in the dataset"""
-        return analyze_token_distribution(data['tokens'], self.tokenizer)
+        return text
 
-    def save_tokenized_data(self, data, output_dir, dataset_name=None):
-        """Save preprocessed data"""
-        os.makedirs(output_dir, exist_ok=True)
-        save_preprocessed_data(data, output_dir=output_dir)
+    def _preprocess_writing_prompts(self, text, max_length=2048):
+        """Apply writing prompts specific preprocessing with length limits."""
+        # Split into prompt-story pairs
+        pairs = text.split("<END>")
+
+        processed_pairs = []
+        for pair in pairs:
+            if "<PROMPT>" not in pair or "<STORY>" not in pair:
+                continue
+
+            # Split into prompt and story
+            parts = pair.split("<STORY>")
+            if len(parts) != 2:
+                continue
+
+            prompt_part = parts[0]
+            story_part = parts[1]
+
+            # Truncate very long stories to save memory
+            if max_length and len(story_part) > max_length:
+                story_part = story_part[:max_length] + "..."
+
+            # Reassemble with proper formatting
+            processed_pair = f"{prompt_part}<STORY>{story_part}<END>"
+            processed_pairs.append(processed_pair)
+
+        return "\n\n".join(processed_pairs)
+
+    def _preprocess_pile(self, text):
+        """Apply pile specific preprocessing."""
+        # The Pile has diverse formats, normalize spacing and structure
+        text = text.replace("\t", " ").replace("  ", " ")
+
+        # Ensure consistent paragraph breaks
+        text = text.replace("\n\n\n", "\n\n")
+
+        return text
+
+    def _preprocess_openassistant(self, text):
+        """Apply openassistant specific preprocessing."""
+        # Ensure consistent formatting for instruction-response pairs
+        text = text.replace("USER:", "USER: ").replace("ASSISTANT:", "ASSISTANT: ")
+
+        # Handle potential JSON formatting issues
+        text = text.replace("\\n", "\n").replace('\\"', '"')
+
+        return text
+
+    def _preprocess_gpteacher(self, text):
+        """Apply gpteacher specific preprocessing."""
+        # Ensure consistent formatting for instruction-response pairs
+        text = text.replace("User:", "USER: ").replace("Assistant:", "ASSISTANT: ")
+
+        # Handle potential formatting issues
+        text = text.replace("\\n", "\n").replace('\\"', '"')
+
+        return text
+
+    def create_dataset_batches(self, sequences, batch_size, dataset_name):
+        """Memory-optimized batch creation"""
+        params = self.dataset_params.get(dataset_name, self.dataset_params["default"])
+
+        # Sort sequences by length for efficient packing
+        sequences.sort(key=lambda x: len(x[0]))
+
+        batches = []
+        current_batch = []
+
+        for seq in sequences:
+            current_batch.append(seq)
+            if len(current_batch) >= params["batch_size"]:
+                # Keep on CPU with pinned memory
+                inputs = torch.tensor([s[0] for s in current_batch],
+                                    dtype=torch.long).pin_memory()
+                targets = torch.tensor([s[1] for s in current_batch],
+                                     dtype=torch.long).pin_memory()
+                batches.append((inputs, targets))
+                current_batch = []
+
+        # Handle remaining sequences
+        if current_batch:
+            inputs = torch.tensor([s[0] for s in current_batch],
+                                dtype=torch.long).pin_memory()
+            targets = torch.tensor([s[1] for s in current_batch],
+                                 dtype=torch.long).pin_memory()
+            batches.append((inputs, targets))
+
+        print(f"Created {len(batches)} {dataset_name} batches (size {params['batch_size']})")
+        return batches
 
     def train_batch(self, batch, model=None, optimizer=None):
-        """Memory-optimized training loop for a single batch"""
+        """Memory-optimized training with dataset awareness"""
+        # Initialize device
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
         # Store model and optimizer if provided
         if model is not None:
             self.model = model
@@ -592,35 +759,70 @@ class ImprovedPreprocessor:
         if not hasattr(self, 'model') or not hasattr(self, 'optimizer'):
             raise ValueError("Model and optimizer must be provided")
 
-        # Unpack batch tuple into inputs and targets
+        # Unpack batch
         inputs, targets = batch
 
-        # GPU Transfer with correct dtype handling
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        inputs = inputs.long().to(device, non_blocking=True)
-        targets = targets.long().to(device, non_blocking=True)
+        # Move to GPU in chunks if writing_prompts
+        if self.current_dataset == "writing_prompts":
+            # Split large batches for memory-constrained datasets
+            chunk_size = len(inputs) // 2
+            losses = []
 
-        # Mixed precision training
-        with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
-            # Forward pass - assumes model takes inputs and returns logits
-            outputs = self.model(inputs)
-            
-            # Calculate loss (adjust based on model output structure)
-            # Example: CrossEntropyLoss for language modeling
-            loss_fn = torch.nn.CrossEntropyLoss()
-            loss = loss_fn(outputs.view(-1, outputs.size(-1)), targets.view(-1))
+            for i in range(0, len(inputs), chunk_size):
+                chunk_inputs = inputs[i:i+chunk_size].to(device, non_blocking=True)
+                chunk_targets = targets[i:i+chunk_size].to(device, non_blocking=True)
+
+                with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+                    outputs = self.model(chunk_inputs)
+                    loss = torch.nn.functional.cross_entropy(
+                        outputs.view(-1, outputs.size(-1)),
+                        chunk_targets.view(-1)
+                    )
+                    losses.append(loss)
+
+                # Cleanup
+                del chunk_inputs, chunk_targets, outputs
+                torch.cuda.empty_cache()
+
+            # Average losses from chunks
+            loss = torch.mean(torch.stack(losses))
+        else:
+            # Standard training for other datasets
+            inputs = inputs.to(device, non_blocking=True)
+            targets = targets.to(device, non_blocking=True)
+
+            with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+                outputs = self.model(inputs)
+                loss = torch.nn.functional.cross_entropy(
+                    outputs.view(-1, outputs.size(-1)),
+                    targets.view(-1)
+                )
 
         # Backpropagation
         loss.backward()
-        self.optimizer.step()
-        self.optimizer.zero_grad(set_to_none=True)
+
+        # Step optimizer based on grad accumulation
+        params = self.dataset_params.get(self.current_dataset, self.dataset_params["default"])
+        self.step_count += 1
+        if (self.step_count) % params["grad_accum_steps"] == 0:
+            self.optimizer.step()
+            self.optimizer.zero_grad(set_to_none=True)
 
         # Memory cleanup
         loss_value = loss.item()
-        del outputs, loss
+        del inputs, targets, outputs, loss
         torch.cuda.empty_cache()
 
         return loss_value
+
+    def analyze_token_distribution(self, data):
+        """Analyze token distribution in the dataset"""
+        return analyze_token_distribution(data['tokens'], self.tokenizer)
+
+    def save_tokenized_data(self, data, output_dir, dataset_name=None):
+        """Save preprocessed data"""
+        os.makedirs(output_dir, exist_ok=True)
+        save_preprocessed_data(data, output_dir=output_dir)
 
     def save_analysis_results(self, analysis_results, output_dir, dataset_name):
         """Save analysis results"""
@@ -699,55 +901,95 @@ def main():
 
     # Create directories
     os.makedirs("preprocessed_data", exist_ok=True)
+    os.makedirs("preprocessing_analysis", exist_ok=True)
 
-    # Create improved tokenizer
-    tokenizer = ImprovedCharTokenizer(add_special_tokens=True)
+    # Create the ImprovedPreprocessor
+    print("\n===== Creating ImprovedPreprocessor with Dataset-Specific Settings =====")
+    preprocessor = ImprovedPreprocessor()
 
-    # Process Persona Chat dataset
-    print("\n===== Processing Persona Chat Dataset =====")
-    persona_data = load_and_preprocess_dataset("persona_chat", tokenizer, max_samples=100)
+    # Process writing_prompts with special settings
+    print("\n===== Processing Writing Prompts Dataset with Special Settings =====")
+    writing_data = preprocessor.process_dataset("writing_prompts")
 
-    print(f"Raw text length: {persona_data['raw_length']}")
-    print(f"Cleaned text length: {persona_data['cleaned_length']}")
-    print(f"Number of tokens: {len(persona_data['tokens'])}")
+    # Log the dataset-specific parameters used
+    print(f"Writing Prompts parameters:")
+    print(f"  - Batch size: {writing_data['params']['batch_size']}")
+    print(f"  - Sequence length: {writing_data['params']['max_sequence_length']}")
+    print(f"  - Stride: {writing_data['params']['stride']}")
+    print(f"  - Gradient accumulation steps: {writing_data['params']['grad_accum_steps']}")
+    print(f"  - Number of batches: {len(writing_data['batches'])}")
 
-    # Analyze token distribution
-    persona_analysis = analyze_token_distribution(persona_data['tokens'], tokenizer)
-    print(f"Unique tokens: {persona_analysis['unique_tokens']} out of {tokenizer.vocab_size}")
+    # Analyze token distribution for writing_prompts
+    writing_analysis = preprocessor.analyze_token_distribution(writing_data)
+    print(f"Unique tokens: {writing_analysis['unique_tokens']} out of {preprocessor.tokenizer.vocab_size}")
 
-    # Create and verify sequences
-    persona_sequences = verify_sequence_creation(persona_data['tokens'], tokenizer, seq_length=100)
+    # Save the preprocessed data
+    preprocessor.save_tokenized_data(writing_data, "preprocessed_data", "writing_prompts")
 
-    # Create and verify batches
-    persona_batches = create_and_verify_batches(persona_sequences, batch_size=32)
+    # Process persona_chat with default settings
+    print("\n===== Processing Persona Chat Dataset with Default Settings =====")
+    persona_data = preprocessor.process_dataset("persona_chat")
 
-    # Save preprocessed data
-    persona_data['sequences'] = persona_sequences
-    persona_data['batches'] = persona_batches
-    save_preprocessed_data(persona_data)
+    # Log the dataset-specific parameters used
+    print(f"Persona Chat parameters:")
+    print(f"  - Batch size: {persona_data['params']['batch_size']}")
+    print(f"  - Sequence length: {persona_data['params']['max_sequence_length']}")
+    print(f"  - Stride: {persona_data['params']['stride']}")
+    print(f"  - Gradient accumulation steps: {persona_data['params']['grad_accum_steps']}")
+    print(f"  - Number of batches: {len(persona_data['batches'])}")
 
-    # Process Writing Prompts dataset
-    print("\n===== Processing Writing Prompts Dataset =====")
-    prompts_data = load_and_preprocess_dataset("writing_prompts", tokenizer, max_samples=50)
+    # Analyze token distribution for persona_chat
+    persona_analysis = preprocessor.analyze_token_distribution(persona_data)
+    print(f"Unique tokens: {persona_analysis['unique_tokens']} out of {preprocessor.tokenizer.vocab_size}")
 
-    print(f"Raw text length: {prompts_data['raw_length']}")
-    print(f"Cleaned text length: {prompts_data['cleaned_length']}")
-    print(f"Number of tokens: {len(prompts_data['tokens'])}")
+    # Save the preprocessed data
+    preprocessor.save_tokenized_data(persona_data, "preprocessed_data", "persona_chat")
 
-    # Analyze token distribution
-    prompts_analysis = analyze_token_distribution(prompts_data['tokens'], tokenizer)
-    print(f"Unique tokens: {prompts_analysis['unique_tokens']} out of {tokenizer.vocab_size}")
+    # Compare the datasets
+    print("\n===== Dataset Comparison Summary =====")
+    print("Writing Prompts (Special Settings):")
+    print(f"  - Batch size: {writing_data['params']['batch_size']}")
+    print(f"  - Sequence length: {writing_data['params']['max_sequence_length']}")
+    print(f"  - Stride: {writing_data['params']['stride']}")
+    print(f"  - Gradient accumulation steps: {writing_data['params']['grad_accum_steps']}")
 
-    # Create and verify sequences
-    prompts_sequences = verify_sequence_creation(prompts_data['tokens'], tokenizer, seq_length=100)
+    print("\nPersona Chat (Default Settings):")
+    print(f"  - Batch size: {persona_data['params']['batch_size']}")
+    print(f"  - Sequence length: {persona_data['params']['max_sequence_length']}")
+    print(f"  - Stride: {persona_data['params']['stride']}")
+    print(f"  - Gradient accumulation steps: {persona_data['params']['grad_accum_steps']}")
 
-    # Create and verify batches
-    prompts_batches = create_and_verify_batches(prompts_sequences, batch_size=32)
+    # Create a comparison visualization
+    try:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
 
-    # Save preprocessed data
-    prompts_data['sequences'] = prompts_sequences
-    prompts_data['batches'] = prompts_batches
-    save_preprocessed_data(prompts_data)
+        # Plot batch sizes
+        datasets = ['writing_prompts', 'persona_chat']
+        batch_sizes = [
+            writing_data['params']['batch_size'],
+            persona_data['params']['batch_size']
+        ]
+
+        ax1.bar(datasets, batch_sizes)
+        ax1.set_title('Batch Size Comparison')
+        ax1.set_ylabel('Batch Size')
+
+        # Plot sequence lengths
+        seq_lengths = [
+            writing_data['params']['max_sequence_length'],
+            persona_data['params']['max_sequence_length']
+        ]
+
+        ax2.bar(datasets, seq_lengths)
+        ax2.set_title('Sequence Length Comparison')
+        ax2.set_ylabel('Sequence Length')
+
+        plt.tight_layout()
+        plt.savefig("preprocessing_analysis/dataset_comparison.png")
+        plt.close()
+        print("\nSaved dataset comparison visualization to 'preprocessing_analysis/dataset_comparison.png'")
+    except Exception as e:
+        print(f"Error creating visualization: {e}")
 
     print("\n====== Preprocessing Verification Complete ======")
     print("Saved all preprocessed data to 'preprocessed_data' directory")

@@ -129,6 +129,7 @@ show_help() {
     echo "  --skip-patches         Skip transformer patches"
     echo "  --force                Skip confirmation prompts (use with caution)"
     echo "  --debug                Enable debug mode"
+    echo "  --use-improved-preprocessor  Use the ImprovedPreprocessor with dataset-specific settings"
     echo ""
     echo "Example: $0 --gpu-type A6000 --vram 50 --model-type code"
 }
@@ -168,6 +169,10 @@ while [[ $# -gt 0 ]]; do
             DEBUG=1
             shift
             ;;
+        --use-improved-preprocessor)
+            USE_IMPROVED_PREPROCESSOR=1
+            shift
+            ;;
         *)
             echo "Unknown option: $1"
             show_help
@@ -186,10 +191,21 @@ if [ -n "$MODEL_TYPE" ]; then
         echo "✅ Device mismatch fix enabled for DeepSeek model"
     fi
 fi
+if [ -n "$USE_IMPROVED_PREPROCESSOR" ]; then
+    echo "✅ Using ImprovedPreprocessor with dataset-specific settings"
+    echo "   (writing_prompts will use special memory-optimized settings)"
+fi
 echo "========================================"
 
 # Force Paperspace environment detection
 export PAPERSPACE=true
+
+# Set USE_IMPROVED_PREPROCESSOR if the flag is provided
+if [ -n "$USE_IMPROVED_PREPROCESSOR" ]; then
+    export USE_IMPROVED_PREPROCESSOR=1
+    echo "✅ Setting USE_IMPROVED_PREPROCESSOR=1"
+fi
+
 echo "Setting up environment and creating directories..."
 python -c "
 import os
@@ -1354,68 +1370,109 @@ try:
 
     # Preprocess all datasets
     print('Preprocessing datasets...')
-    for dataset_name in datasets:
-        preprocessed_path = os.path.join(datasets_dir, f'preprocessed_{dataset_name}.pt')
-        preprocessed_paths[dataset_name] = preprocessed_path
 
-        # Check if dataset is already preprocessed
-        if os.path.exists(preprocessed_path):
-            print(f'Dataset {dataset_name} already preprocessed at {preprocessed_path}')
-            continue
+    # Check if we should use the ImprovedPreprocessor with dataset-specific settings
+    if os.environ.get('USE_IMPROVED_PREPROCESSOR') == '1':
+        print('Using ImprovedPreprocessor with dataset-specific settings')
+        from src.generative_ai_module.improved_preprocessing import ImprovedPreprocessor
+        improved_processor = ImprovedPreprocessor()
 
-        print(f'Preprocessing {dataset_name}...')
-        try:
-            # Prepare dataset with appropriate parameters
-            if dataset_name == 'persona_chat':
-                sequence_length = 512
-                batch_size = 16
-                raw_text = processor.load_persona_chat(split='train', max_samples=5000)
-            elif dataset_name == 'writing_prompts':
-                sequence_length = 1024
-                batch_size = 8
-                raw_text = processor.load_writing_prompts(split='train', max_samples=5000)
-            elif dataset_name == 'pile':
-                sequence_length = 1024
-                batch_size = 8
-                raw_text = processor.load_pile_dataset(split='train', max_samples=5000)
-            elif dataset_name == 'openassistant':
-                sequence_length = 512
-                batch_size = 16
-                raw_text = processor.load_openassistant_dataset(split='train', max_samples=5000)
-            elif dataset_name == 'gpteacher':
-                sequence_length = 768
-                batch_size = 12
-                raw_text = processor.load_gpteacher_dataset(split='train', max_samples=5000)
+        for dataset_name in datasets:
+            preprocessed_path = os.path.join(datasets_dir, f'preprocessed_{dataset_name}.pt')
+            preprocessed_paths[dataset_name] = preprocessed_path
 
-            # Create sequences and batches
-            print(f'Creating sequences with length {sequence_length}...')
-            sequences = processor.create_sequences(raw_text, sequence_length)
+            # Check if dataset is already preprocessed
+            if os.path.exists(preprocessed_path):
+                print(f'Dataset {dataset_name} already preprocessed at {preprocessed_path}')
+                continue
 
-            print(f'Creating batches with batch size {batch_size}...')
-            batches = processor.create_batches(sequences, batch_size=batch_size)
+            print(f'Preprocessing {dataset_name} with ImprovedPreprocessor...')
+            try:
+                # Process dataset with dataset-specific settings
+                # writing_prompts will use special memory-optimized settings
+                data = improved_processor.process_dataset(dataset_name, max_samples=5000)
 
-            # Create dataset dictionary
-            dataset = {
-                'batches': batches,
-                'metadata': {
-                    'dataset_name': dataset_name,
-                    'split': 'train',
-                    'sequence_length': sequence_length,
-                    'batch_size': batch_size,
-                    'sample_count': len(sequences),
-                    'batch_count': len(batches)
+                # Save preprocessed data
+                print(f'Saving preprocessed {dataset_name} to {preprocessed_path}...')
+                torch.save(data, preprocessed_path)
+                print(f'✓ Successfully preprocessed {dataset_name}')
+
+                # Log the dataset-specific parameters used
+                print(f'{dataset_name} parameters:')
+                print(f"  - Batch size: {data['params']['batch_size']}")
+                print(f"  - Sequence length: {data['params']['max_sequence_length']}")
+                print(f"  - Stride: {data['params']['stride']}")
+                print(f"  - Gradient accumulation steps: {data['params']['grad_accum_steps']}")
+                print(f"  - Number of batches: {len(data['batches'])}")
+
+            except Exception as e:
+                print(f'❌ Error preprocessing {dataset_name}: {e}')
+                import traceback
+                traceback.print_exc()
+    else:
+        # Use the standard DatasetProcessor
+        for dataset_name in datasets:
+            preprocessed_path = os.path.join(datasets_dir, f'preprocessed_{dataset_name}.pt')
+            preprocessed_paths[dataset_name] = preprocessed_path
+
+            # Check if dataset is already preprocessed
+            if os.path.exists(preprocessed_path):
+                print(f'Dataset {dataset_name} already preprocessed at {preprocessed_path}')
+                continue
+
+            print(f'Preprocessing {dataset_name}...')
+            try:
+                # Prepare dataset with appropriate parameters
+                if dataset_name == 'persona_chat':
+                    sequence_length = 512
+                    batch_size = 16
+                    raw_text = processor.load_persona_chat(split='train', max_samples=5000)
+                elif dataset_name == 'writing_prompts':
+                    sequence_length = 1024
+                    batch_size = 8
+                    raw_text = processor.load_writing_prompts(split='train', max_samples=5000)
+                elif dataset_name == 'pile':
+                    sequence_length = 1024
+                    batch_size = 8
+                    raw_text = processor.load_pile_dataset(split='train', max_samples=5000)
+                elif dataset_name == 'openassistant':
+                    sequence_length = 512
+                    batch_size = 16
+                    raw_text = processor.load_openassistant_dataset(split='train', max_samples=5000)
+                elif dataset_name == 'gpteacher':
+                    sequence_length = 768
+                    batch_size = 12
+                    raw_text = processor.load_gpteacher_dataset(split='train', max_samples=5000)
+
+                # Create sequences and batches
+                print(f'Creating sequences with length {sequence_length}...')
+                sequences = processor.create_sequences(raw_text, sequence_length)
+
+                print(f'Creating batches with batch size {batch_size}...')
+                batches = processor.create_batches(sequences, batch_size=batch_size)
+
+                # Create dataset dictionary
+                dataset = {
+                    'batches': batches,
+                    'metadata': {
+                        'dataset_name': dataset_name,
+                        'split': 'train',
+                        'sequence_length': sequence_length,
+                        'batch_size': batch_size,
+                        'sample_count': len(sequences),
+                        'batch_count': len(batches)
+                    }
                 }
-            }
 
-            # Save preprocessed data
-            print(f'Saving preprocessed {dataset_name} to {preprocessed_path}...')
-            torch.save(dataset, preprocessed_path)
-            print(f'✓ Successfully preprocessed {dataset_name}')
+                # Save preprocessed data
+                print(f'Saving preprocessed {dataset_name} to {preprocessed_path}...')
+                torch.save(dataset, preprocessed_path)
+                print(f'✓ Successfully preprocessed {dataset_name}')
 
-        except Exception as e:
-            print(f'❌ Error preprocessing {dataset_name}: {e}')
-            import traceback
-            traceback.print_exc()
+            except Exception as e:
+                print(f'❌ Error preprocessing {dataset_name}: {e}')
+                import traceback
+                traceback.print_exc()
 
     # Train the model with all available datasets
     print('Starting training...')
@@ -1792,74 +1849,116 @@ def train_custom_model():
 
     if not available_datasets:
         logger.warning("No preprocessed datasets found. Running preprocessing...")
-        # Import dataset processor
-        from src.generative_ai_module.dataset_processor import DatasetProcessor
 
-        # Create processor for preprocessing
-        processor = DatasetProcessor()
+        # Check if we should use the ImprovedPreprocessor with dataset-specific settings
+        if os.environ.get('USE_IMPROVED_PREPROCESSOR') == '1':
+            logger.info('Using ImprovedPreprocessor with dataset-specific settings')
+            from src.generative_ai_module.improved_preprocessing import ImprovedPreprocessor
 
-        # Preprocess all datasets
-        logger.info('Preprocessing datasets...')
-        for dataset_name in dataset_names:
-            preprocessed_path = preprocessed_paths[dataset_name]
+            # Create improved processor for preprocessing
+            improved_processor = ImprovedPreprocessor()
 
-            logger.info(f'Preprocessing {dataset_name}...')
-            try:
-                # Prepare dataset with appropriate parameters
-                if dataset_name == 'persona_chat':
-                    sequence_length = 512
-                    batch_size = 16
-                    raw_text = processor.load_persona_chat(split='train', max_samples=max_samples // 5)
-                elif dataset_name == 'writing_prompts':
-                    sequence_length = 1024
-                    batch_size = 8
-                    raw_text = processor.load_writing_prompts(split='train', max_samples=max_samples // 5)
-                elif dataset_name == 'pile':
-                    sequence_length = 1024
-                    batch_size = 8
-                    raw_text = processor.load_pile_dataset(split='train', max_samples=max_samples // 5)
-                elif dataset_name == 'openassistant':
-                    sequence_length = 512
-                    batch_size = 16
-                    raw_text = processor.load_openassistant_dataset(split='train', max_samples=max_samples // 5)
-                elif dataset_name == 'gpteacher':
-                    sequence_length = 768
-                    batch_size = 12
-                    raw_text = processor.load_gpteacher_dataset(split='train', max_samples=max_samples // 5)
+            # Preprocess all datasets
+            logger.info('Preprocessing datasets with ImprovedPreprocessor...')
+            for dataset_name in dataset_names:
+                preprocessed_path = preprocessed_paths[dataset_name]
 
-                # Create sequences and batches
-                logger.info(f'Creating sequences with length {sequence_length}...')
-                sequences = processor.create_sequences(raw_text, sequence_length)
+                logger.info(f'Preprocessing {dataset_name} with ImprovedPreprocessor...')
+                try:
+                    # Process dataset with dataset-specific settings
+                    # writing_prompts will use special memory-optimized settings
+                    data = improved_processor.process_dataset(dataset_name, max_samples=max_samples // 5)
 
-                logger.info(f'Creating batches with batch size {batch_size}...')
-                batches = processor.create_batches(sequences, batch_size=batch_size)
+                    # Save preprocessed data
+                    logger.info(f'Saving preprocessed {dataset_name} to {preprocessed_path}...')
+                    os.makedirs(os.path.dirname(preprocessed_path), exist_ok=True)
+                    torch.save(data, preprocessed_path)
+                    logger.info(f'Successfully preprocessed {dataset_name}')
 
-                # Create dataset dictionary
-                dataset = {
-                    'batches': batches,
-                    'metadata': {
-                        'dataset_name': dataset_name,
-                        'split': 'train',
-                        'sequence_length': sequence_length,
-                        'batch_size': batch_size,
-                        'sample_count': len(sequences),
-                        'batch_count': len(batches)
+                    # Log the dataset-specific parameters used
+                    logger.info(f'{dataset_name} parameters:')
+                    logger.info(f"  - Batch size: {data['params']['batch_size']}")
+                    logger.info(f"  - Sequence length: {data['params']['max_sequence_length']}")
+                    logger.info(f"  - Stride: {data['params']['stride']}")
+                    logger.info(f"  - Gradient accumulation steps: {data['params']['grad_accum_steps']}")
+                    logger.info(f"  - Number of batches: {len(data['batches'])}")
+
+                    # Add to available datasets
+                    available_datasets.append(dataset_name)
+
+                except Exception as e:
+                    logger.error(f'Error preprocessing {dataset_name}: {e}')
+                    import traceback
+                    logger.error(traceback.format_exc())
+        else:
+            # Import standard dataset processor
+            from src.generative_ai_module.dataset_processor import DatasetProcessor
+
+            # Create processor for preprocessing
+            processor = DatasetProcessor()
+
+            # Preprocess all datasets
+            logger.info('Preprocessing datasets...')
+            for dataset_name in dataset_names:
+                preprocessed_path = preprocessed_paths[dataset_name]
+
+                logger.info(f'Preprocessing {dataset_name}...')
+                try:
+                    # Prepare dataset with appropriate parameters
+                    if dataset_name == 'persona_chat':
+                        sequence_length = 512
+                        batch_size = 16
+                        raw_text = processor.load_persona_chat(split='train', max_samples=max_samples // 5)
+                    elif dataset_name == 'writing_prompts':
+                        sequence_length = 1024
+                        batch_size = 8
+                        raw_text = processor.load_writing_prompts(split='train', max_samples=max_samples // 5)
+                    elif dataset_name == 'pile':
+                        sequence_length = 1024
+                        batch_size = 8
+                        raw_text = processor.load_pile_dataset(split='train', max_samples=max_samples // 5)
+                    elif dataset_name == 'openassistant':
+                        sequence_length = 512
+                        batch_size = 16
+                        raw_text = processor.load_openassistant_dataset(split='train', max_samples=max_samples // 5)
+                    elif dataset_name == 'gpteacher':
+                        sequence_length = 768
+                        batch_size = 12
+                        raw_text = processor.load_gpteacher_dataset(split='train', max_samples=max_samples // 5)
+
+                    # Create sequences and batches
+                    logger.info(f'Creating sequences with length {sequence_length}...')
+                    sequences = processor.create_sequences(raw_text, sequence_length)
+
+                    logger.info(f'Creating batches with batch size {batch_size}...')
+                    batches = processor.create_batches(sequences, batch_size=batch_size)
+
+                    # Create dataset dictionary
+                    dataset = {
+                        'batches': batches,
+                        'metadata': {
+                            'dataset_name': dataset_name,
+                            'split': 'train',
+                            'sequence_length': sequence_length,
+                            'batch_size': batch_size,
+                            'sample_count': len(sequences),
+                            'batch_count': len(batches)
+                        }
                     }
-                }
 
-                # Save preprocessed data
-                logger.info(f'Saving preprocessed {dataset_name} to {preprocessed_path}...')
-                os.makedirs(os.path.dirname(preprocessed_path), exist_ok=True)
-                torch.save(dataset, preprocessed_path)
-                logger.info(f'Successfully preprocessed {dataset_name}')
+                    # Save preprocessed data
+                    logger.info(f'Saving preprocessed {dataset_name} to {preprocessed_path}...')
+                    os.makedirs(os.path.dirname(preprocessed_path), exist_ok=True)
+                    torch.save(dataset, preprocessed_path)
+                    logger.info(f'Successfully preprocessed {dataset_name}')
 
-                # Add to available datasets
-                available_datasets.append(dataset_name)
+                    # Add to available datasets
+                    available_datasets.append(dataset_name)
 
-            except Exception as e:
-                logger.error(f'Error preprocessing {dataset_name}: {e}')
-                import traceback
-                logger.error(traceback.format_exc())
+                except Exception as e:
+                    logger.error(f'Error preprocessing {dataset_name}: {e}')
+                    import traceback
+                    logger.error(traceback.format_exc())
 
     # Load the preprocessed datasets
     datasets = []
@@ -1904,11 +2003,38 @@ def train_custom_model():
         model.train()
         total_loss = 0
 
+        # Track dataset-specific parameters
+        current_dataset = None
+        prev_dataset = None
+        grad_accum_steps = 1  # Default
+        step_count = 0
+
         # Process batches
         for i, (input_batch, target_batch) in enumerate(combined_batches):
             # Skip invalid batches
             if input_batch is None or target_batch is None:
                 continue
+
+            # Determine which dataset this batch is from
+            # This is a heuristic based on batch size
+            batch_size = input_batch.shape[0]
+            if batch_size <= 2:
+                # Likely writing_prompts with special settings
+                current_dataset = "writing_prompts"
+                grad_accum_steps = 4  # Use writing_prompts grad accumulation
+                use_mixed_precision = True
+            else:
+                # Other datasets with default settings
+                current_dataset = "other"
+                grad_accum_steps = 1
+                use_mixed_precision = False
+
+            # Log dataset change
+            if i == 0 or (i > 0 and current_dataset != prev_dataset):
+                logger.info(f"Processing batch from {current_dataset} dataset")
+                logger.info(f"  - Batch size: {batch_size}")
+                logger.info(f"  - Gradient accumulation steps: {grad_accum_steps}")
+                prev_dataset = current_dataset
 
             # Move to device
             input_batch = input_batch.to(model.device)
@@ -1923,28 +2049,61 @@ def train_custom_model():
             decoder_input_ids[:, 1:] = target_batch[:, :-1]
             decoder_input_ids[:, 0] = model.cnn_model.tokenizer.bos_token_id if model.cnn_model.tokenizer.bos_token_id is not None else model.cnn_model.tokenizer.pad_token_id
 
-            # Forward pass
-            logits = model(
-                input_ids=input_batch,
-                attention_mask=input_attention_mask,
-                decoder_input_ids=decoder_input_ids,
-                decoder_attention_mask=target_attention_mask
-            )
+            # Use mixed precision for writing_prompts dataset
+            if use_mixed_precision and torch.cuda.is_available():
+                with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+                    # Forward pass
+                    logits = model(
+                        input_ids=input_batch,
+                        attention_mask=input_attention_mask,
+                        decoder_input_ids=decoder_input_ids,
+                        decoder_attention_mask=target_attention_mask
+                    )
 
-            # Calculate loss
-            loss = loss_fn(logits.view(-1, logits.size(-1)), target_batch.view(-1))
+                    # Calculate loss
+                    loss = loss_fn(logits.view(-1, logits.size(-1)), target_batch.view(-1))
+
+                    # Scale loss for gradient accumulation
+                    if grad_accum_steps > 1:
+                        loss = loss / grad_accum_steps
+            else:
+                # Forward pass
+                logits = model(
+                    input_ids=input_batch,
+                    attention_mask=input_attention_mask,
+                    decoder_input_ids=decoder_input_ids,
+                    decoder_attention_mask=target_attention_mask
+                )
+
+                # Calculate loss
+                loss = loss_fn(logits.view(-1, logits.size(-1)), target_batch.view(-1))
+
+                # Scale loss for gradient accumulation
+                if grad_accum_steps > 1:
+                    loss = loss / grad_accum_steps
 
             # Backward pass
-            optimizer.zero_grad()
             loss.backward()
-            optimizer.step()
 
-            # Update total loss
-            total_loss += loss.item()
+            # Update step counter
+            step_count += 1
+
+            # Step optimizer based on gradient accumulation
+            if grad_accum_steps == 1 or step_count % grad_accum_steps == 0:
+                optimizer.step()
+                optimizer.zero_grad(set_to_none=True)
+
+            # Update total loss (scale back for reporting)
+            total_loss += loss.item() * (grad_accum_steps if grad_accum_steps > 1 else 1)
 
             # Log progress
             if (i + 1) % log_every == 0:
-                logger.info(f'Epoch {epoch+1}/{epochs}, Batch {i+1}/{len(combined_batches)}, Loss: {loss.item():.4f}')
+                logger.info(f'Epoch {epoch+1}/{epochs}, Batch {i+1}/{len(combined_batches)}, Loss: {loss.item() * (grad_accum_steps if grad_accum_steps > 1 else 1):.4f}')
+
+            # Memory cleanup for writing_prompts dataset
+            if current_dataset == "writing_prompts" and torch.cuda.is_available():
+                del logits
+                torch.cuda.empty_cache()
 
         # Log epoch results
         avg_loss = total_loss / len(combined_batches)
