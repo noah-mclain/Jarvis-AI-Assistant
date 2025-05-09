@@ -232,17 +232,31 @@ def fix_transformers_attention_mask():
                             mask = mask.expand(-1, -1, indices_k.size(0) if hasattr(indices_k, 'size') else indices_k, -1)
 
                     if indices_q is not None:
-                        if isinstance(indices_q, int):
+                        # Check if indices_q is the batch size (which would cause the error)
+                        if isinstance(indices_q, int) and indices_q == attention_mask.size(0):
+                            logger.warning(f"indices_q ({indices_q}) matches batch_size, which would cause dimension mismatch. Using seq_length instead.")
+                            # Use sequence length instead of batch size for expansion
+                            seq_length = attention_mask.size(-1)
+                            mask = mask.expand(-1, 1, -1, -1)  # First expand with 1
+                            mask = mask.expand(-1, -1, seq_length, -1)  # Then expand with seq_length
+                        elif isinstance(indices_q, int):
                             mask = mask.expand(-1, indices_q, -1, -1)
                         else:
                             # Handle case where indices_q is a tensor
-                            mask = mask.expand(-1, indices_q.size(0) if hasattr(indices_q, 'size') else indices_q, -1, -1)
+                            # Check if it's the batch size tensor
+                            if hasattr(indices_q, 'size') and indices_q.size(0) == attention_mask.size(0):
+                                logger.warning(f"indices_q size ({indices_q.size(0)}) matches batch_size, which would cause dimension mismatch. Using seq_length instead.")
+                                seq_length = attention_mask.size(-1)
+                                mask = mask.expand(-1, 1, -1, -1)  # First expand with 1
+                                mask = mask.expand(-1, -1, seq_length, -1)  # Then expand with seq_length
+                            else:
+                                mask = mask.expand(-1, indices_q.size(0) if hasattr(indices_q, 'size') else indices_q, -1, -1)
                 except Exception as e:
                     logger.warning(f"Error expanding mask dimensions: {e}")
-                    # If we encounter the specific tensor size mismatch error, try a different approach
+                    # If we encounter any tensor size mismatch error, create a compatible mask
                     error_msg = str(e)
-                    if "The size of tensor a (6) must match the size of tensor b (2048) at non-singleton dimension 2" in error_msg:
-                        logger.info("Detected specific tensor size mismatch error. Creating a compatible mask.")
+                    if "must match" in error_msg and "at non-singleton dimension" in error_msg:
+                        logger.info("Detected tensor size mismatch error. Creating a compatible mask.")
                         # Create a compatible mask directly
                         batch_size = attention_mask.size(0)
                         seq_length = attention_mask.size(-1)

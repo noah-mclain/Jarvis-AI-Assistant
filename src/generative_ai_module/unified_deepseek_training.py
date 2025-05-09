@@ -55,7 +55,7 @@ except ImportError:
 def apply_attention_mask_fix():
     """Apply the attention mask fix for DeepSeek models"""
     try:
-        # Use the standalone fix script if available
+        # Use the comprehensive fix script if available
         try:
             import sys
             import os
@@ -65,19 +65,32 @@ def apply_attention_mask_fix():
             if setup_dir not in sys.path:
                 sys.path.insert(0, setup_dir)
 
-            # Import and run the fix function
+            # Try to import and run the comprehensive fix first
+            try:
+                from comprehensive_attention_mask_fix import apply_comprehensive_fix
+                success = apply_comprehensive_fix()
+
+                if success:
+                    logger.info("Successfully applied comprehensive attention mask fix")
+                    return True
+                else:
+                    logger.warning("Comprehensive fix failed, trying original fix")
+            except ImportError as e:
+                logger.warning(f"Could not import comprehensive fix: {e}, trying original fix")
+
+            # Fall back to the original fix if comprehensive fix is not available
             from fix_transformers_attention_mask import fix_transformers_attention_mask
             success = fix_transformers_attention_mask()
 
             if success:
-                logger.info("Successfully applied attention mask fixes using standalone script")
+                logger.info("Successfully applied original attention mask fixes")
                 return True
             else:
-                logger.warning("Standalone fix script failed, falling back to built-in fixes")
+                logger.warning("Original fix script failed, falling back to built-in fixes")
         except ImportError as e:
-            logger.warning(f"Could not import standalone fix script: {e}, falling back to built-in fixes")
+            logger.warning(f"Could not import fix scripts: {e}, falling back to built-in fixes")
         except Exception as e:
-            logger.warning(f"Error running standalone fix script: {e}, falling back to built-in fixes")
+            logger.warning(f"Error running fix scripts: {e}, falling back to built-in fixes")
 
         # Check transformers version to apply the appropriate fix
         from transformers import __version__ as transformers_version
@@ -287,17 +300,31 @@ def apply_attention_mask_fix():
                                 mask = mask.expand(-1, -1, indices_k.size(0) if hasattr(indices_k, 'size') else indices_k, -1)
 
                         if indices_q is not None:
-                            if isinstance(indices_q, int):
+                            # Check if indices_q is the batch size (which would cause the error)
+                            if isinstance(indices_q, int) and indices_q == attention_mask.size(0):
+                                logger.warning(f"indices_q ({indices_q}) matches batch_size, which would cause dimension mismatch. Using seq_length instead.")
+                                # Use sequence length instead of batch size for expansion
+                                seq_length = attention_mask.size(-1)
+                                mask = mask.expand(-1, 1, -1, -1)  # First expand with 1
+                                mask = mask.expand(-1, -1, seq_length, -1)  # Then expand with seq_length
+                            elif isinstance(indices_q, int):
                                 mask = mask.expand(-1, indices_q, -1, -1)
                             else:
                                 # Handle case where indices_q is a tensor
-                                mask = mask.expand(-1, indices_q.size(0) if hasattr(indices_q, 'size') else indices_q, -1, -1)
+                                # Check if it's the batch size tensor
+                                if hasattr(indices_q, 'size') and indices_q.size(0) == attention_mask.size(0):
+                                    logger.warning(f"indices_q size ({indices_q.size(0)}) matches batch_size, which would cause dimension mismatch. Using seq_length instead.")
+                                    seq_length = attention_mask.size(-1)
+                                    mask = mask.expand(-1, 1, -1, -1)  # First expand with 1
+                                    mask = mask.expand(-1, -1, seq_length, -1)  # Then expand with seq_length
+                                else:
+                                    mask = mask.expand(-1, indices_q.size(0) if hasattr(indices_q, 'size') else indices_q, -1, -1)
                     except Exception as e:
                         logger.warning(f"Error expanding mask dimensions: {e}")
-                        # If we encounter the specific tensor size mismatch error, try a different approach
+                        # If we encounter any tensor size mismatch error, create a compatible mask
                         error_msg = str(e)
-                        if "The size of tensor a (6) must match the size of tensor b (2048) at non-singleton dimension 2" in error_msg:
-                            logger.info("Detected specific tensor size mismatch error. Creating a compatible mask.")
+                        if "must match" in error_msg and "at non-singleton dimension" in error_msg:
+                            logger.info("Detected tensor size mismatch error. Creating a compatible mask.")
                             # Create a compatible mask directly
                             batch_size = attention_mask.size(0)
                             seq_length = attention_mask.size(-1)

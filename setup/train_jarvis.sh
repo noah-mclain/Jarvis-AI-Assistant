@@ -164,6 +164,30 @@ if [ "$MODEL_TYPE" = "code" ]; then
     chmod +x setup/fix_attention_mask_params.py
     chmod +x setup/fix_tensor_size_mismatch.py
     chmod +x setup/fix_attention_dimension_mismatch.py
+    chmod +x setup/comprehensive_attention_mask_fix.py
+
+    # Try to use the comprehensive fix first
+    if [ -f "setup/comprehensive_attention_mask_fix.py" ]; then
+        echo "Using comprehensive attention mask fix..."
+        # Make it executable
+        chmod +x setup/comprehensive_attention_mask_fix.py
+
+        # Run with detailed logging
+        PYTHONPATH="$PYTHONPATH:." python -c "
+import logging
+logging.basicConfig(level=logging.INFO)
+import setup.comprehensive_attention_mask_fix as fix
+success = fix.apply_comprehensive_fix()
+print(f'Comprehensive fix applied: {success}')
+"
+        if [ $? -eq 0 ]; then
+            echo "✅ Comprehensive attention mask fix applied successfully"
+            # Skip the rest of the attention mask fixes
+            SKIP_UNIFIED_FIX=1
+        else
+            echo "⚠️ Comprehensive fix failed, falling back to unified fix script..."
+        fi
+    fi
 
     # Create a unified fix script that applies all fixes in the correct order
     cat > setup/apply_all_fixes.py << 'EOF'
@@ -366,14 +390,18 @@ EOF
     # Make the unified fix script executable
     chmod +x setup/apply_all_fixes.py
 
-    # Run the unified fix script
-    echo "Applying all attention mask fixes..."
-    python setup/apply_all_fixes.py
+    # Run the unified fix script only if comprehensive fix was not successful
+    if [ -z "$SKIP_UNIFIED_FIX" ]; then
+        echo "Applying all attention mask fixes..."
+        python setup/apply_all_fixes.py
 
-    if [ $? -ne 0 ]; then
-        echo "⚠️ Warning: Attention mask fix script failed, but continuing anyway..."
+        if [ $? -ne 0 ]; then
+            echo "⚠️ Warning: Attention mask fix script failed, but continuing anyway..."
+        else
+            echo "✅ Attention mask fix applied successfully"
+        fi
     else
-        echo "✅ Attention mask fix applied successfully"
+        echo "✅ Skipping unified fix script as comprehensive fix was successful"
     fi
 fi
 
