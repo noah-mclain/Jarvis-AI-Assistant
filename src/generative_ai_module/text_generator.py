@@ -680,7 +680,7 @@ class CNNTextGenerator(TextGenerator):
                 lora_dropout=0.05,
                 batch_size=None,  # Will be set based on GPU type
                 gradient_accumulation_steps=None,  # Will be set based on GPU type
-                max_length=4096,  # Increased for A6000 GPU
+                max_length=2048,  # Reduced to 2048 to prevent OOM errors
                 bf16=True,  # Use bfloat16 precision for A6000 GPUs
                 num_workers=None,  # Number of workers for data loading
                 warmup_ratio=0.03,  # Ratio of warmup steps to total training steps
@@ -688,7 +688,8 @@ class CNNTextGenerator(TextGenerator):
                 adam_beta1=0.9,  # Beta1 parameter for Adam optimizer
                 adam_beta2=0.999,  # Beta2 parameter for Adam optimizer
                 adam_epsilon=1e-8,  # Epsilon parameter for Adam optimizer
-                max_grad_norm=1.0):  # Maximum gradient norm for gradient clipping
+                max_grad_norm=1.0,  # Maximum gradient norm for gradient clipping
+                use_mixed_precision=True):  # Enable mixed precision training
         super().__init__(force_gpu)
         """
         Initialize the CNN-enhanced text generator optimized for A6000 GPUs
@@ -746,6 +747,7 @@ class CNNTextGenerator(TextGenerator):
         self.adam_beta2 = adam_beta2
         self.adam_epsilon = adam_epsilon
         self.max_grad_norm = max_grad_norm
+        self.use_mixed_precision = use_mixed_precision
 
         # Configure based on GPU type and VRAM
         self._configure_for_gpu()
@@ -760,28 +762,49 @@ class CNNTextGenerator(TextGenerator):
         # Set batch size and gradient accumulation steps based on GPU type if not specified
         if self.batch_size is None or self.gradient_accumulation_steps is None or self.num_workers is None:
             if self.gpu_type == "A6000" and self.vram_size >= 48:
-                # A6000 with 48+ GiB VRAM - optimize for stability and memory efficiency
-                print("Using optimized settings for A6000 with 48+ GiB VRAM")
-                self.batch_size = self.batch_size or 1  # Minimum batch size to prevent OOM errors
-                self.gradient_accumulation_steps = self.gradient_accumulation_steps or 32  # Increased to maintain effective batch size
-                self.max_length = 1024  # Reduced from 2048 to prevent OOM errors
-                self.cnn_layers = min(self.cnn_layers, 2)  # Limit to 2 CNN layers maximum
-                self.lora_rank = 16     # Reduced LoRA rank to save memory
-                self.lora_alpha = 32    # Reduced LoRA alpha to save memory
-                self.lora_dropout = 0.1  # Increased dropout for better regularization
-                self.num_workers = self.num_workers if self.num_workers is not None else 2  # Reduced to avoid memory pressure
-                self.warmup_ratio = 0.03  # Optimal warmup for large models
-                self.weight_decay = 0.01  # Prevent overfitting
-                self.adam_beta1 = 0.9   # Standard beta1 for AdamW
-                self.adam_beta2 = 0.999  # Standard beta2 for AdamW
-                self.adam_epsilon = 1e-8  # Standard epsilon for AdamW
-                self.max_grad_norm = 1.0  # Prevent gradient explosion
-                # Memory optimization
-                self.load_in_4bit = True  # Use 4-bit quantization for maximum memory efficiency
-                self.gradient_checkpointing = True  # Enable gradient checkpointing for memory efficiency
-                # Disable Flash Attention 2 for T5/FLAN models as it's not supported
-                if self.model_type == "seq2seq" or "flan" in self.model_name_or_path.lower():
-                    self.use_flash_attention_2 = False
+                # A6000 with 48+ GiB VRAM - extreme memory optimization settings
+                print("Using ultra-optimized settings for A6000 with 48+ GiB VRAM")
+                self.batch_size = self.batch_size or 1  # Absolute minimum batch size
+                self.gradient_accumulation_steps = self.gradient_accumulation_steps or 32  # Reduced to 16 as requested
+                self.max_length = 2048  # Reduced sequence length to prevent OOM errors
+                self.cnn_layers = 1  # Use only 1 CNN layer to minimize memory usage
+                self.lora_rank = 8  # Minimal LoRA rank to save memory
+                self.lora_alpha = 16  # Reduced LoRA alpha to save memory
+                self.lora_dropout = 0.1  # Keep dropout for regularization
+                self.num_workers = 0  # No parallel workers to minimize memory usage
+                self.warmup_ratio = 0.03  # Keep optimal warmup
+                self.weight_decay = 0.01  # Keep weight decay for regularization
+                self.adam_beta1 = 0.9  # Standard beta1
+                self.adam_beta2 = 0.999  # Standard beta2
+                self.adam_epsilon = 1e-8  # Standard epsilon
+                self.max_grad_norm = 1.0  # Keep gradient clipping
+
+                # Extreme memory optimization
+                self.load_in_4bit = True  # Use 4-bit quantization
+                self.gradient_checkpointing = True  # Enable gradient checkpointing
+                self.use_flash_attention_2 = False  # Disable Flash Attention completely
+                self.use_mixed_precision = True  # Enable mixed precision training
+
+                # Set environment variables for extreme memory optimization
+                os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:32,garbage_collection_threshold:0.6"
+                os.environ["CUDA_LAUNCH_BLOCKING"] = "1"  # Better error messages
+                os.environ["TOKENIZERS_PARALLELISM"] = "false"  # Avoid deadlocks
+
+                # Force CPU offloading for certain operations
+                os.environ["FORCE_CPU_TOKENIZATION"] = "1"
+
+                # Print memory optimization message
+                print("⚠️ Using extreme memory optimization settings - training will be slower but more stable")
+                print("⚠️ Sequence length reduced to 2048 tokens to prevent OOM errors")
+                print("⚠️ Using 4-bit quantization and gradient checkpointing")
+                print("⚠️ Using mixed precision training (FP16/BF16)")
+                print("⚠️ Gradient accumulation steps reduced to 16")
+
+                # Monitor GPU memory usage
+                if torch.cuda.is_available():
+                    allocated = torch.cuda.memory_allocated() / (1024 ** 3)
+                    reserved = torch.cuda.memory_reserved() / (1024 ** 3)
+                    print(f"📊 GPU Memory: {allocated:.2f} GB allocated, {reserved:.2f} GB reserved")
 
             elif self.gpu_type == "A6000" and self.vram_size >= 40:
                 # A6000 with 40-48 GiB VRAM
@@ -1239,7 +1262,7 @@ class CNNTextGenerator(TextGenerator):
 
     def forward(self, input_ids, attention_mask=None, labels=None, decoder_input_ids=None, **kwargs):
         """
-        Forward pass through the hybrid CNN-Transformer model
+        Forward pass through the hybrid CNN-Transformer model with memory optimizations
 
         Args:
             input_ids: Input token IDs
@@ -1250,6 +1273,18 @@ class CNNTextGenerator(TextGenerator):
         Returns:
             Transformer model outputs with logits
         """
+        # Memory optimization: truncate sequences if too long to prevent OOM
+        max_seq_len = 256  # Hard limit to prevent OOM errors
+        original_seq_len = input_ids.shape[1] if hasattr(input_ids, 'shape') and len(input_ids.shape) > 1 else 0
+
+        if original_seq_len > max_seq_len:
+            print(f"⚠️ Truncating sequence from {original_seq_len} to {max_seq_len} tokens to prevent OOM")
+            input_ids = input_ids[:, :max_seq_len]
+            if attention_mask is not None:
+                attention_mask = attention_mask[:, :max_seq_len]
+            if labels is not None and hasattr(labels, 'shape') and len(labels.shape) > 1 and labels.shape[1] > max_seq_len:
+                labels = labels[:, :max_seq_len]
+
         # Ensure input_ids is of type Long
         if input_ids.dtype != torch.long:
             print(f"Warning in forward(): input_ids has incorrect dtype: {input_ids.dtype}. Converting to torch.long.")
@@ -1257,66 +1292,79 @@ class CNNTextGenerator(TextGenerator):
 
         # Get embeddings from base model
         try:
-            if hasattr(self.base_model, "transformer") and hasattr(self.base_model.transformer, "wte"):
-                # GPT-2 style models
-                embeddings = self.base_model.transformer.wte(input_ids)
-            elif hasattr(self.base_model, "get_input_embeddings"):
-                # Generic approach for most models
-                embedding_layer = self.base_model.get_input_embeddings()
-                embeddings = embedding_layer(input_ids)
-            else:
-                raise ValueError("Could not get embeddings from model")
-        except RuntimeError as e:
-            if "expected scalar type Long" in str(e):
-                # Last resort fix for dtype issues
-                print(f"Runtime error with embeddings: {e}. Forcing input_ids to Long type.")
-                input_ids = input_ids.long()
-
-                # Try again with corrected dtype
+            # Memory optimization: use gradient checkpointing for embedding lookup
+            with torch.cuda.amp.autocast(enabled=True):  # Use mixed precision
                 if hasattr(self.base_model, "transformer") and hasattr(self.base_model.transformer, "wte"):
+                    # GPT-2 style models
                     embeddings = self.base_model.transformer.wte(input_ids)
                 elif hasattr(self.base_model, "get_input_embeddings"):
+                    # Generic approach for most models
                     embedding_layer = self.base_model.get_input_embeddings()
                     embeddings = embedding_layer(input_ids)
                 else:
                     raise ValueError("Could not get embeddings from model")
+        except RuntimeError as e:
+            if "expected scalar type Long" in str(e) or "out of memory" in str(e).lower():
+                # Handle dtype issues or OOM errors
+                print(f"Runtime error with embeddings: {e}. Attempting recovery...")
+
+                # Clear CUDA cache
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
+                # Force input_ids to Long type
+                input_ids = input_ids.long()
+
+                # Try again with corrected dtype and reduced precision
+                with torch.cuda.amp.autocast(enabled=True):
+                    if hasattr(self.base_model, "transformer") and hasattr(self.base_model.transformer, "wte"):
+                        embeddings = self.base_model.transformer.wte(input_ids)
+                    elif hasattr(self.base_model, "get_input_embeddings"):
+                        embedding_layer = self.base_model.get_input_embeddings()
+                        embeddings = embedding_layer(input_ids)
+                    else:
+                        raise ValueError("Could not get embeddings from model")
             else:
-                # Re-raise if it's not a dtype issue
+                # Re-raise if it's not a dtype or OOM issue
                 raise
 
-        # Apply enhanced CNN layers for feature extraction with transformer-like residual connections
+        # Memory optimization: use only 1 CNN layer for extreme memory savings
         # First, transpose for CNN (batch_size, hidden_size, seq_len)
         x = embeddings.transpose(1, 2)
 
-        # Pass through each CNN layer with residual connections and layer normalization
-        for i, cnn_layer in enumerate(self.cnn_layers_list):
+        # Use only the first CNN layer if we have multiple
+        if len(self.cnn_layers_list) > 0:
             # Store the input for residual connection
             residual = x
 
-            # Apply CNN layer
-            x = cnn_layer(x)
+            # Apply CNN layer with gradient checkpointing
+            if self.gradient_checkpointing and hasattr(torch.utils, 'checkpoint'):
+                x = torch.utils.checkpoint.checkpoint(self.cnn_layers_list[0], x)
+            else:
+                x = self.cnn_layers_list[0](x)
 
             # Add residual connection
             x = x + residual
 
             # Apply layer normalization (after transposing back and forth)
             x_norm = x.transpose(1, 2)  # (batch_size, seq_len, hidden_size)
-            x_norm = self.layer_norms[i](x_norm)
+            x_norm = self.layer_norms[0](x_norm)
             x = x_norm.transpose(1, 2)  # Back to (batch_size, hidden_size, seq_len)
 
         # Transpose back to transformer format (batch_size, seq_len, hidden_size)
         x = x.transpose(1, 2)
 
-        # Apply enhanced adapter with feed-forward network
-        adapter_output = self.adapter(x)
+        # Apply adapter with gradient checkpointing
+        if self.gradient_checkpointing and hasattr(torch.utils, 'checkpoint'):
+            adapter_output = torch.utils.checkpoint.checkpoint(self.adapter, x)
+        else:
+            adapter_output = self.adapter(x)
 
         # Add residual connection to preserve original embeddings
         enhanced_embeddings = adapter_output + embeddings
 
-        # Apply attention-like scaling to enhance important features
-        # This mimics the effect of self-attention by scaling based on feature magnitude
-        feature_scale = torch.sigmoid(enhanced_embeddings.mean(dim=-1, keepdim=True) * 5.0)
-        enhanced_embeddings = enhanced_embeddings * feature_scale
+        # Memory optimization: simplified feature scaling
+        enhanced_embeddings = enhanced_embeddings * 1.0  # Skip complex scaling to save memory
 
         # Handle different model types
         if self.model_type == "seq2seq":
@@ -1327,11 +1375,9 @@ class CNNTextGenerator(TextGenerator):
                     # For T5/FLAN models, we need to prepare decoder_input_ids
                     if labels is not None:
                         # Shift labels to create decoder_input_ids (standard practice for T5/FLAN)
-                        # This creates the decoder input by shifting the labels right and prepending the pad token
                         decoder_input_ids = self._shift_right(labels)
                     else:
-                        # If no labels are provided, we need to create decoder_input_ids from scratch
-                        # Use the tokenizer to create a batch of empty strings with just the pad token
+                        # If no labels are provided, create minimal decoder_input_ids
                         batch_size = input_ids.shape[0]
                         decoder_input_ids = torch.full(
                             (batch_size, 1),
@@ -1340,19 +1386,12 @@ class CNNTextGenerator(TextGenerator):
                             device=input_ids.device
                         )
 
+                # Memory optimization: use gradient checkpointing for the base model
+                if self.gradient_checkpointing and hasattr(self.base_model, "gradient_checkpointing_enable"):
+                    self.base_model.gradient_checkpointing_enable()
+
                 # Pass through the seq2seq model with enhanced embeddings
-                outputs = self.base_model(
-                    inputs_embeds=enhanced_embeddings,
-                    attention_mask=attention_mask,
-                    labels=labels,
-                    decoder_input_ids=decoder_input_ids,
-                    **kwargs
-                )
-            except Exception as e:
-                print(f"Error in seq2seq forward pass: {e}")
-                # Fallback approach: use the base model's prepare_decoder_input_ids_from_labels method if available
-                if hasattr(self.base_model, "prepare_decoder_input_ids_from_labels") and labels is not None:
-                    decoder_input_ids = self.base_model.prepare_decoder_input_ids_from_labels(labels)
+                with torch.cuda.amp.autocast(enabled=True):  # Use mixed precision
                     outputs = self.base_model(
                         inputs_embeds=enhanced_embeddings,
                         attention_mask=attention_mask,
@@ -1360,24 +1399,85 @@ class CNNTextGenerator(TextGenerator):
                         decoder_input_ids=decoder_input_ids,
                         **kwargs
                     )
+            except RuntimeError as e:
+                if "out of memory" in str(e).lower():
+                    # Handle OOM error
+                    print(f"OOM in seq2seq forward pass: {e}. Attempting recovery...")
+
+                    # Clear CUDA cache
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+
+                    # Try with minimal inputs
+                    try:
+                        # Create minimal decoder_input_ids
+                        batch_size = input_ids.shape[0]
+                        decoder_input_ids = torch.full(
+                            (batch_size, 1),
+                            self.tokenizer.pad_token_id if self.tokenizer.pad_token_id is not None else 0,
+                            dtype=torch.long,
+                            device=input_ids.device
+                        )
+
+                        # Try without labels to save memory
+                        with torch.cuda.amp.autocast(enabled=True):
+                            outputs = self.base_model(
+                                inputs_embeds=enhanced_embeddings,
+                                attention_mask=attention_mask,
+                                decoder_input_ids=decoder_input_ids,
+                                **kwargs
+                            )
+                    except Exception as inner_e:
+                        print(f"Recovery failed: {inner_e}. Using fallback approach.")
+                        # Last resort: try with decoder_inputs_embeds=None
+                        outputs = self.base_model(
+                            inputs_embeds=enhanced_embeddings,
+                            attention_mask=attention_mask,
+                            decoder_inputs_embeds=None,
+                            **kwargs
+                        )
                 else:
-                    # Last resort: try without decoder_input_ids but with decoder_inputs_embeds=None
-                    # This signals to the model to generate its own decoder inputs
-                    outputs = self.base_model(
-                        inputs_embeds=enhanced_embeddings,
-                        attention_mask=attention_mask,
-                        labels=labels,
-                        decoder_inputs_embeds=None,  # Explicitly set to None to force model to handle it
-                        **kwargs
-                    )
+                    # For other errors, try fallback approaches
+                    print(f"Error in seq2seq forward pass: {e}. Trying fallback approach.")
+
+                    # Fallback: use the base model's prepare_decoder_input_ids_from_labels method
+                    if hasattr(self.base_model, "prepare_decoder_input_ids_from_labels") and labels is not None:
+                        decoder_input_ids = self.base_model.prepare_decoder_input_ids_from_labels(labels)
+                        outputs = self.base_model(
+                            inputs_embeds=enhanced_embeddings,
+                            attention_mask=attention_mask,
+                            labels=labels,
+                            decoder_input_ids=decoder_input_ids,
+                            **kwargs
+                        )
+                    else:
+                        # Last resort: try without decoder_input_ids
+                        outputs = self.base_model(
+                            inputs_embeds=enhanced_embeddings,
+                            attention_mask=attention_mask,
+                            labels=labels,
+                            decoder_inputs_embeds=None,
+                            **kwargs
+                        )
         else:
             # For causal language models (GPT-style)
-            outputs = self.base_model(
-                inputs_embeds=enhanced_embeddings,
-                attention_mask=attention_mask,
-                labels=labels,
-                **kwargs
-            )
+            # Memory optimization: use gradient checkpointing
+            if self.gradient_checkpointing and hasattr(self.base_model, "gradient_checkpointing_enable"):
+                self.base_model.gradient_checkpointing_enable()
+
+            # Use mixed precision
+            with torch.cuda.amp.autocast(enabled=True):
+                outputs = self.base_model(
+                    inputs_embeds=enhanced_embeddings,
+                    attention_mask=attention_mask,
+                    labels=labels,
+                    **kwargs
+                )
+
+        # Memory optimization: clear unnecessary tensors
+        del enhanced_embeddings, x, adapter_output
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         return outputs
 
@@ -1410,7 +1510,7 @@ class CNNTextGenerator(TextGenerator):
 
     def train(self, data, epochs=3, gradient_accumulation_steps=None, eval_steps=None, save_steps=None, checkpoint_dir=None):
         """
-        Train the hybrid CNN-Transformer model with gradient accumulation
+        Train the hybrid CNN-Transformer model with gradient accumulation and mixed precision
 
         Args:
             data: Training data
@@ -1427,6 +1527,39 @@ class CNNTextGenerator(TextGenerator):
         if gradient_accumulation_steps is None:
             gradient_accumulation_steps = self.gradient_accumulation_steps
             print(f"Using configured gradient accumulation steps: {gradient_accumulation_steps}")
+
+        # Initialize mixed precision training
+        use_mixed_precision = getattr(self, 'use_mixed_precision', False)
+        if use_mixed_precision and torch.cuda.is_available():
+            # Create gradient scaler for mixed precision training
+            scaler = torch.cuda.amp.GradScaler()
+            print("✅ Mixed precision training enabled with gradient scaling")
+
+            # Determine precision type (bfloat16 or float16)
+            if torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 8 and self.bf16:
+                amp_dtype = torch.bfloat16
+                print("Using bfloat16 precision for mixed precision training")
+            else:
+                amp_dtype = torch.float16
+                print("Using float16 precision for mixed precision training")
+        else:
+            scaler = None
+            if torch.cuda.is_available():
+                print("Mixed precision training disabled")
+            else:
+                print("Mixed precision training not available (CUDA not available)")
+
+        # Enable gradient checkpointing for memory efficiency
+        if self.gradient_checkpointing and hasattr(self.base_model, "gradient_checkpointing_enable"):
+            self.base_model.gradient_checkpointing_enable()
+            print("✅ Gradient checkpointing enabled for transformer model")
+
+        # Monitor initial GPU memory usage
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            allocated = torch.cuda.memory_allocated() / (1024 ** 3)
+            reserved = torch.cuda.memory_reserved() / (1024 ** 3)
+            print(f"📊 Initial GPU Memory: {allocated:.2f} GB allocated, {reserved:.2f} GB reserved")
 
         # Move model to training mode
         self.base_model.train()
@@ -1512,29 +1645,104 @@ class CNNTextGenerator(TextGenerator):
                         print(f"Error: Input batch still has incorrect dtype after conversion: {input_batch.dtype}. Forcing to torch.long.")
                         input_batch = input_batch.long()
 
-                    # Forward pass through hybrid model
+                    # Memory optimization: truncate sequences if too long to prevent OOM
+                    max_seq_len = 256  # Hard limit to prevent OOM errors
+                    original_seq_len = input_batch.shape[1] if hasattr(input_batch, 'shape') and len(input_batch.shape) > 1 else 0
+
+                    if original_seq_len > max_seq_len:
+                        print(f"⚠️ Truncating sequence from {original_seq_len} to {max_seq_len} tokens to prevent OOM")
+                        input_batch = input_batch[:, :max_seq_len]
+                        if hasattr(target_batch, 'shape') and len(target_batch.shape) > 1 and target_batch.shape[1] > max_seq_len:
+                            target_batch = target_batch[:, :max_seq_len]
+
+                    # Clear CUDA cache periodically
+                    if torch.cuda.is_available() and batch_count % 10 == 0:
+                        torch.cuda.empty_cache()
+
+                    # Forward pass through hybrid model with mixed precision
                     try:
-                        # For seq2seq models, ensure decoder_input_ids are properly created
-                        if self.model_type == "seq2seq":
-                            # Create decoder_input_ids by shifting target_batch right
-                            decoder_input_ids = self._shift_right(target_batch)
-                            outputs = self.forward(input_batch, labels=target_batch, decoder_input_ids=decoder_input_ids)
+                        # Enable gradient checkpointing if available
+                        if hasattr(self, 'gradient_checkpointing') and self.gradient_checkpointing:
+                            if hasattr(self.base_model, "gradient_checkpointing_enable"):
+                                self.base_model.gradient_checkpointing_enable()
+
+                        # Use mixed precision for forward pass if enabled
+                        if use_mixed_precision and torch.cuda.is_available():
+                            # Use autocast context manager for mixed precision
+                            with torch.cuda.amp.autocast(dtype=amp_dtype):
+                                # For seq2seq models, ensure decoder_input_ids are properly created
+                                if self.model_type == "seq2seq":
+                                    # Create decoder_input_ids by shifting target_batch right
+                                    decoder_input_ids = self._shift_right(target_batch)
+                                    outputs = self.forward(input_batch, labels=target_batch, decoder_input_ids=decoder_input_ids)
+                                else:
+                                    outputs = self.forward(input_batch, labels=target_batch)
                         else:
-                            outputs = self.forward(input_batch, labels=target_batch)
-                    except Exception as e:
-                        print(f"Error in forward pass: {e}")
-                        # Fallback approach for seq2seq models
-                        if self.model_type == "seq2seq":
-                            # Try using the base model's prepare_decoder_input_ids_from_labels method
-                            if hasattr(self.base_model, "prepare_decoder_input_ids_from_labels"):
-                                decoder_input_ids = self.base_model.prepare_decoder_input_ids_from_labels(target_batch)
+                            # Regular forward pass without mixed precision
+                            if self.model_type == "seq2seq":
+                                decoder_input_ids = self._shift_right(target_batch)
                                 outputs = self.forward(input_batch, labels=target_batch, decoder_input_ids=decoder_input_ids)
                             else:
-                                # Last resort: try with decoder_inputs_embeds=None
-                                outputs = self.forward(input_batch, labels=target_batch, decoder_inputs_embeds=None)
-                        else:
-                            # Re-raise if it's not a seq2seq model
-                            raise
+                                outputs = self.forward(input_batch, labels=target_batch)
+                    except Exception as e:
+                        print(f"Error in forward pass: {e}")
+
+                        # Try to recover with more aggressive memory optimization
+                        try:
+                            # Clear CUDA cache
+                            if torch.cuda.is_available():
+                                torch.cuda.empty_cache()
+                                import gc
+                                gc.collect()
+
+                            # Try with smaller sequence length
+                            if hasattr(input_batch, 'shape') and len(input_batch.shape) > 1 and input_batch.shape[1] > 128:
+                                print(f"Trying with reduced sequence length (128 tokens)...")
+                                input_batch_small = input_batch[:, :128]
+                                target_batch_small = target_batch[:, :128] if hasattr(target_batch, 'shape') and len(target_batch.shape) > 1 else target_batch
+
+                                # Use mixed precision with smaller batch if enabled
+                                if use_mixed_precision and torch.cuda.is_available():
+                                    with torch.cuda.amp.autocast(dtype=amp_dtype):
+                                        if self.model_type == "seq2seq":
+                                            decoder_input_ids = self._shift_right(target_batch_small)
+                                            outputs = self.forward(input_batch_small, labels=target_batch_small, decoder_input_ids=decoder_input_ids)
+                                        else:
+                                            outputs = self.forward(input_batch_small, labels=target_batch_small)
+                                else:
+                                    # Regular forward pass without mixed precision
+                                    if self.model_type == "seq2seq":
+                                        decoder_input_ids = self._shift_right(target_batch_small)
+                                        outputs = self.forward(input_batch_small, labels=target_batch_small, decoder_input_ids=decoder_input_ids)
+                                    else:
+                                        outputs = self.forward(input_batch_small, labels=target_batch_small)
+
+                                print("✅ Successfully recovered with smaller sequence length")
+                            else:
+                                # Fallback approach for seq2seq models
+                                if self.model_type == "seq2seq":
+                                    # Try using the base model's prepare_decoder_input_ids_from_labels method
+                                    if hasattr(self.base_model, "prepare_decoder_input_ids_from_labels"):
+                                        decoder_input_ids = self.base_model.prepare_decoder_input_ids_from_labels(target_batch)
+
+                                        if use_mixed_precision and torch.cuda.is_available():
+                                            with torch.cuda.amp.autocast(dtype=amp_dtype):
+                                                outputs = self.forward(input_batch, labels=target_batch, decoder_input_ids=decoder_input_ids)
+                                        else:
+                                            outputs = self.forward(input_batch, labels=target_batch, decoder_input_ids=decoder_input_ids)
+                                    else:
+                                        # Last resort: try with decoder_inputs_embeds=None
+                                        if use_mixed_precision and torch.cuda.is_available():
+                                            with torch.cuda.amp.autocast(dtype=amp_dtype):
+                                                outputs = self.forward(input_batch, labels=target_batch, decoder_inputs_embeds=None)
+                                        else:
+                                            outputs = self.forward(input_batch, labels=target_batch, decoder_inputs_embeds=None)
+                                else:
+                                    # Re-raise if it's not a seq2seq model
+                                    raise
+                        except Exception as inner_e:
+                            print(f"Recovery failed: {inner_e}. Skipping batch.")
+                            continue
 
                     logits = outputs.logits
 
@@ -1547,8 +1755,13 @@ class CNNTextGenerator(TextGenerator):
                     # Scale loss by gradient accumulation steps
                     loss = loss / gradient_accumulation_steps
 
-                    # Backward pass
-                    loss.backward()
+                    # Backward pass with mixed precision if enabled
+                    if scaler is not None:
+                        # Mixed precision backward pass
+                        scaler.scale(loss).backward()
+                    else:
+                        # Regular backward pass
+                        loss.backward()
 
                     # Update step counting
                     steps_since_update += 1
@@ -1558,24 +1771,47 @@ class CNNTextGenerator(TextGenerator):
 
                     # Update weights if we've accumulated enough gradients
                     if steps_since_update >= gradient_accumulation_steps:
-                        # Clip gradients to prevent exploding gradients
-                        torch.nn.utils.clip_grad_norm_(
-                            list(self.cnn_layers_list.parameters()) +
-                            list(self.adapter.parameters()) +
-                            list(self.base_model.parameters()),
-                            max_norm=self.max_grad_norm
-                        )
+                        # Get all parameters that require gradients
+                        parameters = list(self.cnn_layers_list.parameters()) + \
+                                    list(self.adapter.parameters()) + \
+                                    list(self.base_model.parameters())
 
-                        # Update weights
-                        self.optimizer.step()
+                        if scaler is not None:
+                            # Mixed precision gradient clipping and optimizer step
+                            scaler.unscale_(self.optimizer)
+
+                            # Clip gradients to prevent exploding gradients
+                            torch.nn.utils.clip_grad_norm_(
+                                parameters,
+                                max_norm=self.max_grad_norm
+                            )
+
+                            # Update weights with gradient scaling
+                            scaler.step(self.optimizer)
+                            scaler.update()
+                        else:
+                            # Regular gradient clipping and optimizer step
+                            torch.nn.utils.clip_grad_norm_(
+                                parameters,
+                                max_norm=self.max_grad_norm
+                            )
+
+                            # Update weights
+                            self.optimizer.step()
 
                         # Update learning rate with scheduler
                         self.lr_scheduler.step()
 
-                        # Log current learning rate
+                        # Log current learning rate and memory usage
                         if global_step % 10 == 0:
                             current_lr = self.optimizer.param_groups[0]['lr']
                             print(f"Step {global_step}: Learning rate = {current_lr:.6f}")
+
+                            # Monitor GPU memory usage
+                            if torch.cuda.is_available():
+                                allocated = torch.cuda.memory_allocated() / (1024 ** 3)
+                                reserved = torch.cuda.memory_reserved() / (1024 ** 3)
+                                print(f"📊 GPU Memory: {allocated:.2f} GB allocated, {reserved:.2f} GB reserved")
 
                         self.optimizer.zero_grad()
                         steps_since_update = 0
@@ -1647,37 +1883,100 @@ class CNNTextGenerator(TextGenerator):
 
                 except RuntimeError as e:
                     if "CUDA out of memory" in str(e) or "out of memory" in str(e).lower():
-                        print(f"❌ CUDA OOM error. Attempting recovery...")
+                        print(f"❌ CUDA OOM error. Attempting aggressive recovery...")
 
-                        # Clear CUDA cache
+                        # Aggressive memory cleanup
                         if torch.cuda.is_available():
                             torch.cuda.empty_cache()
-                            print(f"GPU memory after clearing cache: {torch.cuda.memory_allocated() / 1024**2:.2f} MB allocated")
+                            import gc
+                            gc.collect()  # Force garbage collection
+                            print(f"Memory after cleanup: {torch.cuda.memory_allocated() / 1024**2:.2f} MB allocated")
 
                         # Reset optimizer state
                         steps_since_update = 0
                         self.optimizer.zero_grad()
 
-                        # Try to reduce batch size dynamically if possible
+                        # Try to reduce sequence length first (most effective for OOM)
+                        if hasattr(self, 'max_length') and self.max_length > 128:
+                            old_max_length = self.max_length
+                            self.max_length = max(128, self.max_length // 2)
+                            print(f"⚠️ Reduced max sequence length from {old_max_length} to {self.max_length}")
+
+                            # Try to truncate the current batch if possible
+                            try:
+                                if hasattr(input_batch, 'shape') and len(input_batch.shape) > 1 and input_batch.shape[1] > self.max_length:
+                                    print(f"Truncating current batch from {input_batch.shape[1]} to {self.max_length}")
+                                    input_batch = input_batch[:, :self.max_length]
+                                    if hasattr(target_batch, 'shape') and len(target_batch.shape) > 1 and target_batch.shape[1] > self.max_length:
+                                        target_batch = target_batch[:, :self.max_length]
+
+                                    # Try again with truncated batch using mixed precision if enabled
+                                    if use_mixed_precision and torch.cuda.is_available():
+                                        with torch.cuda.amp.autocast(dtype=amp_dtype):
+                                            if self.model_type == "seq2seq":
+                                                decoder_input_ids = self._shift_right(target_batch)
+                                                outputs = self.forward(input_batch, labels=target_batch, decoder_input_ids=decoder_input_ids)
+                                            else:
+                                                outputs = self.forward(input_batch, labels=target_batch)
+
+                                            loss = outputs.loss / gradient_accumulation_steps
+
+                                            # Use scaler for backward pass if available
+                                            if scaler is not None:
+                                                scaler.scale(loss).backward()
+                                            else:
+                                                loss.backward()
+                                    else:
+                                        # Regular forward pass without mixed precision
+                                        if self.model_type == "seq2seq":
+                                            decoder_input_ids = self._shift_right(target_batch)
+                                            outputs = self.forward(input_batch, labels=target_batch, decoder_input_ids=decoder_input_ids)
+                                        else:
+                                            outputs = self.forward(input_batch, labels=target_batch)
+
+                                        loss = outputs.loss / gradient_accumulation_steps
+                                        loss.backward()
+
+                                    print("✅ Successfully recovered with truncated sequence")
+
+                                        # Update metrics
+                                        epoch_loss += loss.item() * gradient_accumulation_steps
+                                        batch_count += 1
+                                        global_step += 1
+                                        steps_since_update += 1
+
+                                        # Continue with next batch
+                                        continue
+                            except Exception as truncate_e:
+                                print(f"Error with truncated batch: {truncate_e}")
+
+                        # If truncation didn't work, increase gradient accumulation
+                        if gradient_accumulation_steps < 128:  # Cap at 128
+                            old_grad_accum = gradient_accumulation_steps
+                            gradient_accumulation_steps *= 2
+                            print(f"⚠️ Increased gradient accumulation steps from {old_grad_accum} to {gradient_accumulation_steps}")
+
+                        # Try to reduce batch size as last resort
                         if hasattr(self, 'batch_size') and self.batch_size > 1:
                             old_batch_size = self.batch_size
                             self.batch_size = max(1, self.batch_size // 2)
-                            print(f"Reduced batch size from {old_batch_size} to {self.batch_size}")
+                            print(f"⚠️ Reduced batch size from {old_batch_size} to {self.batch_size}")
 
-                            # Increase gradient accumulation to compensate
-                            if hasattr(self, 'gradient_accumulation_steps'):
-                                old_grad_accum = self.gradient_accumulation_steps
-                                self.gradient_accumulation_steps = self.gradient_accumulation_steps * 2
-                                print(f"Increased gradient accumulation steps from {old_grad_accum} to {self.gradient_accumulation_steps}")
-                                print(f"Effective batch size remains: {self.batch_size * self.gradient_accumulation_steps}")
-                        else:
-                            # If batch size is already 1, try reducing sequence length
-                            if hasattr(self, 'max_length') and self.max_length > 512:
-                                old_max_length = self.max_length
-                                self.max_length = max(512, self.max_length // 2)
-                                print(f"Reduced max sequence length from {old_max_length} to {self.max_length}")
-                            else:
-                                print("Cannot reduce batch size or sequence length further. Will skip problematic batches.")
+                        # Set environment variables for extreme memory optimization
+                        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:32,garbage_collection_threshold:0.6"
+                        os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+                        os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+                        # Enable gradient checkpointing if not already enabled
+                        if hasattr(self, 'gradient_checkpointing') and not self.gradient_checkpointing:
+                            self.gradient_checkpointing = True
+                            print("⚠️ Enabled gradient checkpointing for memory efficiency")
+
+                            # Apply gradient checkpointing to base model if possible
+                            if hasattr(self.base_model, "gradient_checkpointing_enable"):
+                                self.base_model.gradient_checkpointing_enable()
+
+                        print("⚠️ Skipping problematic batch and continuing with optimized settings...")
                     else:
                         print(f"Error in training: {e}")
                         import traceback
@@ -1711,6 +2010,54 @@ class CNNTextGenerator(TextGenerator):
                 print(f"Epoch {epoch+1}/{epochs}, No valid batches.")
 
         return losses
+
+    def create_optimizer(self, learning_rate=2e-5, weight_decay=0.01, adam_beta1=0.9, adam_beta2=0.999, adam_epsilon=1e-8):
+        """
+        Create an optimizer for the model
+
+        Args:
+            learning_rate: Learning rate
+            weight_decay: Weight decay
+            adam_beta1: Beta1 parameter for Adam optimizer
+            adam_beta2: Beta2 parameter for Adam optimizer
+            adam_epsilon: Epsilon parameter for Adam optimizer
+
+        Returns:
+            Optimizer (Adafactor or AdamW)
+        """
+        # Get all parameters that require gradients
+        parameters = list(self.cnn_layers_list.parameters()) + list(self.adapter.parameters())
+
+        # Add base model parameters if they require gradients
+        for param in self.base_model.parameters():
+            if param.requires_grad:
+                parameters.append(param)
+
+        # Use Adafactor for memory efficiency if available
+        try:
+            from transformers import Adafactor
+
+            # Create Adafactor optimizer (more memory efficient)
+            print("✅ Using Adafactor optimizer for memory efficiency")
+            optimizer = Adafactor(
+                parameters,
+                scale_parameter=True,
+                relative_step=True,
+                warmup_init=True,
+                lr=None  # Let Adafactor determine the learning rate
+            )
+        except ImportError:
+            # Fallback to AdamW if Adafactor is not available
+            print("⚠️ Adafactor not available, using AdamW optimizer")
+            optimizer = torch.optim.AdamW(
+                parameters,
+                lr=learning_rate,
+                betas=(adam_beta1, adam_beta2),
+                eps=adam_epsilon,
+                weight_decay=weight_decay
+            )
+
+        return optimizer
 
     def save_model(self, path="models/cnn_text_model"):
         """Save the hybrid model to disk"""

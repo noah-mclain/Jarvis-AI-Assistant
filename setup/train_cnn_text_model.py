@@ -25,30 +25,53 @@ def train_cnn_text_model(gpu_type, vram_size, use_improved_preprocessor=False):
             print('❌ ERROR: CUDA is not available. Cannot proceed with GPU training.')
             sys.exit(1)
 
-        # Create and train the CNN-enhanced text generator with optimized parameters for A6000 48GB GPU
+        # Create and train the CNN-enhanced text generator with extreme memory optimization for A6000 48GB GPU
         model = create_cnn_text_generator(
             model_name='google/flan-ul2',
             force_gpu=True,
             gpu_type=gpu_type,
             vram_size=int(vram_size),
-            cnn_layers=2,  # Reduced from 3 to 2 CNN layers to save memory
+            cnn_layers=1,  # Use only 1 CNN layer to minimize memory usage
             load_in_4bit=True,  # Use 4-bit quantization for maximum memory efficiency
-            use_flash_attention_2=False,  # Disable for T5/FLAN models as it's not supported
+            use_flash_attention_2=False,  # Disable Flash Attention completely
             gradient_checkpointing=True,  # Enable gradient checkpointing for memory efficiency
-            lora_rank=16,  # Reduced from 32 to 16 to save memory
-            lora_alpha=32,  # Reduced from 64 to 32 to save memory
+            lora_rank=8,  # Minimal LoRA rank to save memory
+            lora_alpha=16,  # Reduced LoRA alpha to save memory
             lora_dropout=0.1,  # Keep dropout for regularization
-            max_length=1024,  # Reduced from 2048 to 1024 to prevent OOM errors
-            batch_size=1,  # Reduced to minimum to prevent OOM errors
-            gradient_accumulation_steps=32,  # Increased to maintain effective batch size
-            num_workers=2,  # Reduced from 8 to 2 to avoid memory pressure from data loading
-            warmup_ratio=0.03,  # Slightly reduced warmup ratio
+            max_length=256,  # Reduced sequence length to prevent OOM errors
+            batch_size=1,  # Absolute minimum batch size
+            gradient_accumulation_steps=16,  # Reduced to 16 as requested
+            num_workers=0,  # No parallel workers to minimize memory usage
+            warmup_ratio=0.03,  # Keep optimal warmup
             weight_decay=0.01,  # Keep weight decay for regularization
             adam_beta1=0.9,
             adam_beta2=0.999,
             adam_epsilon=1e-8,
             max_grad_norm=1.0
         )
+
+        # Set environment variables for extreme memory optimization
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:32,garbage_collection_threshold:0.6"
+        os.environ["CUDA_LAUNCH_BLOCKING"] = "1"  # Better error messages
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"  # Avoid deadlocks
+        os.environ["FORCE_CPU_TOKENIZATION"] = "1"  # Force tokenization on CPU
+
+        # Enable mixed precision training
+        os.environ["MIXED_PRECISION_TRAINING"] = "1"
+
+        # Print memory optimization message
+        print("⚠️ Using extreme memory optimization settings - training will be slower but more stable")
+        print("⚠️ Sequence length reduced to 256 tokens to prevent OOM errors")
+        print("⚠️ Using 4-bit quantization and gradient checkpointing")
+        print("⚠️ Using mixed precision training (FP16/BF16)")
+        print("⚠️ Gradient accumulation steps reduced to 16")
+        print("⚠️ Using Adafactor optimizer for memory efficiency")
+
+        # Monitor GPU memory usage
+        if torch.cuda.is_available():
+            allocated = torch.cuda.memory_allocated() / (1024 ** 3)
+            reserved = torch.cuda.memory_reserved() / (1024 ** 3)
+            print(f"📊 Initial GPU Memory: {allocated:.2f} GB allocated, {reserved:.2f} GB reserved")
 
         # Verify model is on GPU
         if not next(model.parameters()).is_cuda:
