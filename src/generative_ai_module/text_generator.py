@@ -1939,14 +1939,14 @@ class CNNTextGenerator(TextGenerator):
 
                                     print("✅ Successfully recovered with truncated sequence")
 
-                                        # Update metrics
-                                        epoch_loss += loss.item() * gradient_accumulation_steps
-                                        batch_count += 1
-                                        global_step += 1
-                                        steps_since_update += 1
+                                    # Update metrics
+                                    epoch_loss += loss.item() * gradient_accumulation_steps
+                                    batch_count += 1
+                                    global_step += 1
+                                    steps_since_update += 1
 
-                                        # Continue with next batch
-                                        continue
+                                    # Continue with next batch
+                                    continue
                             except Exception as truncate_e:
                                 print(f"Error with truncated batch: {truncate_e}")
 
