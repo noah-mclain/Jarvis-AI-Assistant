@@ -37,7 +37,7 @@ detect_gpu() {
         echo "ERROR: NumPy 1.26.4 installation failed. Cannot continue."
         exit 1
     fi
-    
+
     echo "✅ NumPy 1.26.4 successfully installed"
 
     # Install minimal PyTorch to check GPU
@@ -47,14 +47,14 @@ detect_gpu() {
     if python -c "import torch; print(torch.cuda.is_available())" 2>/dev/null | grep -q "True"; then
         echo "PyTorch confirms CUDA is available"
         GPU_AVAILABLE=1
-        
+
         # Get CUDA and GPU info
         CUDA_VERSION=$(python -c "import torch; print(torch.version.cuda)")
         GPU_NAME=$(python -c "import torch; print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'None')")
-        
+
         echo "CUDA Version: $CUDA_VERSION"
         echo "GPU: $GPU_NAME"
-        
+
         # Detect specific GPU types
         if echo "$GPU_NAME" | grep -q "A100"; then
             echo "A100 GPU detected - using optimized settings for high VRAM"
@@ -75,7 +75,7 @@ detect_gpu() {
         else
             echo "Unknown GPU: $GPU_NAME - using generic settings"
         fi
-        
+
         # Common optimizations for all GPUs
         export CUDA_LAUNCH_BLOCKING=0
         export TOKENIZERS_PARALLELISM=true
@@ -88,7 +88,7 @@ detect_gpu() {
 
 cleanup_environment() {
     echo "Performing complete environment cleanup..."
-    
+
     # Uninstall all relevant packages
     pip uninstall -y torch torchvision torchaudio
     pip uninstall -y numpy scipy matplotlib pandas
@@ -97,7 +97,7 @@ cleanup_environment() {
     pip uninstall -y bitsandbytes xformers triton
     pip uninstall -y unsloth
     pip uninstall -y flash-attn
-    
+
     # Remove package directories with sudo if available
     echo "Removing package directories..."
     if command -v sudo &> /dev/null; then
@@ -111,7 +111,7 @@ cleanup_environment() {
         rm -rf /usr/local/lib/python3.11/dist-packages/transformers*
         rm -rf /usr/local/lib/python3.11/dist-packages/unsloth*
     fi
-    
+
     # Clear cache
     pip cache purge
     rm -rf ~/.cache/pip
@@ -120,17 +120,17 @@ cleanup_environment() {
 
 install_core_dependencies() {
     echo "Installing core dependencies with specific compatible versions..."
-    
+
     # Set LD_LIBRARY_PATH for CUDA libraries
     echo "Setting up CUDA library paths..."
     export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/lib64-nvidia
     echo 'export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64:/usr/lib64-nvidia' >> ~/.bashrc
-    
+
     # 1. NumPy 1.26.4 (crucial for compatibility)
     echo "Installing NumPy 1.26.4 (foundation package)..."
     pip install numpy==1.26.4 --no-deps --force-reinstall
     pip install numpy==1.26.4 --force-reinstall
-    
+
     # Verify NumPy installation
     if ! python -c "import numpy; print(f'NumPy version: {numpy.__version__}'); exit(0 if numpy.__version__ == '1.26.4' else 1)"; then
         echo "ERROR: NumPy 1.26.4 installation failed. Cannot continue."
@@ -138,64 +138,76 @@ install_core_dependencies() {
     else
         echo "✅ NumPy 1.26.4 successfully installed!"
     fi
-    
+
     # 2. Install PyTorch 2.1.2 with CUDA 12.1 (verified compatible version)
     echo "Installing PyTorch 2.1.2 with CUDA 12.1 support..."
     pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --extra-index-url https://download.pytorch.org/whl/cu121
-    
-    # 3. Install core dependencies 
+
+    # 3. Install core dependencies
     echo "Installing core scientific packages..."
     pip install scipy==1.12.0 matplotlib==3.8.3 pandas==2.2.0
-    
+
     # 4. Install utility packages required by transformers ecosystem
     pip install filelock==3.12.2 requests==2.31.0 tqdm==4.66.1
     pip install pyyaml==6.0.1 typing-extensions==4.8.0 packaging==23.1
     pip install fsspec==2023.6.0 psutil==5.9.5 ninja==1.11.1
-    
+
     # 5. Hugging Face ecosystem - in exact order for compatibility
     echo "Installing Hugging Face ecosystem..."
     pip install safetensors==0.4.0
     pip install huggingface-hub==0.19.4 --no-deps
     pip install huggingface-hub==0.19.4  # Second install pulls in compatible dependencies
-    
+
     pip install tokenizers==0.14.0 --no-deps
     pip install tokenizers==0.14.0
-    
+
     pip install transformers==4.36.2 --no-deps
     pip install transformers==4.36.2  # Second install pulls in compatible dependencies
-    
+
     pip install peft==0.6.0 --no-deps
     pip install peft==0.6.0
-    
+
     pip install accelerate==0.25.0 --no-deps
     pip install accelerate==0.25.0
-    
+
     pip install datasets==2.14.5 --no-deps
     pip install datasets==2.14.5
-    
+
     pip install trl==0.7.4 --no-deps
     pip install trl==0.7.4
-    
+
     pip install einops==0.7.0
-    
+
     # 6. Install optimization libraries with exact versions
     echo "Installing optimization libraries..."
     pip install bitsandbytes==0.41.0
     pip install triton==2.1.0
     pip install xformers==0.0.23.post1 --index-url https://download.pytorch.org/whl/cu121
-    
+
     # 7. Install unsloth (version 2024.8 is confirmed to work with this setup)
     echo "Installing unsloth dependencies..."
     pip install sentencepiece==0.1.99
     pip install unsloth==2024.8 --no-deps
-    
+
+    # 8. Install Flash Attention 2.5.5 with proper dependency handling
+    echo "Installing Flash Attention 2.5.5..."
+    pip install packaging ninja --no-deps  # Ensure these are available
+    pip install flash-attn==2.5.5 --no-build-isolation --no-deps
+
+    # Verify Flash Attention installation
+    if python -c "import flash_attn; print(f'Flash Attention version: {flash_attn.__version__}')"; then
+        echo "✅ Flash Attention 2.5.5 successfully installed!"
+    else
+        echo "⚠️ Flash Attention installation failed. Will try again later."
+    fi
+
     echo "✅ All core dependencies installed!"
 }
 
 configure_gpu_optimizations() {
     echo "Configuring GPU optimizations..."
     mkdir -p ~/.config/accelerate
-    
+
     if [ "$A100_GPU" = true ]; then
         echo "Applying A100-specific optimizations (BF16)..."
         cat > ~/.config/accelerate/default_config.yaml << EOF
@@ -232,7 +244,7 @@ EOF
     export PYTORCH_CUDA_ALLOC_CONF=${PYTORCH_CUDA_ALLOC_CONF:-"max_split_size_mb:256"}
     export CUDA_LAUNCH_BLOCKING=0
     export TOKENIZERS_PARALLELISM=true
-    
+
     echo "export PYTORCH_CUDA_ALLOC_CONF=$PYTORCH_CUDA_ALLOC_CONF" >> ~/.bashrc
     echo "export CUDA_LAUNCH_BLOCKING=0" >> ~/.bashrc
     echo "export TOKENIZERS_PARALLELISM=true" >> ~/.bashrc
@@ -300,6 +312,13 @@ try:
     print('✅ unsloth successfully imported')
 except Exception as e:
     print(f'❌ unsloth error: {e}')
+
+try:
+    import flash_attn
+    print(f'Flash Attention version: {flash_attn.__version__ if hasattr(flash_attn, \"__version__\") else \"installed\"}')
+    print('✅ Flash Attention successfully imported')
+except Exception as e:
+    print(f'❌ Flash Attention error: {e}')
 "
 }
 
@@ -380,4 +399,4 @@ echo "- Unsloth 2024.8 (compatible version)"
 echo ""
 echo "If NumPy or other packages get corrupted, run:"
 echo "./fix_numpy_emergency.sh"
-echo "====================================================================" 
+echo "===================================================================="

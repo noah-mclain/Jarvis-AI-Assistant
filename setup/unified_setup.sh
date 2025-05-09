@@ -76,6 +76,7 @@ chmod +x setup/*
 ./setup/fix_unsloth_final.sh
 ./setup/create_minimal_unsloth.sh
 ./setup/apply_fixed_unsloth.sh
+./setup/install_flash_attention.sh
 
 # Activate minimal Unsloth
 CUSTOM_UNSLOTH_DIR="/notebooks/custom_unsloth"

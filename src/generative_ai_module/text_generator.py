@@ -758,16 +758,27 @@ class CNNTextGenerator(TextGenerator):
             else:
                 # Check if flash attention is available
                 try:
-                    # Just check if it can be imported
-                    import importlib.util
-                    if importlib.util.find_spec("flash_attn") is not None:
-                        print("Flash Attention 2 detected - enabling for transformer model")
-                        load_kwargs['use_flash_attention_2'] = True
-                    else:
-                        raise ImportError("flash_attn module not found")
+                    # Try to import flash_attn
+                    import flash_attn
+                    flash_attn_version = getattr(flash_attn, "__version__", "unknown")
+                    print(f"Flash Attention {flash_attn_version} detected - enabling for transformer model")
+
+                    # Enable Flash Attention 2 in the model config
+                    load_kwargs['use_flash_attention_2'] = True
+
+                    # For Flash Attention 2.5.5, we need to set attn_implementation="flash_attention_2"
+                    if hasattr(flash_attn, "flash_attn_func"):
+                        print("Using Flash Attention implementation: flash_attention_2")
+                        load_kwargs['attn_implementation'] = "flash_attention_2"
+
+                    # Print confirmation
+                    print("✅ Flash Attention 2 enabled for faster training and inference")
                 except ImportError:
                     print("Flash Attention 2 requested but not installed - continuing without it")
-                    print("To install: pip install flash-attn --no-build-isolation")
+                    print("To install: pip install flash-attn==2.5.5 --no-build-isolation --no-deps")
+                except Exception as e:
+                    print(f"Error enabling Flash Attention: {e}")
+                    print("Continuing without Flash Attention")
 
         # Load the appropriate model type with optimized settings
         torch_dtype = torch.bfloat16 if torch.cuda.is_available() and self.bf16 else torch.float16 if torch.cuda.is_available() else torch.float32
