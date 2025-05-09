@@ -700,9 +700,20 @@ class CNNTextGenerator(TextGenerator):
         import torch.nn as nn
         from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
 
-        # Determine model type
-        is_gpt2_model = "gpt2" in model_name_or_path.lower()
-        is_t5_model = any(name in model_name_or_path.lower() for name in ["t5", "flan", "ul2"])
+        # Determine model type with more robust detection
+        model_name_lower = model_name_or_path.lower()
+        is_gpt2_model = "gpt2" in model_name_lower
+
+        # More comprehensive check for T5/FLAN-UL2 models
+        is_t5_model = any(name in model_name_lower for name in ["t5", "flan-t5", "flan-ul2", "ul2", "flan"])
+
+        # Print detected model type for debugging
+        if is_t5_model:
+            print(f"Detected T5/FLAN-UL2 model: {model_name_or_path}")
+        elif is_gpt2_model:
+            print(f"Detected GPT-2 model: {model_name_or_path}")
+        else:
+            print(f"Detected other model type: {model_name_or_path}")
 
         # Set model type attribute for use in forward pass
         self.model_type = "seq2seq" if is_t5_model else "causal"
@@ -799,19 +810,91 @@ class CNNTextGenerator(TextGenerator):
                     use_gradient_checkpointing=self.gradient_checkpointing
                 )
 
-                # Define LoRA configuration
-                lora_config = LoraConfig(
-                    r=self.lora_rank,
-                    lora_alpha=self.lora_alpha,
-                    lora_dropout=self.lora_dropout,
-                    target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-                    bias="none",
-                    task_type="CAUSAL_LM" if not is_t5_model else "SEQ_2_SEQ_LM"
-                )
+                # Define LoRA configuration based on model architecture
+                if is_t5_model:
+                    # T5/FLAN-UL2 architecture uses different module names
+                    target_modules = ["q", "k", "v", "o", "wi", "wo"]
+                    task_type = "SEQ_2_SEQ_LM"
+                    print(f"Using T5/FLAN-UL2 target modules: {target_modules}")
+                else:
+                    # Default modules for transformer models like GPT, LLaMA, etc.
+                    target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+                    task_type = "CAUSAL_LM"
+                    print(f"Using default transformer target modules: {target_modules}")
 
-                # Apply LoRA adapters
-                self.base_model = get_peft_model(self.base_model, lora_config)
-                print(f"Applied LoRA adapters with rank={self.lora_rank}, alpha={self.lora_alpha}")
+                # Verify target modules exist in the model
+                try:
+                    # Get all named modules in the model
+                    model_modules = dict(self.base_model.named_modules())
+
+                    # Check if any of the target modules exist in the model
+                    found_modules = [module for module in target_modules if any(module in name for name in model_modules.keys())]
+
+                    if not found_modules:
+                        print(f"⚠️ Warning: None of the target modules {target_modules} found in model!")
+                        print("Available modules (sample):")
+                        # Print a sample of available modules for debugging
+                        sample_modules = list(model_modules.keys())[:20]
+                        for module in sample_modules:
+                            print(f"  - {module}")
+
+                        # Special case for FLAN-UL2
+                        if "flan-ul2" in model_name_or_path.lower():
+                            print("Detected FLAN-UL2 model, using specific target modules")
+                            # These are the actual module names in FLAN-UL2
+                            target_modules = ["SelfAttention.q", "SelfAttention.k", "SelfAttention.v", "SelfAttention.o",
+                                             "DenseReluDense.wi", "DenseReluDense.wo", "EncDecAttention.q",
+                                             "EncDecAttention.k", "EncDecAttention.v", "EncDecAttention.o"]
+                            task_type = "SEQ_2_SEQ_LM"
+                        # Try to infer target modules from model structure
+                        elif hasattr(self.base_model, "encoder") and hasattr(self.base_model, "decoder"):
+                            print("Detected encoder-decoder structure, using T5-style target modules")
+                            target_modules = ["q", "k", "v", "o", "wi", "wo"]
+                            task_type = "SEQ_2_SEQ_LM"
+                        else:
+                            print("Using minimal target modules as fallback")
+                            # Use a minimal set that's likely to exist in most models
+                            target_modules = ["q", "k", "v", "o"]
+
+                        print(f"Using fallback target modules: {target_modules}")
+                except Exception as e:
+                    print(f"Error checking target modules: {e}")
+                    print("Continuing with original target modules")
+
+                # Add a safety mechanism to handle completely different architectures
+                try:
+                    lora_config = LoraConfig(
+                        r=self.lora_rank,
+                        lora_alpha=self.lora_alpha,
+                        lora_dropout=self.lora_dropout,
+                        target_modules=target_modules,
+                        bias="none",
+                        task_type=task_type
+                    )
+                except Exception as e:
+                    print(f"Error creating LoRA config: {e}")
+                    print("Trying with a more generic configuration...")
+
+                    # Try with a more generic configuration
+                    lora_config = LoraConfig(
+                        r=self.lora_rank,
+                        lora_alpha=self.lora_alpha,
+                        lora_dropout=self.lora_dropout,
+                        # Use a very minimal set of target modules
+                        target_modules=["q"],
+                        bias="none",
+                        task_type="CAUSAL_LM" if not is_t5_model else "SEQ_2_SEQ_LM"
+                    )
+
+                # Apply LoRA adapters with error handling
+                try:
+                    self.base_model = get_peft_model(self.base_model, lora_config)
+                    print(f"Applied LoRA adapters with rank={self.lora_rank}, alpha={self.lora_alpha}")
+                except Exception as e:
+                    print(f"❌ Error applying LoRA adapters: {e}")
+                    print("Continuing with base model without LoRA")
+                    # If we can't apply LoRA, we'll just use the base model
+                    # This allows training to continue even if LoRA fails
             except ImportError:
                 print("PEFT library not available. LoRA adapters not applied.")
                 print("To install: pip install peft")
