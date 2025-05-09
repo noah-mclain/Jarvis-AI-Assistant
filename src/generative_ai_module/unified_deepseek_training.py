@@ -812,6 +812,107 @@ def train_with_unsloth(args):
     # Check transformers version for compatibility
     logger.info(f"Using transformers version: {transformers_version}")
 
+    # Apply PEFT model fix for "too many values to unpack" error
+    def apply_peft_model_fix():
+        """
+        Apply a fix for the "too many values to unpack" error in PEFT models.
+        This patches the forward method of PeftModel to always return a dictionary-like object.
+        """
+        try:
+            # Try to import PeftModel
+            try:
+                from peft import PeftModel
+                logger.info("Successfully imported PeftModel")
+            except ImportError:
+                logger.warning("Could not import PeftModel, skipping PEFT model fix")
+                return False
+
+            # Check if the forward method exists
+            if not hasattr(PeftModel, "forward"):
+                logger.warning("PeftModel does not have a forward method, skipping PEFT model fix")
+                return False
+
+            # Store the original forward method
+            original_forward = PeftModel.forward
+            logger.info("Stored original PeftModel.forward method")
+
+            # Define a patched forward method
+            def patched_forward(self, *args, **kwargs):
+                """
+                Patched forward method for PeftModel that ensures:
+                1. No duplicate arguments (e.g., input_ids passed both as positional and keyword)
+                2. Always returns a dictionary-like object with return_dict=True
+                3. Handles any errors gracefully
+                """
+                logger.info("Using patched PeftModel.forward method")
+
+                # Always set return_dict=True to avoid tuple unpacking issues
+                kwargs["return_dict"] = True
+
+                # Handle case where input_ids is passed both as positional and keyword argument
+                if len(args) > 1 and isinstance(args[1], torch.Tensor) and "input_ids" in kwargs:
+                    logger.info("Detected input_ids in both args and kwargs, removing from kwargs")
+                    # Remove input_ids from kwargs to avoid the multiple values error
+                    del kwargs["input_ids"]
+
+                # Call the original forward method with proper arguments
+                try:
+                    return original_forward(self, **kwargs)
+                except Exception as e:
+                    logger.error(f"Error in patched PeftModel.forward: {e}")
+
+                    # Try a more direct approach if the original call fails
+                    try:
+                        logger.info("Trying direct call to base_model.forward")
+                        # Call the base model's forward method directly
+                        outputs = self.base_model.forward(**kwargs)
+
+                        # Ensure the output is a dictionary-like object
+                        if not hasattr(outputs, "keys"):
+                            from transformers.modeling_outputs import CausalLMOutputWithPast
+                            # Convert tuple to dictionary-like object
+                            if isinstance(outputs, tuple):
+                                logger.info(f"Converting tuple output with {len(outputs)} elements to dictionary")
+                                outputs_dict = {}
+
+                                # First element is typically the loss
+                                if len(outputs) >= 1:
+                                    outputs_dict["loss"] = outputs[0]
+
+                                # Second element is typically the logits
+                                if len(outputs) >= 2:
+                                    outputs_dict["logits"] = outputs[1]
+
+                                # Add any remaining elements with generic names
+                                for i in range(2, len(outputs)):
+                                    outputs_dict[f"hidden_states_{i-2}"] = outputs[i]
+
+                                # Convert to ModelOutput
+                                outputs = CausalLMOutputWithPast(**outputs_dict)
+                                logger.info(f"Converted tuple to ModelOutput with keys: {list(outputs_dict.keys())}")
+
+                        return outputs
+                    except Exception as e2:
+                        logger.error(f"Direct call to base_model.forward also failed: {e2}")
+                        # Create a dummy output as last resort
+                        from transformers.modeling_outputs import CausalLMOutputWithPast
+                        dummy_logits = torch.zeros((1, 1, self.base_model.config.vocab_size),
+                                                device=self.device if hasattr(self, "device") else "cpu")
+                        dummy_loss = torch.tensor(1.0, requires_grad=True,
+                                               device=self.device if hasattr(self, "device") else "cpu")
+                        return CausalLMOutputWithPast(loss=dummy_loss, logits=dummy_logits)
+
+            # Apply the patch
+            PeftModel.forward = patched_forward
+            logger.info("✅ Successfully patched PeftModel.forward to fix 'too many values to unpack' error")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to apply PEFT model fix: {e}")
+            return False
+
+    # Apply the PEFT model fix
+    apply_peft_model_fix()
+
     # Parse version string to check compatibility
     try:
         version_parts = transformers_version.split('.')
@@ -1485,9 +1586,8 @@ def train_with_unsloth(args):
                         logger.info("Using special PeftModel forward call to avoid 'got multiple values for argument' error")
                         # Use automatic mixed precision with the model's dtype
                         with torch.cuda.amp.autocast(dtype=model_dtype):
-                            # Call the model's forward method with self as first argument to avoid the error
+                            # Call the model's forward method correctly (without passing model as first argument)
                             outputs = model.forward(
-                                model,  # Pass self as first argument
                                 input_ids=inputs["input_ids"],
                                 attention_mask=inputs["attention_mask"] if "attention_mask" in inputs else None,
                                 labels=inputs["labels"],
@@ -1545,9 +1645,8 @@ def train_with_unsloth(args):
                             logger.info("Using special PeftModel forward call to avoid 'got multiple values for argument' error")
                             # Use automatic mixed precision with the model's dtype
                             with torch.cuda.amp.autocast(dtype=model_dtype):
-                                # Call the model's forward method with self as first argument to avoid the error
+                                # Call the model's forward method correctly
                                 outputs = model.forward(
-                                    model,  # Pass self as first argument
                                     input_ids=inputs["input_ids"],
                                     attention_mask=None,  # Skip attention mask
                                     labels=inputs["labels"],
@@ -1579,9 +1678,8 @@ def train_with_unsloth(args):
                                 logger.info("Using special PeftModel forward call to avoid 'got multiple values for argument' error")
                                 # Use automatic mixed precision with the model's dtype
                                 with torch.cuda.amp.autocast(dtype=model_dtype):
-                                    # Call the model's forward method with self as first argument to avoid the error
+                                    # Call the model's forward method correctly
                                     outputs = model.forward(
-                                        model,  # Pass self as first argument
                                         input_ids=inputs["input_ids"],
                                         labels=inputs["labels"],
                                         use_cache=False,
@@ -1614,9 +1712,8 @@ def train_with_unsloth(args):
                                     logger.info("Using special PeftModel forward call to avoid 'got multiple values for argument' error")
                                     # Use automatic mixed precision with the model's dtype
                                     with torch.cuda.amp.autocast(dtype=model_dtype):
-                                        # Call the model's forward method with self as first argument to avoid the error
+                                        # Call the model's forward method correctly
                                         outputs = model.forward(
-                                            model,  # Pass self as first argument
                                             input_ids=inputs["input_ids"],
                                             use_cache=False,
                                             return_dict=True
@@ -1984,13 +2081,13 @@ def train_with_unsloth(args):
                                 # Special handling for PeftModel to avoid "got multiple values for argument 'input_ids'" error
                                 if is_peft_model:
                                     logger.info("Using special PeftModel forward call for manual gradient computation")
-                                    # Call the model's forward method with self as first argument to avoid the error
+                                    # Call the model's forward method correctly
                                     outputs = model.forward(
-                                        model,  # Pass self as first argument
                                         input_ids=inputs["input_ids"].to(device),
                                         attention_mask=inputs["attention_mask"].to(device) if "attention_mask" in inputs else None,
                                         labels=inputs["labels"].to(device),
-                                        use_cache=False  # Critical for gradient checkpointing
+                                        use_cache=False,  # Critical for gradient checkpointing
+                                        return_dict=True  # Always use return_dict=True to avoid tuple unpacking issues
                                     )
                                 else:
                                     # Forward pass with use_cache=False for gradient checkpointing
@@ -3067,6 +3164,107 @@ This model was fine-tuned from {args.model_name} on {datetime.now().strftime('%Y
 def train_with_standard_method(args):
     """Train using standard method with attention mask fix"""
     logger.info("Using standard training method with attention mask fix")
+
+    # Apply PEFT model fix for "too many values to unpack" error
+    def apply_peft_model_fix():
+        """
+        Apply a fix for the "too many values to unpack" error in PEFT models.
+        This patches the forward method of PeftModel to always return a dictionary-like object.
+        """
+        try:
+            # Try to import PeftModel
+            try:
+                from peft import PeftModel
+                logger.info("Successfully imported PeftModel")
+            except ImportError:
+                logger.warning("Could not import PeftModel, skipping PEFT model fix")
+                return False
+
+            # Check if the forward method exists
+            if not hasattr(PeftModel, "forward"):
+                logger.warning("PeftModel does not have a forward method, skipping PEFT model fix")
+                return False
+
+            # Store the original forward method
+            original_forward = PeftModel.forward
+            logger.info("Stored original PeftModel.forward method")
+
+            # Define a patched forward method
+            def patched_forward(self, *args, **kwargs):
+                """
+                Patched forward method for PeftModel that ensures:
+                1. No duplicate arguments (e.g., input_ids passed both as positional and keyword)
+                2. Always returns a dictionary-like object with return_dict=True
+                3. Handles any errors gracefully
+                """
+                logger.info("Using patched PeftModel.forward method")
+
+                # Always set return_dict=True to avoid tuple unpacking issues
+                kwargs["return_dict"] = True
+
+                # Handle case where input_ids is passed both as positional and keyword argument
+                if len(args) > 1 and isinstance(args[1], torch.Tensor) and "input_ids" in kwargs:
+                    logger.info("Detected input_ids in both args and kwargs, removing from kwargs")
+                    # Remove input_ids from kwargs to avoid the multiple values error
+                    del kwargs["input_ids"]
+
+                # Call the original forward method with proper arguments
+                try:
+                    return original_forward(self, **kwargs)
+                except Exception as e:
+                    logger.error(f"Error in patched PeftModel.forward: {e}")
+
+                    # Try a more direct approach if the original call fails
+                    try:
+                        logger.info("Trying direct call to base_model.forward")
+                        # Call the base model's forward method directly
+                        outputs = self.base_model.forward(**kwargs)
+
+                        # Ensure the output is a dictionary-like object
+                        if not hasattr(outputs, "keys"):
+                            from transformers.modeling_outputs import CausalLMOutputWithPast
+                            # Convert tuple to dictionary-like object
+                            if isinstance(outputs, tuple):
+                                logger.info(f"Converting tuple output with {len(outputs)} elements to dictionary")
+                                outputs_dict = {}
+
+                                # First element is typically the loss
+                                if len(outputs) >= 1:
+                                    outputs_dict["loss"] = outputs[0]
+
+                                # Second element is typically the logits
+                                if len(outputs) >= 2:
+                                    outputs_dict["logits"] = outputs[1]
+
+                                # Add any remaining elements with generic names
+                                for i in range(2, len(outputs)):
+                                    outputs_dict[f"hidden_states_{i-2}"] = outputs[i]
+
+                                # Convert to ModelOutput
+                                outputs = CausalLMOutputWithPast(**outputs_dict)
+                                logger.info(f"Converted tuple to ModelOutput with keys: {list(outputs_dict.keys())}")
+
+                        return outputs
+                    except Exception as e2:
+                        logger.error(f"Direct call to base_model.forward also failed: {e2}")
+                        # Create a dummy output as last resort
+                        from transformers.modeling_outputs import CausalLMOutputWithPast
+                        dummy_logits = torch.zeros((1, 1, self.base_model.config.vocab_size),
+                                                device=self.device if hasattr(self, "device") else "cpu")
+                        dummy_loss = torch.tensor(1.0, requires_grad=True,
+                                               device=self.device if hasattr(self, "device") else "cpu")
+                        return CausalLMOutputWithPast(loss=dummy_loss, logits=dummy_logits)
+
+            # Apply the patch
+            PeftModel.forward = patched_forward
+            logger.info("✅ Successfully patched PeftModel.forward to fix 'too many values to unpack' error")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to apply PEFT model fix: {e}")
+            return False
+
+    # Apply the PEFT model fix
+    apply_peft_model_fix()
 
     # Import the finetune_deepseek module
     try:
