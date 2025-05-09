@@ -697,10 +697,38 @@ EOF
     fi
 fi
 
-# [Remaining training code sections follow the same pattern of fixes...]
+# Run the appropriate training script based on the model type
+case "$MODEL_TYPE" in
+    code)
+        echo "Running DeepSeek code model training with device mismatch fix..."
 
-# Final verification Python code
-python verify_gpu_text.py
+        # Verify GPU availability before starting training
+        python setup/verify_gpu_code.py
+
+        # Check exit code of the GPU verification
+        if [ $? -ne 0 ]; then
+            echo "❌ GPU verification failed. Cannot proceed with training."
+            exit 1
+        fi
+
+        # Apply additional safeguards for GPU training
+        export PYTORCH_NO_CUDA_MEMORY_CACHING=1  # Disable CUDA memory caching
+
+        python train_code_model.py "$GPU_TYPE" "$VRAM_SIZE"
+
+        # Check if training was successful
+        if [ $? -ne 0 ]; then
+            echo "❌ Code model training failed. See logs for details."
+            exit 1
+        else
+            echo "✓ Code model training completed successfully!"
+        fi
+        ;;
+    text)
+        echo "Running text generation model training..."
+
+        # Verify GPU availability before starting training
+        python setup/verify_gpu_text.py
 
         # Check exit code of the GPU verification
         if [ $? -ne 0 ]; then
@@ -725,7 +753,7 @@ python verify_gpu_text.py
         echo "Running CNN-based text generation model training with enhanced GPU handling..."
 
         # Verify GPU availability before starting training
-        python verify_gpu_cnn_text.py
+        python setup/verify_gpu_cnn_text.py
 
         # Check exit code of the GPU verification
         if [ $? -ne 0 ]; then
@@ -763,7 +791,7 @@ python verify_gpu_text.py
         fi
 
         # Verify GPU availability before starting training
-        python verify_gpu_custom_model.py
+        python setup/verify_gpu_custom_model.py
 
         # Check exit code of the GPU verification
         if [ $? -ne 0 ]; then
@@ -843,7 +871,7 @@ esac
 echo "Performing final verification and cleanup..."
 
 # Verify that models were saved correctly
-python verify_models.py "$MODEL_TYPE"
+python setup/verify_models.py "$MODEL_TYPE"
 
 # Final cleanup
 echo "Cleaning up temporary files..."
