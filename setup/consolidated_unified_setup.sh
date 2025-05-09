@@ -6,8 +6,8 @@ echo "===================================================================="
 
 # Fix all string literal issues first
 echo "Fixing all string literal issues in Python files..."
-chmod +x setup/fix_all_string_literals.py
-python setup/fix_all_string_literals.py
+chmod +x setup/consolidated_utils.py
+python setup/consolidated_utils.py --action string-literals
 
 # Copy the new ultimate attention fix to ensure it's available
 echo "Setting up new ultimate attention fix..."
@@ -258,76 +258,36 @@ echo "Setting up spaCy with minimal tokenizer..."
 chmod +x setup/consolidated_fix_spacy.sh
 ./setup/consolidated_fix_spacy.sh
 
-# Fix TRL/PEFT and spaCy imports
-echo "Fixing TRL/PEFT and spaCy import issues..."
-chmod +x setup/fix_trl_spacy_imports.py
-python setup/fix_trl_spacy_imports.py
-
-# Fix transformers.utils issue
-echo "Fixing transformers.utils issue..."
-chmod +x setup/fix_transformers_utils.py
-python setup/fix_transformers_utils.py
+# Fix TRL/PEFT, spaCy imports, and transformers.utils
+echo "Fixing TRL/PEFT, spaCy imports, and transformers.utils issues..."
+chmod +x setup/consolidated_utils.py
+python setup/consolidated_utils.py --action trl-peft
+python setup/consolidated_utils.py --action trl-spacy
+python setup/consolidated_utils.py --action transformers-utils
 
 # Apply fixes for DeepSeek models
 echo "Applying fixes for DeepSeek models..."
 
-# Fix bitsandbytes version for 4-bit quantization
-echo "Checking bitsandbytes version for 4-bit quantization compatibility..."
-chmod +x setup/fix_bitsandbytes_version.py
-python setup/fix_bitsandbytes_version.py
+# Make the consolidated DeepSeek fixes script executable
+chmod +x setup/consolidated_deepseek_fixes.py
 
-# Fix unsloth trust_remote_code issue
-echo "Fixing unsloth trust_remote_code issue..."
-chmod +x setup/fix_unsloth_trust_remote_code.py
-python setup/fix_unsloth_trust_remote_code.py
+# Run the consolidated DeepSeek fixes script
+echo "Applying consolidated DeepSeek fixes..."
+python setup/consolidated_deepseek_fixes.py
 
 # Apply attention mask fixes
 echo "Applying attention mask fixes..."
 
-# Make the scripts executable
-chmod +x setup/fix_transformers_attention_mask.py
-chmod +x setup/fix_attention_mask_params.py
-chmod +x setup/fix_tensor_size_mismatch.py
-chmod +x setup/fix_attention_dimension_mismatch.py
-chmod +x setup/fix_tuple_unpacking_error.py
-chmod +x setup/comprehensive_attention_mask_fix.py
-chmod +x setup/fix_all_attention_issues.py
-chmod +x setup/ultimate_attention_fix.py
+# Make the consolidated attention fixes script executable
+chmod +x setup/consolidated_attention_fixes.py
 
-# Run the ultimate fix script first (most comprehensive)
-echo "Applying ultimate fix for all attention-related issues..."
+# Run the consolidated attention fixes script
+echo "Applying consolidated attention fixes..."
+python setup/consolidated_attention_fixes.py
+
+# Keep the ultimate fix script as a fallback
+echo "Applying ultimate fix as fallback..."
 python setup/ultimate_attention_fix.py
-
-# Run the all-in-one fix script as first fallback
-echo "Applying all-in-one attention mask and tuple unpacking fixes..."
-python setup/fix_all_attention_issues.py
-
-# Run individual fix scripts as additional fallbacks
-echo "Applying individual fixes as additional fallbacks..."
-
-# Run the general fix script
-echo "Applying general attention mask fixes..."
-python setup/fix_transformers_attention_mask.py
-
-# Run the parameter-specific fix script
-echo "Applying parameter-specific attention mask fixes..."
-python setup/fix_attention_mask_params.py
-
-# Run the tensor size mismatch fix script
-echo "Applying tensor size mismatch fixes..."
-python setup/fix_tensor_size_mismatch.py
-
-# Run the attention dimension mismatch fix script
-echo "Applying attention dimension mismatch fixes..."
-python setup/fix_attention_dimension_mismatch.py
-
-# Run the tuple unpacking error fix script
-echo "Applying fix for 'too many values to unpack (expected 2)' error..."
-python setup/fix_tuple_unpacking_error.py
-
-# Run the comprehensive attention mask fix script
-echo "Applying comprehensive attention mask fix..."
-python setup/comprehensive_attention_mask_fix.py
 
 # Create import_fix.py
 echo "Creating import_fix.py..."
@@ -487,59 +447,8 @@ EOL
 
 # Verify installation
 echo "Verifying installation..."
-python -c "
-import sys
-print(f'Python version: {sys.version}')
-
-try:
-    import numpy
-    print(f'NumPy version: {numpy.__version__}')
-except Exception as e:
-    print(f'❌ NumPy error: {e}')
-
-try:
-    import torch
-    print(f'PyTorch version: {torch.__version__}')
-    print(f'CUDA available: {torch.cuda.is_available()}')
-    if torch.cuda.is_available():
-        print(f'CUDA version: {torch.version.cuda}')
-        print(f'GPU: {torch.cuda.get_device_name(0)}')
-except Exception as e:
-    print(f'❌ PyTorch error: {e}')
-
-try:
-    import transformers
-    print(f'transformers version: {transformers.__version__}')
-
-    # Specifically check for transformers.utils
-    try:
-        import transformers.utils
-        print(f'✅ transformers.utils is available')
-    except ImportError as e:
-        print(f'❌ transformers.utils is NOT available: {e}')
-        print('This will cause issues with attention mask fixes and model training')
-        print('Will run fix_transformers_utils.py later in the script')
-except Exception as e:
-    print(f'❌ transformers error: {e}')
-
-try:
-    import unsloth
-    print(f'unsloth version: {unsloth.__version__ if hasattr(unsloth, \"__version__\") else \"installed\"}')
-except Exception as e:
-    print(f'❌ unsloth error: {e}')
-
-try:
-    import joblib
-    print(f'joblib version: {joblib.__version__}')
-except Exception as e:
-    print(f'❌ joblib error: {e}')
-
-try:
-    import sklearn
-    print(f'scikit-learn version: {sklearn.__version__}')
-except Exception as e:
-    print(f'❌ scikit-learn error: {e}')
-"
+chmod +x setup/consolidated_verification.py
+python setup/consolidated_verification.py --model-type none
 
 # Final comprehensive installation for all model types
 echo "Performing comprehensive installation for all model types..."
@@ -885,256 +794,17 @@ if [ "$IN_PAPERSPACE" = "1" ]; then
     apt-get update -q
     apt-get install -y rclone fuse
 
-    # Interactive rclone configuration
-    echo "===================================================================="
-    echo "Interactive rclone configuration for Google Drive"
-    echo "===================================================================="
-    echo "You will now be guided through the rclone configuration process."
-    echo "Please follow these steps:"
-    echo "1. Select 'n' for New remote"
-    echo "2. Enter 'gdrive' as the name"
-    echo "3. Select the number for 'Google Drive'"
-    echo "4. For client_id and client_secret, just press Enter to use the defaults"
-    echo "5. Select 'scope' option 1 (full access)"
-    echo "6. For root_folder_id, just press Enter"
-    echo "7. For service_account_file, just press Enter"
-    echo "8. Select 'y' to edit advanced config if you need to, otherwise 'n'"
-    echo "9. Select 'y' to use auto config"
-    echo "10. Follow the browser authentication steps when prompted"
-    echo "11. Select 'y' to confirm the configuration is correct"
-    echo "12. Select 'q' to quit the config process when done"
-    echo "===================================================================="
-    echo "Starting rclone config now..."
-    echo "Press Enter to continue"
-    read -p ""
+    # Make the consolidated Google Drive utilities script executable
+    chmod +x setup/consolidated_gdrive_utils.py
 
-    # Run rclone config interactively
-    rclone config
+    # Run the consolidated Google Drive utilities script
+    echo "Setting up Google Drive integration..."
+    python setup/consolidated_gdrive_utils.py --action setup
 
-    # Verify rclone configuration
-    echo "Verifying rclone configuration..."
-    if rclone listremotes | grep -q "gdrive:"; then
-        echo "✅ Google Drive remote 'gdrive:' configured successfully"
-    else
-        echo "⚠️ Google Drive remote 'gdrive:' not found in rclone config"
-        echo "You can manually configure it later with: rclone config"
-    fi
-
-    # Create mount point for Google Drive
-    DRIVE_MOUNT_POINT="/notebooks/drive"
-    mkdir -p "$DRIVE_MOUNT_POINT"
-
-    # Mount Google Drive
-    echo "Mounting Google Drive..."
-    if rclone listremotes | grep -q "gdrive:"; then
-        # Mount in the background
-        rclone mount gdrive: "$DRIVE_MOUNT_POINT" --daemon --vfs-cache-mode=full --vfs-cache-max-size=1G --dir-cache-time=1h --buffer-size=32M --transfers=4 --checkers=8 --drive-chunk-size=32M --timeout=1h --umask=000
-
-        # Wait for the mount to be ready
-        echo "Waiting for Google Drive to be mounted..."
-        for i in {1..10}; do
-            if mountpoint -q "$DRIVE_MOUNT_POINT"; then
-                echo "✅ Google Drive mounted successfully at $DRIVE_MOUNT_POINT"
-                break
-            fi
-            echo "Waiting... ($i/10)"
-            sleep 1
-        done
-
-        if ! mountpoint -q "$DRIVE_MOUNT_POINT"; then
-            echo "⚠️ Google Drive mount not detected. Will try to continue anyway."
-        fi
-    else
-        echo "⚠️ Skipping Google Drive mount as 'gdrive:' remote was not configured"
-    fi
-
-    # Define Jarvis AI Assistant directory structure
-    JARVIS_DIR="$DRIVE_MOUNT_POINT/My Drive/Jarvis_AI_Assistant"
-
-    # Create Jarvis directory structure in Google Drive
-    mkdir -p "$JARVIS_DIR/checkpoints"
-    mkdir -p "$JARVIS_DIR/datasets"
-    mkdir -p "$JARVIS_DIR/models"
-    mkdir -p "$JARVIS_DIR/logs"
-    mkdir -p "$JARVIS_DIR/metrics"
-    mkdir -p "$JARVIS_DIR/preprocessed_data"
-    mkdir -p "$JARVIS_DIR/visualizations"
-
-    # Create symbolic links to the Jarvis directories
-    echo "Creating symbolic links to Google Drive directories..."
-    ln -sf "$JARVIS_DIR/checkpoints" /notebooks/Jarvis_AI_Assistant/checkpoints
-    ln -sf "$JARVIS_DIR/datasets" /notebooks/Jarvis_AI_Assistant/datasets
-    ln -sf "$JARVIS_DIR/models" /notebooks/Jarvis_AI_Assistant/models
-    ln -sf "$JARVIS_DIR/logs" /notebooks/Jarvis_AI_Assistant/logs
-    ln -sf "$JARVIS_DIR/metrics" /notebooks/Jarvis_AI_Assistant/metrics
-    ln -sf "$JARVIS_DIR/preprocessed_data" /notebooks/Jarvis_AI_Assistant/preprocessed_data
-    ln -sf "$JARVIS_DIR/visualizations" /notebooks/Jarvis_AI_Assistant/visualizations
-
-    # Create a test file to verify the mount is working
-    echo "Testing Google Drive mount..." > "$JARVIS_DIR/mount_test.txt"
-    if [ -f "$JARVIS_DIR/mount_test.txt" ]; then
-        echo "✅ Successfully wrote test file to Google Drive"
-    else
-        echo "⚠️ Could not write test file to Google Drive"
-    fi
-
-    # Check if mount_drive_paperspace.py exists and is executable
-    if [ -f "setup/mount_drive_paperspace.py" ]; then
-        echo "Running mount_drive_paperspace.py..."
-        chmod +x setup/mount_drive_paperspace.py
-        python setup/mount_drive_paperspace.py
-    else
-        echo "Creating mount_drive_paperspace.py..."
-        cat > setup/mount_drive_paperspace.py << 'EOL'
-#!/usr/bin/env python3
-"""
-Mount Google Drive in Paperspace using rclone.
-This script automates the process of mounting Google Drive in Paperspace.
-"""
-
-import os
-import subprocess
-import time
-import sys
-
-def mount_google_drive():
-    """Mount Google Drive using rclone."""
-    print("Mounting Google Drive...")
-
-    # Check if rclone is configured
-    result = subprocess.run(["rclone", "listremotes"], capture_output=True, text=True)
-    if "gdrive:" not in result.stdout:
-        print("Google Drive remote not found in rclone config.")
-        print("Would you like to configure rclone now? (y/n)")
-        choice = input().strip().lower()
-        if choice == 'y':
-            print("\nPlease follow these steps:")
-            print("1. Select 'n' for New remote")
-            print("2. Enter 'gdrive' as the name")
-            print("3. Select the number for 'Google Drive'")
-            print("4. For client_id and client_secret, just press Enter to use the defaults")
-            print("5. Select 'scope' option 1 (full access)")
-            print("6. For root_folder_id, just press Enter")
-            print("7. For service_account_file, just press Enter")
-            print("8. Select 'y' to edit advanced config if you need to, otherwise 'n'")
-            print("9. Select 'y' to use auto config")
-            print("10. Follow the browser authentication steps when prompted")
-            print("11. Select 'y' to confirm the configuration is correct")
-            print("12. Select 'q' to quit the config process when done")
-            print("\nStarting rclone config now...\n")
-
-            # Run rclone config
-            subprocess.run(["rclone", "config"])
-
-            # Check if configuration was successful
-            result = subprocess.run(["rclone", "listremotes"], capture_output=True, text=True)
-            if "gdrive:" not in result.stdout:
-                print("Google Drive remote still not found in rclone config.")
-                print("Please run 'rclone config' manually later.")
-                return False
-            else:
-                print("✅ Google Drive remote 'gdrive:' configured successfully")
-        else:
-            print("Please run 'rclone config' to set up Google Drive remote.")
-            print("Follow the prompts to create a new remote named 'gdrive' for Google Drive.")
-            return False
-
-    # Create mount point
-    mount_point = "/notebooks/drive"
-    os.makedirs(mount_point, exist_ok=True)
-
-    # Check if already mounted
-    if os.path.ismount(mount_point):
-        print(f"Google Drive is already mounted at {mount_point}")
-        return True
-
-    # Mount Google Drive
-    cmd = [
-        "rclone", "mount",
-        "gdrive:", mount_point,
-        "--daemon",
-        "--vfs-cache-mode=full",
-        "--vfs-cache-max-size=1G",
-        "--dir-cache-time=1h",
-        "--buffer-size=32M",
-        "--transfers=4",
-        "--checkers=8",
-        "--drive-chunk-size=32M",
-        "--timeout=1h",
-        "--umask=000"
-    ]
-
-    try:
-        subprocess.run(cmd, check=True)
-        print(f"Google Drive mounted at {mount_point}")
-
-        # Wait for the mount to be ready
-        for _ in range(10):
-            if os.path.ismount(mount_point):
-                break
-            time.sleep(1)
-
-        if os.path.ismount(mount_point):
-            print("Mount successful!")
-
-            # Create Jarvis directory structure
-            jarvis_dir = os.path.join(mount_point, "My Drive/Jarvis_AI_Assistant")
-            os.makedirs(jarvis_dir, exist_ok=True)
-
-            # Create subdirectories
-            subdirs = [
-                "checkpoints", "datasets", "models", "logs",
-                "metrics", "preprocessed_data", "visualizations"
-            ]
-
-            for subdir in subdirs:
-                os.makedirs(os.path.join(jarvis_dir, subdir), exist_ok=True)
-
-            # Create symbolic links
-            for subdir in subdirs:
-                source = os.path.join(jarvis_dir, subdir)
-                target = os.path.join("/notebooks/Jarvis_AI_Assistant", subdir)
-
-                # Remove existing link or directory
-                if os.path.islink(target):
-                    os.unlink(target)
-                elif os.path.isdir(target):
-                    os.system(f"rm -rf {target}")
-
-                # Create symbolic link
-                os.symlink(source, target)
-                print(f"Created symbolic link: {target} -> {source}")
-
-            # Create a test file
-            with open(os.path.join(jarvis_dir, "mount_test.txt"), "w") as f:
-                f.write("Google Drive mount test successful!")
-
-            return True
-        else:
-            print("Failed to mount Google Drive. Mount point is not a mount.")
-            return False
-    except subprocess.CalledProcessError as e:
-        print(f"Failed to mount Google Drive: {e}")
-        return False
-
-if __name__ == "__main__":
-    success = mount_google_drive()
-    sys.exit(0 if success else 1)
-EOL
-
-        chmod +x setup/mount_drive_paperspace.py
-        python setup/mount_drive_paperspace.py
-    fi
-
-    # Verify the mount is working
-    if [ -f "$JARVIS_DIR/mount_test.txt" ]; then
-        echo "✅ Google Drive mounted successfully!"
-    else
-        echo "⚠️ Warning: Google Drive mount verification failed"
-        echo "You can manually mount Google Drive with:"
-        echo "1. Run: rclone config"
-        echo "2. Follow the setup steps for Google Drive"
-        echo "3. Run: rclone mount gdrive: /notebooks/drive --daemon --vfs-cache-mode=full"
+    # Get the Jarvis directory path
+    JARVIS_DIR="/notebooks/drive/My Drive/Jarvis_AI_Assistant"
+    if [ ! -d "$JARVIS_DIR" ]; then
+        JARVIS_DIR="/notebooks/drive/MyDrive/Jarvis_AI_Assistant"
     fi
 
     # Update environment variables to use Google Drive paths

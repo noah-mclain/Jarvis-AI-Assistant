@@ -1,0 +1,30 @@
+# Files to remove after consolidation
+
+# Google Drive and storage files (consolidated into storage_manager.py)
+src/generative_ai_module/google_drive_storage.py
+src/generative_ai_module/sync_gdrive.py
+src/generative_ai_module/optimize_deepseek_gdrive.py
+src/generative_ai_module/optimize_deepseek_storage.py
+src/generative_ai_module/storage_optimization.py
+
+# DeepSeek training files (consolidated into deepseek_training.py)
+src/generative_ai_module/deepseek_handler.py
+src/generative_ai_module/unsloth_deepseek.py
+src/generative_ai_module/finetune_deepseek.py
+src/generative_ai_module/finetune_deepseek_examples.py
+src/generative_ai_module/finetune_on_mini.py
+src/generative_ai_module/fixed_run_finetune.py
+src/generative_ai_module/run_finetune.py
+src/generative_ai_module/unified_deepseek_training.py
+
+# Evaluation files (consolidated into evaluation.py)
+src/generative_ai_module/evaluate_generation.py
+src/generative_ai_module/evaluation_example.py
+src/generative_ai_module/evaluation_metrics.py
+
+# Preprocessing files (functionality in consolidated_dataset_processor.py)
+src/generative_ai_module/use_improved_preprocessor.py
+src/generative_ai_module/use_new_datasets.py
+
+# Utility files (functionality in utils.py or other consolidated files)
+src/generative_ai_module/sync_finetune_log.py

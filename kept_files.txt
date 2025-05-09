@@ -1,0 +1,30 @@
+# Files to keep after consolidation
+
+# Consolidated files
+src/generative_ai_module/storage_manager.py
+src/generative_ai_module/deepseek_training.py
+src/generative_ai_module/evaluation.py
+src/generative_ai_module/consolidated_dataset_processor.py
+src/generative_ai_module/consolidated_generation_pipeline.py
+
+# Core files
+src/generative_ai_module/__init__.py
+src/generative_ai_module/utils.py
+src/generative_ai_module/nlp_utils.py
+src/generative_ai_module/jarvis_unified.py
+src/generative_ai_module/run_jarvis.py
+src/generative_ai_module/set_paperspace_env.py
+src/generative_ai_module/setup_apple_gpu.py
+
+# Tokenization files
+src/generative_ai_module/basic_tokenizer.py
+src/generative_ai_module/minimal_spacy_tokenizer.py
+
+# Preprocessing files
+src/generative_ai_module/code_preprocessing.py
+
+# Other important files
+src/generative_ai_module/prompt_enhancer.py
+src/generative_ai_module/integration.py
+src/generative_ai_module/manage_storage.py
+src/generative_ai_module/import_utilities.py
