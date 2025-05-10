@@ -344,34 +344,22 @@ EOF
     # Run the script
     python setup/fix_bitsandbytes_version.py
 
-    # Fix unsloth trust_remote_code issue
-    echo "Fixing unsloth trust_remote_code issue..."
-    chmod +x setup/fix_unsloth_trust_remote_code.py
-    python setup/fix_unsloth_trust_remote_code.py
-
-    # Fix unterminated string literals
-    echo "Fixing unterminated string literals..."
-    chmod +x setup/fix_unterminated_strings.py
-    python setup/fix_unterminated_strings.py
+    # Use consolidated utils to fix issues
+    echo "Fixing unsloth and string literal issues..."
+    chmod +x setup/consolidated_utils.py
+    python setup/consolidated_utils.py --action unsloth-trust-remote-code
+    python setup/consolidated_utils.py --action string-literals
 
     # Skip autocast fix as it's causing issues
     echo "Skipping autocast fix..."
 
-    # Apply individual attention mask fix scripts directly
-    echo "Applying individual attention mask fix scripts..."
-    chmod +x setup/fix_transformers_attention_mask.py
-    chmod +x setup/fix_attention_mask_params.py
-    chmod +x setup/fix_tensor_size_mismatch.py
-    chmod +x setup/fix_attention_dimension_mismatch.py
-    chmod +x setup/fix_tuple_unpacking_error.py
-    chmod +x setup/fix_custom_encoder_decoder_model.py
-    chmod +x setup/comprehensive_attention_mask_fix.py
-    chmod +x setup/fix_all_attention_issues.py
+    # Apply consolidated attention mask fixes
+    echo "Applying consolidated attention mask fixes..."
+    chmod +x setup/consolidated_attention_fixes.py
     chmod +x setup/ultimate_attention_fix.py
 
-    # Fix custom encoder-decoder model
-    echo "Fixing custom encoder-decoder model..."
-    python setup/fix_custom_encoder_decoder_model.py
+    # Run the consolidated attention fixes
+    python setup/consolidated_attention_fixes.py
 
     # Check if transformers.utils is available
     echo "Checking if transformers.utils is available..."
@@ -703,7 +691,7 @@ case "$MODEL_TYPE" in
         echo "Running DeepSeek code model training with device mismatch fix..."
 
         # Verify GPU availability before starting training
-        python setup/verify_gpu_code.py
+        python setup/consolidated_verification.py --model-type code
 
         # Check exit code of the GPU verification
         if [ $? -ne 0 ]; then
@@ -728,7 +716,7 @@ case "$MODEL_TYPE" in
         echo "Running text generation model training..."
 
         # Verify GPU availability before starting training
-        python setup/verify_gpu_text.py
+        python setup/consolidated_verification.py --model-type text
 
         # Check exit code of the GPU verification
         if [ $? -ne 0 ]; then
@@ -753,7 +741,7 @@ case "$MODEL_TYPE" in
         echo "Running CNN-based text generation model training with enhanced GPU handling..."
 
         # Verify GPU availability before starting training
-        python setup/verify_gpu_cnn_text.py
+        python setup/consolidated_verification.py --model-type cnn-text
 
         # Check exit code of the GPU verification
         if [ $? -ne 0 ]; then
@@ -791,7 +779,7 @@ case "$MODEL_TYPE" in
         fi
 
         # Verify GPU availability before starting training
-        python setup/verify_gpu_custom_model.py
+        python setup/consolidated_verification.py --model-type custom-model
 
         # Check exit code of the GPU verification
         if [ $? -ne 0 ]; then
@@ -871,7 +859,7 @@ esac
 echo "Performing final verification and cleanup..."
 
 # Verify that models were saved correctly
-python setup/verify_models.py "$MODEL_TYPE"
+python setup/consolidated_verification.py --model-type "$MODEL_TYPE"
 
 # Final cleanup
 echo "Cleaning up temporary files..."

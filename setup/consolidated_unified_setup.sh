@@ -9,9 +9,8 @@ echo "Fixing all string literal issues in Python files..."
 chmod +x setup/consolidated_utils.py
 python setup/consolidated_utils.py --action string-literals
 
-# Copy the new ultimate attention fix to ensure it's available
-echo "Setting up new ultimate attention fix..."
-cp setup/ultimate_attention_fix_new.py setup/ultimate_attention_fix.py
+# Make sure the ultimate attention fix is executable
+echo "Setting up ultimate attention fix..."
 chmod +x setup/ultimate_attention_fix.py
 
 # Detect environment
@@ -287,7 +286,7 @@ python setup/consolidated_attention_fixes.py
 
 # Keep the ultimate fix script as a fallback
 echo "Applying ultimate fix as fallback..."
-python setup/ultimate_attention_fix.py
+python setup/consolidated_attention_fix.py
 
 # Create import_fix.py
 echo "Creating import_fix.py..."
