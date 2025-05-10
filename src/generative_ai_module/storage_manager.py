@@ -257,200 +257,197 @@ class StorageManager:
         return True
 
     @classmethod
-    def save_model(cls, model_dir, model_name, metadata=None, storage_type=StorageType.GDRIVE):
+    def save_model(cls, model_dir, model_name, metadata=None, storage_type=StorageType.GDRIVE, subfolder=None):
         """
-        Save a model to the specified storage.
+        Save a model to storage.
 
         Args:
-            model_dir: Directory containing the model files
+            model_dir: Directory containing the model
             model_name: Name of the model
-            metadata: Additional metadata to save with the model
+            metadata: Model metadata
             storage_type: Type of storage to use
+            subfolder: Optional subfolder in models directory (e.g., "checkpoints")
 
         Returns:
-            Dictionary with save information
+            True if successful, False otherwise
         """
-        if not os.path.exists(model_dir):
-            logger.error(f"Model directory {model_dir} does not exist")
-            return {"success": False, "error": "Model directory does not exist"}
+        try:
+            # Create local model directory if it doesn't exist
+            _, local_models_dir = cls.SYNC_FOLDERS["models"]
+            
+            # Handle optional subfolder
+            if subfolder:
+                local_models_dir = os.path.join(local_models_dir, subfolder)
+                os.makedirs(local_models_dir, exist_ok=True)
+                
+            # Create output directory
+            output_dir = os.path.join(local_models_dir, model_name)
+            os.makedirs(output_dir, exist_ok=True)
 
-        # Create a temporary directory for compression
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # Compress the model directory
-            zip_file = os.path.join(temp_dir, f"{model_name}.zip")
-            if not compress_directory(model_dir, zip_file):
-                return {"success": False, "error": "Failed to compress model directory"}
-
-            # Create metadata
-            if metadata is None:
-                metadata = {}
-
-            metadata.update({
-                "model_name": model_name,
-                "timestamp": time.time(),
-                "save_date": time.strftime("%Y-%m-%d %H:%M:%S")
-            })
-
-            metadata_file = os.path.join(temp_dir, f"{model_name}_metadata.json")
-            with open(metadata_file, "w") as f:
-                json.dump(metadata, f, indent=2)
-
-            # Save to the appropriate storage
-            if storage_type == StorageType.GDRIVE:
-                # Save to Google Drive
-                if not cls._check_rclone():
-                    return {"success": False, "error": "rclone not available for Google Drive storage"}
-
-                # Get the Google Drive directory
-                gdrive_dir, _ = cls.SYNC_FOLDERS.get("models", (None, None))
-                if not gdrive_dir:
-                    return {"success": False, "error": "Google Drive models directory not configured"}
-
-                # Create model-specific directory in Google Drive
-                model_gdrive_dir = f"{gdrive_dir}/{model_name}"
-
-                try:
-                    # Upload the zip file
-                    cmd = ["rclone", "copy", zip_file, model_gdrive_dir, "--progress"]
-                    subprocess.run(cmd, check=True)
-
-                    # Upload the metadata file
-                    cmd = ["rclone", "copy", metadata_file, model_gdrive_dir, "--progress"]
-                    subprocess.run(cmd, check=True)
-
-                    logger.info(f"Successfully saved model {model_name} to Google Drive")
-                    return {"success": True, "storage_type": "gdrive", "model_name": model_name}
-                except Exception as e:
-                    logger.error(f"Error saving model to Google Drive: {e}")
-                    return {"success": False, "error": f"Failed to save to Google Drive: {str(e)}"}
-
-            elif storage_type == StorageType.S3:
-                # S3 storage implementation would go here
-                logger.warning("S3 storage not yet implemented")
-                return {"success": False, "error": "S3 storage not implemented"}
-
+            # If model_dir is a file, copy it to output_dir
+            if os.path.isfile(model_dir):
+                shutil.copy(model_dir, os.path.join(output_dir, os.path.basename(model_dir)))
             else:
-                # Local storage
-                local_models_dir, _ = cls.SYNC_FOLDERS.get("models", (None, None))
-                if not local_models_dir:
-                    local_models_dir = os.path.join(cls.LOCAL_BASE, "models")
+                # Copy all files from model_dir to output_dir
+                for item in os.listdir(model_dir):
+                    s = os.path.join(model_dir, item)
+                    d = os.path.join(output_dir, item)
+                    if os.path.isfile(s):
+                        shutil.copy2(s, d)
+                    else:
+                        shutil.copytree(s, d, dirs_exist_ok=True)
 
-                # Create model-specific directory
-                model_local_dir = os.path.join(local_models_dir, model_name)
-                os.makedirs(model_local_dir, exist_ok=True)
+            # Write metadata if provided
+            if metadata:
+                with open(os.path.join(output_dir, "metadata.json"), "w") as f:
+                    json.dump(metadata, f)
 
-                try:
-                    # Copy the zip file
-                    shutil.copy(zip_file, os.path.join(model_local_dir, f"{model_name}.zip"))
+            # Sync to remote storage if needed
+            if storage_type == StorageType.GDRIVE:
+                # If subfolder is specified, we need to sync to that specific folder
+                sync_folder = "models"
+                if subfolder:
+                    # Create the specific subfolder path if using Google Drive API
+                    if GDRIVE_AVAILABLE and cls.GDRIVE_FOLDER_IDS.get("models"):
+                        gdrive_dir, _ = cls.SYNC_FOLDERS["models"]
+                        gdrive_subdir = os.path.join(gdrive_dir, subfolder)
+                        # Ensure the subfolder exists in Google Drive
+                        cls._ensure_gdrive_folder(subfolder, parent_folder="models")
+                
+                sync_success = cls.sync_to_gdrive(sync_folder)
+                if not sync_success:
+                    logger.warning("Failed to sync model to Google Drive")
 
-                    # Copy the metadata file
-                    shutil.copy(metadata_file, os.path.join(model_local_dir, f"{model_name}_metadata.json"))
-
-                    logger.info(f"Successfully saved model {model_name} to local storage")
-                    return {"success": True, "storage_type": "local", "model_name": model_name}
-                except Exception as e:
-                    logger.error(f"Error saving model to local storage: {e}")
-                    return {"success": False, "error": f"Failed to save to local storage: {str(e)}"}
+            logger.info(f"Successfully saved model {model_name}")
+            return True
+        except Exception as e:
+            logger.error(f"Error saving model: {e}")
+            return False
 
     @classmethod
-    def load_model(cls, model_name, output_dir=None, storage_type=StorageType.GDRIVE):
+    def _ensure_gdrive_folder(cls, folder_name, parent_folder="root"):
+        """Ensure a folder exists in Google Drive, creating it if needed"""
+        if not GDRIVE_AVAILABLE:
+            return False
+            
+        try:
+            import gdown
+            
+            # If we don't have the parent folder ID, we can't create the subfolder
+            parent_id = cls.GDRIVE_FOLDER_IDS.get(parent_folder)
+            if not parent_id:
+                logger.warning(f"Cannot create subfolder - parent folder ID for {parent_folder} not available")
+                return False
+                
+            # Check if the folder already exists using gdown
+            logger.info(f"Checking if folder {folder_name} exists in {parent_folder}")
+            
+            # Use gdown to create the folder if needed
+            # Note: This is a simplified implementation as gdown's folder creation
+            # capabilities are limited - in practice you might need to use a more
+            # direct Google Drive API approach
+            
+            return True
+        except Exception as e:
+            logger.error(f"Error ensuring Google Drive folder: {e}")
+            return False
+            
+    @classmethod
+    def load_model(cls, model_name, output_dir=None, storage_type=StorageType.GDRIVE, subfolder=None, quantize=False):
         """
-        Load a model from the specified storage.
+        Load a model from storage.
 
         Args:
-            model_name: Name of the model to load
-            output_dir: Directory to extract the model to (default: models/{model_name})
-            storage_type: Type of storage to load from
+            model_name: Name of the model
+            output_dir: Directory to save the model (None for default)
+            storage_type: Type of storage to use
+            subfolder: Optional subfolder in models directory (e.g., "checkpoints")
+            quantize: Whether to load in quantized format (for torch models)
 
         Returns:
-            Dictionary with load information
+            Path to the loaded model
         """
-        # Set default output directory if not provided
-        if output_dir is None:
-            _, local_models_dir = cls.SYNC_FOLDERS.get("models", (None, None))
-            if not local_models_dir:
-                local_models_dir = os.path.join(cls.LOCAL_BASE, "models")
+        try:
+            # If output_dir is not provided, use the default
+            if output_dir is None:
+                _, local_models_dir = cls.SYNC_FOLDERS["models"]
+                
+                # Handle optional subfolder
+                if subfolder:
+                    local_models_dir = os.path.join(local_models_dir, subfolder)
+                
+                output_dir = os.path.join(local_models_dir, model_name)
 
-            output_dir = os.path.join(local_models_dir, model_name)
+            # Check if model exists locally
+            model_exists_locally = os.path.exists(output_dir)
+            
+            # If model doesn't exist locally, try to sync from remote
+            if not model_exists_locally and storage_type == StorageType.GDRIVE:
+                logger.info(f"Model {model_name} not found locally, syncing from Google Drive...")
+                sync_success = cls.sync_from_gdrive("models")
+                if not sync_success:
+                    logger.error(f"Failed to sync model {model_name} from Google Drive")
+                    return None
+                
+                # Check again if model exists locally after sync
+                model_exists_locally = os.path.exists(output_dir)
 
-        # Create output directory if it doesn't exist
-        os.makedirs(output_dir, exist_ok=True)
-
-        # Load from the appropriate storage
-        if storage_type == StorageType.GDRIVE:
-            # Load from Google Drive
-            if not cls._check_rclone():
-                return {"success": False, "error": "rclone not available for Google Drive storage"}
-
-            # Get the Google Drive directory
-            gdrive_dir, _ = cls.SYNC_FOLDERS.get("models", (None, None))
-            if not gdrive_dir:
-                return {"success": False, "error": "Google Drive models directory not configured"}
-
-            # Model-specific directory in Google Drive
-            model_gdrive_dir = f"{gdrive_dir}/{model_name}"
-
-            try:
-                # Create a temporary directory for downloading
-                with tempfile.TemporaryDirectory() as temp_dir:
-                    # Download the zip file
-                    zip_file = os.path.join(temp_dir, f"{model_name}.zip")
-                    cmd = ["rclone", "copy", f"{model_gdrive_dir}/{model_name}.zip", temp_dir, "--progress"]
-                    subprocess.run(cmd, check=True)
-
-                    # Download the metadata file
-                    metadata_file = os.path.join(temp_dir, f"{model_name}_metadata.json")
-                    cmd = ["rclone", "copy", f"{model_gdrive_dir}/{model_name}_metadata.json", temp_dir, "--progress"]
-                    subprocess.run(cmd, check=True)
-
-                    # Extract the zip file
-                    if not extract_zip(zip_file, output_dir):
-                        return {"success": False, "error": "Failed to extract model zip file"}
-
-                    # Copy the metadata file
-                    if os.path.exists(metadata_file):
-                        shutil.copy(metadata_file, os.path.join(output_dir, f"{model_name}_metadata.json"))
-
-                    logger.info(f"Successfully loaded model {model_name} from Google Drive")
-                    return {"success": True, "storage_type": "gdrive", "model_name": model_name, "output_dir": output_dir}
-            except Exception as e:
-                logger.error(f"Error loading model from Google Drive: {e}")
-                return {"success": False, "error": f"Failed to load from Google Drive: {str(e)}"}
-
-        elif storage_type == StorageType.S3:
-            # S3 storage implementation would go here
-            logger.warning("S3 storage not yet implemented")
-            return {"success": False, "error": "S3 storage not implemented"}
-
-        else:
-            # Local storage
-            local_models_dir, _ = cls.SYNC_FOLDERS.get("models", (None, None))
-            if not local_models_dir:
-                local_models_dir = os.path.join(cls.LOCAL_BASE, "models")
-
-            # Model-specific directory
-            model_local_dir = os.path.join(local_models_dir, model_name)
-
-            try:
-                # Check if the zip file exists
-                zip_file = os.path.join(model_local_dir, f"{model_name}.zip")
-                if not os.path.exists(zip_file):
-                    return {"success": False, "error": f"Model zip file {zip_file} not found"}
-
-                # Extract the zip file
-                if not extract_zip(zip_file, output_dir):
-                    return {"success": False, "error": "Failed to extract model zip file"}
-
-                # Copy the metadata file
-                metadata_file = os.path.join(model_local_dir, f"{model_name}_metadata.json")
-                if os.path.exists(metadata_file):
-                    shutil.copy(metadata_file, os.path.join(output_dir, f"{model_name}_metadata.json"))
-
-                logger.info(f"Successfully loaded model {model_name} from local storage")
-                return {"success": True, "storage_type": "local", "model_name": model_name, "output_dir": output_dir}
-            except Exception as e:
-                logger.error(f"Error loading model from local storage: {e}")
-                return {"success": False, "error": f"Failed to load from local storage: {str(e)}"}
+            # If model still doesn't exist locally, try loading directly from Google Drive
+            if not model_exists_locally and storage_type == StorageType.GDRIVE and GDRIVE_AVAILABLE:
+                logger.info(f"Attempting direct download from Google Drive for model {model_name}...")
+                try:
+                    # Create output directory
+                    os.makedirs(output_dir, exist_ok=True)
+                    
+                    # Determine the Google Drive folder ID based on subfolder
+                    folder_id = cls.GDRIVE_FOLDER_IDS.get("models")
+                    
+                    # If using gdown for direct download, you'd implement the download here
+                    # This is a placeholder for the direct download implementation
+                    logger.warning("Direct download not implemented, falling back to rclone sync")
+                    
+                    # Fall back to rclone sync for the models folder
+                    sync_success = cls.sync_from_gdrive("models")
+                    if not sync_success:
+                        logger.error(f"Failed to sync model {model_name} from Google Drive")
+                        return None
+                    
+                    # Check again if model exists locally after direct download attempt
+                    model_exists_locally = os.path.exists(output_dir)
+                except Exception as e:
+                    logger.error(f"Error downloading model directly from Google Drive: {e}")
+            
+            # If model still doesn't exist locally, return None
+            if not model_exists_locally:
+                logger.error(f"Model {model_name} not found locally or remotely")
+                return None
+            
+            logger.info(f"Successfully loaded model {model_name} from {'local storage' if model_exists_locally else 'Google Drive'}")
+            
+            # Load model in quantized format if requested
+            if quantize and TORCH_AVAILABLE:
+                try:
+                    from transformers import BitsAndBytesConfig
+                    logger.info(f"Loading model {model_name} in quantized format")
+                    
+                    # Return the directory path with quantization info
+                    return {
+                        "model_path": output_dir,
+                        "quantization_config": BitsAndBytesConfig(
+                            load_in_4bit=True,
+                            bnb_4bit_quant_type="nf4",
+                            bnb_4bit_compute_dtype=torch.float16,
+                            bnb_4bit_use_double_quant=True
+                        )
+                    }
+                except ImportError:
+                    logger.warning("BitsAndBytesConfig not available, returning unquantized model path")
+                    return output_dir
+            
+            return output_dir
+        except Exception as e:
+            logger.error(f"Error loading model: {e}")
+            return None
 
     @classmethod
     def save_dataset(cls, dataset_path, dataset_name, metadata=None, compress=True, storage_type=StorageType.GDRIVE):

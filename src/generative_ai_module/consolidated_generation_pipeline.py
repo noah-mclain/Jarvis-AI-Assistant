@@ -379,40 +379,164 @@ class ConsolidatedGenerationPipeline:
             return False
 
     def _load_text_model(self, model_path):
-        """Load a text generation model."""
-        # Load the model state
-        checkpoint = torch.load(model_path, map_location=self.device)
+        """
+        Load a text generation model.
 
-        # Check if we need to create a new model
-        if self.model is None:
-            # Get model parameters from checkpoint
-            hidden_size = checkpoint.get('hidden_size', self.config['hidden_size'])
-            num_layers = checkpoint.get('num_layers', self.config['num_layers'])
+        Args:
+            model_path: Path to the model file or directory
 
-            # Create a new model with the right parameters
-            self.model = CombinedModel(
-                input_size=self.vocab_size,
-                hidden_size=hidden_size,
-                output_size=self.vocab_size,
-                num_layers=num_layers
-            )
-
-        # Load the state dictionary
-        self.model.load_state_dict(checkpoint['model_state_dict'])
-
-        # Move model to the right device
-        self.model.to(self.device)
-
-        # Load character mappings if available
-        if 'char_to_index' in checkpoint:
-            self.char_to_index = checkpoint['char_to_index']
-        if 'index_to_char' in checkpoint:
-            self.index_to_char = checkpoint['index_to_char']
-        if 'vocab_size' in checkpoint:
-            self.vocab_size = checkpoint['vocab_size']
-
-        # Set model to evaluation mode
-        self.model.eval()
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            logger.info(f"Loading text model from {model_path}")
+            
+            # Check if model_path is a directory
+            if os.path.isdir(model_path):
+                # Check if it's a Hugging Face model directory
+                if os.path.exists(os.path.join(model_path, "config.json")):
+                    logger.info("Detected Hugging Face model directory")
+                    
+                    if TRANSFORMERS_AVAILABLE:
+                        # Try to load as a FLAN-UL2 or other HF model
+                        try:
+                            # Configure quantization for memory efficiency
+                            quantization_config = None
+                            if torch.cuda.is_available() and getattr(self, "_use_4bit", False):
+                                logger.info("Loading model with 4-bit quantization")
+                                quantization_config = BitsAndBytesConfig(
+                                    load_in_4bit=True,
+                                    bnb_4bit_quant_type="nf4",
+                                    bnb_4bit_compute_dtype=torch.float16,
+                                    bnb_4bit_use_double_quant=True
+                                )
+                            elif torch.cuda.is_available() and getattr(self, "_use_8bit", False):
+                                logger.info("Loading model with 8-bit quantization")
+                                quantization_config = BitsAndBytesConfig(
+                                    load_in_8bit=True
+                                )
+                                
+                            # Load tokenizer and model
+                            self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+                            self.model = AutoModelForCausalLM.from_pretrained(
+                                model_path,
+                                device_map="auto",
+                                quantization_config=quantization_config,
+                                torch_dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16,
+                                low_cpu_mem_usage=True
+                            )
+                            
+                            # Load vocabulary
+                            self.vocab = list(self.tokenizer.get_vocab().keys())
+                            self.vocab_size = len(self.vocab)
+                            
+                            logger.info(f"Successfully loaded Hugging Face model with vocab size {self.vocab_size}")
+                            self.model_loaded = True
+                            self.is_hf_model = True
+                            
+                            # Clear CUDA cache to free memory
+                            if torch.cuda.is_available():
+                                torch.cuda.empty_cache()
+                                gc.collect()
+                                
+                            return True
+                        except Exception as e:
+                            logger.error(f"Error loading Hugging Face model: {e}")
+                            # Fall back to character-level model
+                
+                # Try to load a character-level model saved with torch.save
+                model_file = os.path.join(model_path, "model.pt")
+                if os.path.exists(model_file):
+                    return self._load_char_level_model(model_file)
+                    
+                # Try to find any .pt files in the directory
+                pt_files = [f for f in os.listdir(model_path) if f.endswith(".pt")]
+                if pt_files:
+                    model_file = os.path.join(model_path, pt_files[0])
+                    return self._load_char_level_model(model_file)
+                    
+                logger.error(f"No valid model found in directory {model_path}")
+                return False
+            
+            # If model_path is a file, load it directly
+            elif os.path.isfile(model_path):
+                return self._load_char_level_model(model_path)
+                
+            else:
+                logger.error(f"Model path {model_path} does not exist")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error loading text model: {e}")
+            return False
+            
+    def _load_char_level_model(self, model_file):
+        """Load a character-level model saved with torch.save"""
+        try:
+            # Load model state
+            state_dict = torch.load(model_file, map_location=self.device)
+            
+            # Check if it's a complete model or just the state dict
+            if isinstance(state_dict, dict) and "model" in state_dict:
+                # Extract model state dict and metadata
+                model_state = state_dict["model"]
+                self.vocab = state_dict.get("vocab", list(string.printable))
+                self.vocab_size = len(self.vocab)
+                self.char_to_idx = {char: i for i, char in enumerate(self.vocab)}
+                self.idx_to_char = {i: char for i, char in enumerate(self.vocab)}
+                
+                # Create new model with the right dimensions
+                input_size = output_size = self.vocab_size
+                hidden_size = state_dict.get("hidden_size", self.config["hidden_size"])
+                num_layers = state_dict.get("num_layers", self.config["num_layers"])
+                
+                self.model = CombinedModel(input_size, hidden_size, output_size, num_layers)
+                self.model.load_state_dict(model_state)
+                self.model.to(self.device)
+                self.model.eval()
+                
+                logger.info(f"Successfully loaded character-level model with vocab size {self.vocab_size}")
+                self.model_loaded = True
+                self.is_hf_model = False
+                return True
+                
+            else:
+                # Assume it's just the model state dict
+                # We need to guess the model dimensions
+                self.vocab = list(string.printable)
+                self.vocab_size = len(self.vocab)
+                self.char_to_idx = {char: i for i, char in enumerate(self.vocab)}
+                self.idx_to_char = {i: char for i, char in enumerate(self.vocab)}
+                
+                # Try to infer model dimensions from state dict
+                fc_weight_shape = None
+                for key, value in state_dict.items():
+                    if "fc.weight" in key:
+                        fc_weight_shape = value.shape
+                        break
+                        
+                if fc_weight_shape is not None:
+                    output_size, hidden_size = fc_weight_shape
+                    input_size = output_size  # Assume input size = output size for char-level models
+                    num_layers = self.config["num_layers"]  # Just use default
+                    
+                    self.model = CombinedModel(input_size, hidden_size, output_size, num_layers)
+                    self.model.load_state_dict(state_dict)
+                    self.model.to(self.device)
+                    self.model.eval()
+                    
+                    logger.info(f"Successfully loaded character-level model with inferred dimensions")
+                    self.model_loaded = True
+                    self.is_hf_model = False
+                    return True
+                    
+                else:
+                    logger.error("Could not infer model dimensions from state dict")
+                    return False
+                    
+        except Exception as e:
+            logger.error(f"Error loading character-level model: {e}")
+            return False
 
     def _load_code_model(self, model_path):
         """Load a code generation model."""
@@ -508,92 +632,166 @@ class ConsolidatedGenerationPipeline:
         Train the model on a dataset.
 
         Args:
-            dataset: Dataset to train on (list of batches)
-            epochs: Number of epochs to train for (default: from config)
-            learning_rate: Learning rate (default: from config)
-            batch_size: Batch size (default: from config)
+            dataset: Dataset to train on (list of text sequences)
+            epochs: Number of training epochs (default: config value)
+            learning_rate: Learning rate (default: config value)
+            batch_size: Batch size (default: config value)
 
         Returns:
-            Dictionary with training metrics
+            Dict with training metrics
         """
-        # Use provided parameters or defaults from config
-        epochs = epochs or self.config['epochs']
-        learning_rate = learning_rate or self.config['learning_rate']
-        batch_size = batch_size or self.config['batch_size']
+        # Set parameters or use defaults
+        epochs = epochs or self.config["epochs"]
+        learning_rate = learning_rate or self.config["learning_rate"]
+        batch_size = batch_size or self.config["batch_size"]
 
-        # Create model if it doesn't exist
-        if self.model is None:
-            self.create_model()
+        # If VRAM is limited, auto-adjust batch size
+        if torch.cuda.is_available():
+            try:
+                vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                logger.info(f"Detected {vram_gb:.2f} GB VRAM")
+                
+                # Auto-adjust batch size based on VRAM
+                if vram_gb < 16 and batch_size > 16:
+                    old_batch_size = batch_size
+                    batch_size = min(16, batch_size)
+                    logger.info(f"Auto-adjusted batch size from {old_batch_size} to {batch_size} based on available VRAM")
+                    
+            except Exception as e:
+                logger.warning(f"Failed to auto-adjust batch size: {e}")
 
-        # Set model to training mode
-        self.model.train()
+        if self.model_type == "code" and TRANSFORMERS_AVAILABLE:
+            return self._train_code_model(dataset, epochs, learning_rate, batch_size)
+        elif hasattr(self, "is_hf_model") and self.is_hf_model and TRANSFORMERS_AVAILABLE:
+            return self._train_hf_model(dataset, epochs, learning_rate, batch_size)
+        else:
+            return self._train_char_model(dataset, epochs, learning_rate, batch_size)
 
-        # Create optimizer
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
-
-        # Training metrics
-        metrics = {
-            'epochs': epochs,
-            'learning_rate': learning_rate,
-            'batch_size': batch_size,
-            'losses': [],
-            'start_time': datetime.datetime.now().isoformat()
-        }
-
-        # Training loop
+    def _train_hf_model(self, dataset, epochs, learning_rate, batch_size):
+        """
+        Train a Hugging Face model (like FLAN-UL2) with memory optimizations.
+        
+        Args:
+            dataset: Dataset to train on
+            epochs: Number of training epochs
+            learning_rate: Learning rate
+            batch_size: Batch size
+            
+        Returns:
+            Dict with training metrics
+        """
+        if not TRANSFORMERS_AVAILABLE:
+            logger.error("Transformers library not available. Cannot train Hugging Face model.")
+            return {"error": "Transformers library not available"}
+            
+        logger.info(f"Training Hugging Face model for {epochs} epochs with batch size {batch_size}")
+        
         try:
-            for epoch in range(epochs):
-                epoch_loss = 0
-                batch_count = 0
-
-                # Process each batch
-                for input_batch, target_batch in tqdm(dataset, desc=f"Epoch {epoch+1}/{epochs}"):
-                    # Move data to device
-                    input_batch = input_batch.to(self.device)
-                    target_batch = target_batch.to(self.device)
-
-                    # Zero gradients
-                    optimizer.zero_grad()
-
-                    # Forward pass
-                    output, _ = self.model(input_batch)
-
-                    # Calculate loss
-                    loss = F.cross_entropy(output, target_batch)
-
-                    # Backward pass and optimize
-                    loss.backward()
-                    optimizer.step()
-
-                    # Update metrics
-                    epoch_loss += loss.item()
-                    batch_count += 1
-
-                    # Free memory
-                    del input_batch, target_batch, output
-                    if self.device == "cuda":
-                        torch.cuda.empty_cache()
-
-                # Calculate average loss for the epoch
-                avg_loss = epoch_loss / batch_count if batch_count > 0 else 0
-                metrics['losses'].append(avg_loss)
-
-                # Log progress
-                self.logger.info(f"Epoch {epoch+1}/{epochs}, Loss: {avg_loss:.4f}")
-
-            # Set model back to evaluation mode
+            from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+            from transformers import Trainer, TrainingArguments
+            
+            # Apply LoRA for memory-efficient fine-tuning
+            if not hasattr(self.model, "is_peft_model") or not self.model.is_peft_model:
+                logger.info("Applying LoRA adapters for memory-efficient training")
+                
+                # Prepare model for k-bit training if using quantization
+                if getattr(self, "_use_4bit", False) or getattr(self, "_use_8bit", False):
+                    self.model = prepare_model_for_kbit_training(self.model)
+                
+                # Define LoRA configuration
+                lora_config = LoraConfig(
+                    r=16,  # Rank
+                    lora_alpha=32,
+                    target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+                    lora_dropout=0.05,
+                    bias="none",
+                    task_type="CAUSAL_LM"
+                )
+                
+                # Apply LoRA adapters
+                self.model = get_peft_model(self.model, lora_config)
+                
+            # Prepare the dataset
+            from datasets import Dataset as HFDataset
+            
+            # Process the dataset into the right format
+            if isinstance(dataset, list):
+                # If it's a list of strings, convert to a proper dataset
+                processed_data = []
+                for text in dataset:
+                    try:
+                        inputs = self.tokenizer(text, truncation=True, max_length=self.config["sequence_length"])
+                        inputs["labels"] = inputs["input_ids"].copy()
+                        processed_data.append(inputs)
+                    except Exception as e:
+                        logger.warning(f"Error tokenizing text: {e}")
+                        continue
+                
+                # Convert to HF Dataset
+                train_dataset = HFDataset.from_list(processed_data)
+                
+            elif hasattr(dataset, "__getitem__") and hasattr(dataset, "__len__"):
+                # If it's already a dataset-like object, convert to HF Dataset if needed
+                if not isinstance(dataset, HFDataset):
+                    train_dataset = HFDataset.from_dict({
+                        "input_ids": [item["input_ids"] for item in dataset],
+                        "attention_mask": [item["attention_mask"] for item in dataset],
+                        "labels": [item["labels"] for item in dataset],
+                    })
+                else:
+                    train_dataset = dataset
+            else:
+                raise ValueError("Dataset must be a list of strings or a dataset-like object")
+            
+            # Set up training arguments
+            training_args = TrainingArguments(
+                output_dir="./results",
+                num_train_epochs=epochs,
+                per_device_train_batch_size=batch_size,
+                gradient_accumulation_steps=4,  # Accumulate gradients for effective larger batch size
+                learning_rate=learning_rate,
+                weight_decay=0.01,
+                warmup_ratio=0.1,
+                logging_steps=10,
+                save_steps=100,
+                save_total_limit=2,
+                fp16=torch.cuda.is_available() and not torch.cuda.is_bf16_supported(),
+                bf16=torch.cuda.is_bf16_supported(),
+                gradient_checkpointing=True,  # Enable gradient checkpointing to save memory
+                remove_unused_columns=False
+            )
+            
+            # Create the trainer
+            trainer = Trainer(
+                model=self.model,
+                args=training_args,
+                train_dataset=train_dataset,
+                tokenizer=self.tokenizer
+            )
+            
+            # Train the model
+            train_result = trainer.train()
+            
+            # Get metrics
+            metrics = train_result.metrics
+            
+            # Set the model to eval mode
             self.model.eval()
-
-            # Update metrics
-            metrics['end_time'] = datetime.datetime.now().isoformat()
-
+            
+            # Clear CUDA cache
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                gc.collect()
+                
             return metrics
-
+            
         except Exception as e:
-            self.logger.error(f"Error during training: {str(e)}")
-            # Set model back to evaluation mode
-            self.model.eval()
-            return metrics
+            logger.error(f"Error training Hugging Face model: {e}")
+            # Attempt to clear CUDA cache in case of OOM error
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                gc.collect()
+            return {"error": str(e)}
 
     def generate_text(self, seed_text, max_length=None, temperature=None, top_k=None, top_p=None):
         """

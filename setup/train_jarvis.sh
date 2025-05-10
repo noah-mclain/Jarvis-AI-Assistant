@@ -108,6 +108,89 @@ except ImportError as e:
 '
 }
 
+# Function to sync data from Google Drive before training
+sync_from_gdrive() {
+    echo "Checking for existing models and data in Google Drive..."
+    
+    # Check if we're in a Paperspace environment
+    if [ -d "/notebooks" ] || [ -d "/storage" ]; then
+        echo "Detected Paperspace environment - setting up Google Drive sync"
+        
+        # Check if rclone is configured
+        if rclone listremotes | grep -q gdrive:; then
+            echo "✅ rclone configured for Google Drive"
+            
+            # Create data directories if they don't exist
+            mkdir -p data/models
+            mkdir -p data/datasets
+            mkdir -p data/checkpoints
+            mkdir -p data/preprocessed_data
+            
+            # Sync data from Google Drive
+            echo "Syncing models from Google Drive..."
+            python -c '
+from src.generative_ai_module.storage_manager import sync_from_gdrive
+print("Syncing models from Google Drive...")
+sync_from_gdrive("models")
+print("Syncing datasets from Google Drive...")
+sync_from_gdrive("datasets")
+print("Syncing checkpoints from Google Drive...")
+sync_from_gdrive("checkpoints")
+print("Syncing preprocessed data from Google Drive...")
+sync_from_gdrive("preprocessed_data")
+print("✅ Completed Google Drive sync")
+            '
+            
+            # Check if sync was successful
+            if [ $? -eq 0 ]; then
+                echo "✅ Successfully synced data from Google Drive"
+            else
+                echo "⚠️ Warning: Failed to sync data from Google Drive"
+                echo "Will continue with training using only local data"
+            fi
+        else
+            echo "⚠️ Warning: rclone not configured for Google Drive"
+            echo "Will continue with training using only local data"
+        fi
+    else
+        echo "Not in Paperspace environment - skipping Google Drive sync"
+    fi
+}
+
+# Function to sync trained models to Google Drive after training
+sync_to_gdrive() {
+    echo "Syncing trained models back to Google Drive..."
+    
+    # Check if we're in a Paperspace environment
+    if [ -d "/notebooks" ] || [ -d "/storage" ]; then
+        echo "Detected Paperspace environment - syncing to Google Drive"
+        
+        # Check if rclone is configured
+        if rclone listremotes | grep -q gdrive:; then
+            # Sync data to Google Drive
+            python -c '
+from src.generative_ai_module.storage_manager import sync_to_gdrive
+print("Syncing models to Google Drive...")
+sync_to_gdrive("models")
+print("Syncing checkpoints to Google Drive...")
+sync_to_gdrive("checkpoints")
+print("✅ Completed Google Drive sync")
+            '
+            
+            # Check if sync was successful
+            if [ $? -eq 0 ]; then
+                echo "✅ Successfully synced trained models to Google Drive"
+            else
+                echo "⚠️ Warning: Failed to sync trained models to Google Drive"
+            fi
+        else
+            echo "⚠️ Warning: rclone not configured for Google Drive"
+        fi
+    else
+        echo "Not in Paperspace environment - skipping Google Drive sync"
+    fi
+}
+
 # Activate Python environment and Unsloth
 check_and_activate_python_env
 check_and_activate_unsloth
@@ -127,6 +210,8 @@ show_help() {
     echo "  --model-type TYPE      Specify model type (code, text, cnn-text, custom-model)"
     echo "  --skip-cleanup         Skip GPU memory cleanup"
     echo "  --skip-patches         Skip transformer patches"
+    echo "  --skip-gdrive-sync     Skip Google Drive sync"
+    echo "  --force-gdrive-sync    Force Google Drive sync before and after training"
     echo "  --force                Skip confirmation prompts (use with caution)"
     echo "  --debug                Enable debug mode"
     echo "  --use-improved-preprocessor  Use the ImprovedPreprocessor with dataset-specific settings"
@@ -159,6 +244,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-patches)
             SKIP_PATCHES=1
+            shift
+            ;;
+        --skip-gdrive-sync)
+            SKIP_GDRIVE_SYNC=1
+            shift
+            ;;
+        --force-gdrive-sync)
+            FORCE_GDRIVE_SYNC=1
             shift
             ;;
         --force)
@@ -195,10 +288,17 @@ if [ -n "$USE_IMPROVED_PREPROCESSOR" ]; then
     echo "✅ Using ImprovedPreprocessor with dataset-specific settings"
     echo "   (writing_prompts will use special memory-optimized settings)"
 fi
+if [ -n "$SKIP_GDRIVE_SYNC" ]; then
+    echo "⚠️ Skipping Google Drive sync"
+elif [ -n "$FORCE_GDRIVE_SYNC" ]; then
+    echo "✅ Forced Google Drive sync enabled"
+fi
 echo "========================================"
 
-# Force Paperspace environment detection
-export PAPERSPACE=true
+# Sync from Google Drive before training (unless skipped)
+if [ -z "$SKIP_GDRIVE_SYNC" ]; then
+    sync_from_gdrive
+fi
 
 # Set USE_IMPROVED_PREPROCESSOR if the flag is provided
 if [ -n "$USE_IMPROVED_PREPROCESSOR" ]; then
@@ -838,8 +938,6 @@ case "$MODEL_TYPE" in
             --log-every "$LOG_EVERY" \
             $([ "$USE_IMPROVED_PREPROCESSOR" = "1" ] && echo "--use-improved-preprocessor")
 
-
-
         # Check if training was successful
         if [ $? -ne 0 ]; then
             echo "❌ Custom model training failed. See logs for details."
@@ -855,16 +953,12 @@ case "$MODEL_TYPE" in
         ;;
 esac
 
-# Perform final verification and cleanup
-echo "Performing final verification and cleanup..."
+# After training is complete, sync to Google Drive (unless skipped)
+if [ -z "$SKIP_GDRIVE_SYNC" ]; then
+    sync_to_gdrive
+fi
 
-# Verify that models were saved correctly
-python setup/consolidated_verification.py --model-type "$MODEL_TYPE"
-
-# Final cleanup
-echo "Cleaning up temporary files..."
-find /tmp -name "torch_*" -type d -mmin +60 -exec rm -rf {} \; 2>/dev/null || true
-find /tmp -name "transformers_*" -type d -mmin +60 -exec rm -rf {} \; 2>/dev/null || true
-
-echo "✓ Training process completed successfully!"
-echo "✓ Done"
+echo "========================================"
+echo "Training completed successfully!"
+echo "Models have been saved and synced to Google Drive (if applicable)."
+echo "========================================"

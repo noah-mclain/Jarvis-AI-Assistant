@@ -3,6 +3,16 @@
 Generative AI Module - Jarvis AI Assistant
 
 This module provides functionality for training and using generative AI models.
+
+Consolidated Module Structure:
+- jarvis_unified.py: Main unified interface for Jarvis AI
+- consolidated_generation_pipeline.py: Unified text and code generation pipeline
+- consolidated_dataset_processor.py: Unified dataset processing and tokenization
+- deepseek_training.py: DeepSeek model training and fine-tuning
+- storage_manager.py: Model and dataset storage management
+- evaluation.py: Model evaluation metrics and tools
+- utils.py: General utility functions
+- nlp_utils.py: Natural language processing utilities
 """
 import os
 import logging
@@ -216,32 +226,28 @@ except ImportError as e:
     def generate_with_deepseek(*args, **kwargs):
         logger.error("generate_with_deepseek not available")
 
-# Expose key classes and functions
+# Define the public API
 __all__ = [
+    # Core components
     'JarvisAI',
-    # New consolidated modules
     'ConsolidatedGenerationPipeline',
     'ConsolidatedDatasetProcessor',
     'ImprovedTokenizer',
     'ConversationContext',
-    # Backward compatibility
+    
+    # Backward compatibility aliases
     'TextGenerator',
     'CodeGenerator',
-    'EvaluationMetrics',
     'UnifiedGenerationPipeline',
     'UnifiedDatasetHandler',
-    # Evaluation functions
-    'evaluate_generation',
-    'calculate_bleu',
-    'calculate_rouge',
-    'evaluate_code_generation',
-    'compare_models',
-    # DeepSeek training functions
-    'DeepSeekTrainer',
-    'fine_tune_deepseek',
-    'load_deepseek_model',
-    'generate_with_deepseek',
-    # Storage functions
+    
+    # Utility functions
+    'get_storage_path',
+    'setup_logging',
+    'setup_gpu_for_training',
+    'force_cuda_device',
+    
+    # Storage management
     'StorageManager',
     'sync_to_gdrive',
     'sync_from_gdrive',
@@ -250,14 +256,25 @@ __all__ = [
     'save_dataset',
     'optimize_model_storage',
     'get_storage_status',
-    # Utility functions
-    'setup_gpu_for_training',
-    'force_cuda_device',
-    'get_storage_path',
-    'setup_logging',
+    
+    # Environment setup
     'create_directories',
     'setup_paperspace_env',
-    'get_storage_base_path'
+    'get_storage_base_path',
+    
+    # Evaluation metrics
+    'EvaluationMetrics',
+    'evaluate_generation',
+    'calculate_bleu',
+    'calculate_rouge',
+    'evaluate_code_generation',
+    'compare_models',
+    
+    # DeepSeek training functions
+    'DeepSeekTrainer',
+    'fine_tune_deepseek',
+    'load_deepseek_model',
+    'generate_with_deepseek',
 ]
 
 # Version information

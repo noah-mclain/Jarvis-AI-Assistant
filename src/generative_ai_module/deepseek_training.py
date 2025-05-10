@@ -48,13 +48,18 @@ except ImportError:
     TRANSFORMERS_AVAILABLE = False
     logger.warning("Transformers library not available. DeepSeek training will be limited.")
 
-# Try to import Unsloth
-try:
-    from unsloth import FastLanguageModel
-    UNSLOTH_AVAILABLE = True
-except ImportError:
-    UNSLOTH_AVAILABLE = False
-    logger.warning("Unsloth not available. Training will use standard methods.")
+# Try to import Unsloth - safely check CUDA first
+UNSLOTH_AVAILABLE = False
+if torch.cuda.is_available():
+    try:
+        from unsloth import FastLanguageModel
+        UNSLOTH_AVAILABLE = True
+    except ImportError:
+        logger.warning("Unsloth not available. Training will use standard methods.")
+    except Exception as e:
+        logger.warning(f"Error importing Unsloth: {e}. Training will use standard methods.")
+else:
+    logger.warning("CUDA not available. Unsloth will not be imported.")
 
 # Import local modules
 try:
@@ -245,6 +250,30 @@ class DeepSeekTrainer:
         output_dir = output_dir or self.output_dir
         os.makedirs(output_dir, exist_ok=True)
 
+        # Check if we need to auto-adjust batch size based on VRAM
+        if kwargs.get("auto_batch_size", True) and torch.cuda.is_available():
+            try:
+                vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                logger.info(f"Detected {vram_gb:.2f} GB VRAM")
+                
+                # Auto-adjust batch size based on VRAM
+                if vram_gb < 16 and batch_size > 2:
+                    old_batch_size = batch_size
+                    batch_size = 2
+                    logger.info(f"Auto-adjusted batch size from {old_batch_size} to {batch_size} based on available VRAM")
+                    
+                    # Increase gradient accumulation to compensate
+                    old_grad_accum = gradient_accumulation_steps
+                    gradient_accumulation_steps = max(old_grad_accum, old_batch_size // batch_size)
+                    logger.info(f"Auto-adjusted gradient accumulation from {old_grad_accum} to {gradient_accumulation_steps}")
+            except Exception as e:
+                logger.warning(f"Failed to auto-adjust batch size: {e}")
+
+        # Clear CUDA cache before loading model
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            gc.collect()
+
         # Load model if not already loaded
         if self.model is None or self.tokenizer is None:
             self.load_model()
@@ -409,6 +438,10 @@ class DeepSeekTrainer:
                 "max_grad_norm": kwargs.get("max_grad_norm", 0.3),
                 "remove_unused_columns": False,
                 "report_to": kwargs.get("report_to", "none"),
+                "gradient_checkpointing": kwargs.get("gradient_checkpointing", True),
+                "dataloader_num_workers": kwargs.get("dataloader_num_workers", 2),
+                "dataloader_pin_memory": kwargs.get("dataloader_pin_memory", True),
+                "torch_compile": kwargs.get("torch_compile", False),  # PyTorch 2.0+ feature
             }
 
             # Add evaluation arguments if eval_dataset is provided
@@ -445,14 +478,35 @@ class DeepSeekTrainer:
             trainer.save_metrics("train", metrics)
             trainer.save_state()
 
-            # Sync to Google Drive if in Paperspace environment
+            # Save model checkpoints to Google Drive at intervals
+            if is_paperspace_environment() and kwargs.get("sync_checkpoints", True):
+                checkpoint_interval = kwargs.get("gdrive_checkpoint_interval", 3)
+                if checkpoint_interval > 0 and checkpoint_interval <= epochs:
+                    try:
+                        # Only sync at specific intervals to avoid excessive drive operations
+                        from .storage_manager import sync_to_gdrive
+                        logger.info(f"Syncing model checkpoints to Google Drive...")
+                        sync_to_gdrive(folder_type="models", subfolder="checkpoints")
+                        logger.info("✅ Successfully synced checkpoints to Google Drive")
+                    except Exception as e:
+                        logger.warning(f"Failed to sync checkpoints to Google Drive: {e}")
+                        logger.warning("Continuing without checkpoint sync")
+
+            # Sync final model to Google Drive if in Paperspace environment
             if is_paperspace_environment():
                 try:
                     from .storage_manager import sync_to_gdrive
-                    logger.info("Syncing model to Google Drive...")
-                    sync_to_gdrive("models")
-                except ImportError:
-                    logger.warning("Storage manager not available. Model not synced to Google Drive.")
+                    logger.info("Syncing final model to Google Drive...")
+                    sync_to_gdrive(folder_type="models")
+                    logger.info("✅ Successfully synced model to Google Drive")
+                except Exception as e:
+                    logger.warning(f"Failed to sync model to Google Drive: {e}")
+                    logger.warning("Local model has been saved and will need to be manually synced")
+
+            # Clear CUDA cache after training
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                gc.collect()
 
             return {
                 "status": "success",
@@ -582,6 +636,10 @@ class DeepSeekTrainer:
                 "max_grad_norm": kwargs.get("max_grad_norm", 0.3),
                 "remove_unused_columns": False,
                 "report_to": kwargs.get("report_to", "none"),
+                "gradient_checkpointing": kwargs.get("gradient_checkpointing", True),
+                "dataloader_num_workers": kwargs.get("dataloader_num_workers", 2),
+                "dataloader_pin_memory": kwargs.get("dataloader_pin_memory", True),
+                "torch_compile": kwargs.get("torch_compile", False),  # PyTorch 2.0+ feature
             }
 
             # Add evaluation arguments if eval_dataset is provided
@@ -664,14 +722,35 @@ class DeepSeekTrainer:
             trainer.save_metrics("train", metrics)
             trainer.save_state()
 
-            # Sync to Google Drive if in Paperspace environment
+            # Save model checkpoints to Google Drive at intervals
+            if is_paperspace_environment() and kwargs.get("sync_checkpoints", True):
+                checkpoint_interval = kwargs.get("gdrive_checkpoint_interval", 3)
+                if checkpoint_interval > 0 and checkpoint_interval <= epochs:
+                    try:
+                        # Only sync at specific intervals to avoid excessive drive operations
+                        from .storage_manager import sync_to_gdrive
+                        logger.info(f"Syncing model checkpoints to Google Drive...")
+                        sync_to_gdrive(folder_type="models", subfolder="checkpoints")
+                        logger.info("✅ Successfully synced checkpoints to Google Drive")
+                    except Exception as e:
+                        logger.warning(f"Failed to sync checkpoints to Google Drive: {e}")
+                        logger.warning("Continuing without checkpoint sync")
+
+            # Sync final model to Google Drive if in Paperspace environment
             if is_paperspace_environment():
                 try:
                     from .storage_manager import sync_to_gdrive
-                    logger.info("Syncing model to Google Drive...")
-                    sync_to_gdrive("models")
-                except ImportError:
-                    logger.warning("Storage manager not available. Model not synced to Google Drive.")
+                    logger.info("Syncing final model to Google Drive...")
+                    sync_to_gdrive(folder_type="models")
+                    logger.info("✅ Successfully synced model to Google Drive")
+                except Exception as e:
+                    logger.warning(f"Failed to sync model to Google Drive: {e}")
+                    logger.warning("Local model has been saved and will need to be manually synced")
+
+            # Clear CUDA cache after training
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                gc.collect()
 
             return {
                 "status": "success",
@@ -684,7 +763,7 @@ class DeepSeekTrainer:
             logger.error(f"Error during standard fine-tuning: {str(e)}")
             return {"status": "error", "error": str(e)}
 
-    def generate(self, prompt, max_length=1000, temperature=0.7, top_p=0.9, top_k=50):
+    def generate(self, prompt, max_length=1000, temperature=0.7, top_p=0.9, top_k=50, **kwargs):
         """
         Generate text with the fine-tuned model.
 
@@ -694,6 +773,9 @@ class DeepSeekTrainer:
             temperature: Temperature for sampling
             top_p: Top-p sampling parameter
             top_k: Top-k sampling parameter
+            **kwargs: Additional arguments including:
+                repetition_penalty: Penalty for repeating tokens (default: 1.1)
+                no_repeat_ngram_size: Size of n-grams to avoid repeating (default: 3)
 
         Returns:
             Generated text
@@ -709,20 +791,32 @@ class DeepSeekTrainer:
             # Tokenize input
             inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
 
+            # Set up generation parameters with defaults
+            gen_kwargs = {
+                "max_length": max_length,
+                "temperature": temperature,
+                "top_p": top_p,
+                "top_k": top_k,
+                "do_sample": temperature > 0,
+                "pad_token_id": self.tokenizer.eos_token_id,
+                "repetition_penalty": kwargs.get("repetition_penalty", 1.1),
+                "no_repeat_ngram_size": kwargs.get("no_repeat_ngram_size", 3),
+            }
+
             # Generate
             with torch.no_grad():
                 outputs = self.model.generate(
                     inputs.input_ids,
-                    max_length=max_length,
-                    temperature=temperature,
-                    top_p=top_p,
-                    top_k=top_k,
-                    do_sample=True,
-                    pad_token_id=self.tokenizer.eos_token_id
+                    **gen_kwargs
                 )
 
             # Decode and return
             generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+            
+            # Trim the prompt from the output if return_full_text is False
+            if not kwargs.get("return_full_text", False) and prompt in generated_text:
+                generated_text = generated_text[len(prompt):].lstrip()
+                
             return generated_text
 
         except Exception as e:

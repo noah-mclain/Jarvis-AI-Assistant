@@ -82,6 +82,22 @@ def train_model(dataset, model_type="text", config=None, output_dir=None):
     
     return training_info
 
+def train_text_model(dataset, config=None, output_dir=None):
+    """
+    Train a text generation model.
+    
+    This is a specialized version of train_model specifically for text models.
+    
+    Args:
+        dataset: Dataset to train on
+        config: Configuration dictionary
+        output_dir: Directory to save the model
+        
+    Returns:
+        Dictionary with training information
+    """
+    return train_model(dataset, model_type="text", config=config, output_dir=output_dir)
+
 def generate_with_model(model_path, seed_text, model_type="text", max_length=100, temperature=0.7):
     """
     Generate text with a trained model.

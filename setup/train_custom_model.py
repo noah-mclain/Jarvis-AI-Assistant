@@ -3,6 +3,7 @@
 Train Custom Encoder-Decoder Model for Jarvis AI Assistant
 
 This script trains a custom encoder-decoder model that uses the CNN model as a feature extractor.
+It has been enhanced with memory optimizations and better performance.
 """
 
 import os
@@ -11,6 +12,8 @@ import logging
 import argparse
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+import gc
 from pathlib import Path
 
 # Configure logging
@@ -28,7 +31,12 @@ parent_dir = str(Path(__file__).resolve().parent.parent)
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-# Define custom encoder-decoder model
+# Check if we're running in a Paperspace environment
+def is_paperspace_environment():
+    """Check if running in Paperspace Gradient environment"""
+    return os.path.exists("/notebooks") or os.path.exists("/storage")
+
+# Define custom encoder-decoder model with improved memory efficiency
 class CustomEncoderDecoder(nn.Module):
     def __init__(self, cnn_model, hidden_size=768, num_encoder_layers=3, num_decoder_layers=3, dropout=0.1):
         super(CustomEncoderDecoder, self).__init__()
@@ -63,27 +71,67 @@ class CustomEncoderDecoder(nn.Module):
         
         # Output projection
         self.output_projection = nn.Linear(hidden_size, hidden_size)
+        
+        # Flag for gradient checkpointing
+        self.use_gradient_checkpointing = False
     
     def forward(self, input_ids, decoder_input_ids, attention_mask=None, decoder_attention_mask=None):
-        # Get CNN model features
+        # Get CNN model features - optimized to handle memory better
         with torch.no_grad():
+            # Clear cache if needed
+            if hasattr(torch.cuda, 'empty_cache') and torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                
+            # Process with CNN model
             _, encoder_hidden_states = self.cnn_model(input_ids, attention_mask=attention_mask)
         
-        # Apply encoder
-        encoder_output = self.encoder(encoder_hidden_states)
+        # Apply encoder with gradient checkpointing if enabled
+        if self.use_gradient_checkpointing and self.training:
+            def create_custom_forward(module):
+                def custom_forward(*inputs):
+                    return module(*inputs)
+                return custom_forward
+                
+            encoder_output = torch.utils.checkpoint.checkpoint(
+                create_custom_forward(self.encoder),
+                encoder_hidden_states
+            )
+        else:
+            encoder_output = self.encoder(encoder_hidden_states)
         
         # Get decoder input embeddings
         decoder_hidden_states = self.cnn_model.base_model.get_input_embeddings()(decoder_input_ids)
         
-        # Apply decoder
-        decoder_output = self.decoder(
-            decoder_hidden_states,
-            encoder_output,
-            tgt_mask=self._generate_square_subsequent_mask(decoder_hidden_states.size(1)).to(decoder_hidden_states.device),
-            memory_mask=None,
-            tgt_key_padding_mask=None if decoder_attention_mask is None else ~decoder_attention_mask.bool(),
-            memory_key_padding_mask=None if attention_mask is None else ~attention_mask.bool()
-        )
+        # Create masks for decoder
+        tgt_mask = self._generate_square_subsequent_mask(decoder_hidden_states.size(1)).to(decoder_hidden_states.device)
+        tgt_key_padding_mask = None if decoder_attention_mask is None else ~decoder_attention_mask.bool()
+        memory_key_padding_mask = None if attention_mask is None else ~attention_mask.bool()
+        
+        # Apply decoder with gradient checkpointing if enabled
+        if self.use_gradient_checkpointing and self.training:
+            def create_custom_forward(module):
+                def custom_forward(*inputs):
+                    return module(*inputs)
+                return custom_forward
+                
+            decoder_output = torch.utils.checkpoint.checkpoint(
+                create_custom_forward(self.decoder),
+                decoder_hidden_states,
+                encoder_output,
+                tgt_mask,
+                None,  # memory_mask
+                tgt_key_padding_mask,
+                memory_key_padding_mask
+            )
+        else:
+            decoder_output = self.decoder(
+                decoder_hidden_states,
+                encoder_output,
+                tgt_mask=tgt_mask,
+                memory_mask=None,
+                tgt_key_padding_mask=tgt_key_padding_mask,
+                memory_key_padding_mask=memory_key_padding_mask
+            )
         
         # Project to output
         output = self.output_projection(decoder_output)
@@ -94,6 +142,16 @@ class CustomEncoderDecoder(nn.Module):
         mask = (torch.triu(torch.ones(sz, sz)) == 1).transpose(0, 1)
         mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
         return mask
+        
+    def enable_gradient_checkpointing(self):
+        """Enable gradient checkpointing to save memory during training"""
+        self.use_gradient_checkpointing = True
+        logger.info("Gradient checkpointing enabled for encoder-decoder model")
+        
+    def disable_gradient_checkpointing(self):
+        """Disable gradient checkpointing"""
+        self.use_gradient_checkpointing = False
+        logger.info("Gradient checkpointing disabled for encoder-decoder model")
 
 def train_custom_model(args):
     """
@@ -116,6 +174,8 @@ def train_custom_model(args):
     logger.info(f"Dropout: {args.dropout}")
     logger.info(f"Log every: {args.log_every}")
     logger.info(f"Using improved preprocessor: {args.use_improved_preprocessor}")
+    logger.info(f"Gradient checkpointing: {args.gradient_checkpointing}")
+    logger.info(f"Gradient accumulation steps: {args.gradient_accumulation_steps}")
     
     # Import required modules
     try:
@@ -127,15 +187,48 @@ def train_custom_model(args):
         sys.exit(1)
     
     # Check if CUDA is available
-    if not torch.cuda.is_available():
-        logger.error("CUDA is not available. Cannot train custom model.")
-        sys.exit(1)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    if device == "cpu":
+        logger.warning("CUDA is not available. Training will be slow on CPU.")
+        if args.force_gpu:
+            logger.error("Force GPU was specified but CUDA is not available. Exiting.")
+            sys.exit(1)
+    else:
+        # Log GPU info
+        logger.info(f"Using GPU: {torch.cuda.get_device_name(0)}")
+        try:
+            vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            logger.info(f"GPU Memory: {vram_gb:.2f} GB")
+            
+            # Auto-adjust batch size based on VRAM if needed
+            if args.auto_batch_size and vram_gb < 24 and args.batch_size > 8:
+                old_batch_size = args.batch_size
+                if vram_gb < 8:
+                    args.batch_size = 2
+                elif vram_gb < 16:
+                    args.batch_size = 4
+                else:
+                    args.batch_size = 8
+                    
+                logger.info(f"Auto-adjusted batch size from {old_batch_size} to {args.batch_size} based on available VRAM")
+                
+                # Increase gradient accumulation to compensate
+                old_accum = args.gradient_accumulation_steps
+                args.gradient_accumulation_steps = max(old_accum, old_batch_size // args.batch_size)
+                logger.info(f"Auto-adjusted gradient accumulation steps from {old_accum} to {args.gradient_accumulation_steps}")
+        except Exception as e:
+            logger.warning(f"Failed to get GPU memory: {e}")
     
     # Check if CNN model exists
     if not os.path.exists(args.cnn_model_path):
         logger.error(f"CNN model not found at {args.cnn_model_path}")
         logger.error("Please run train_jarvis.sh with --model-type cnn-text first")
         sys.exit(1)
+    
+    # Clean up before loading models
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        gc.collect()
     
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
@@ -168,11 +261,13 @@ def train_custom_model(args):
         # Load tokenizer
         tokenizer = AutoTokenizer.from_pretrained(base_model_name)
         
-        # Load base model
+        # Load base model with memory optimizations
+        logger.info(f"Loading base model {base_model_name} with optimizations")
         base_model = AutoModelForCausalLM.from_pretrained(
             base_model_name,
             torch_dtype=torch.float16,
-            device_map="auto"
+            device_map="auto",
+            low_cpu_mem_usage=True
         )
         
         # Create CNN model
@@ -185,12 +280,16 @@ def train_custom_model(args):
         )
         
         # Load CNN model weights
-        cnn_model.load_state_dict(torch.load(args.cnn_model_path))
+        logger.info(f"Loading CNN model weights from {args.cnn_model_path}")
+        cnn_state_dict = torch.load(args.cnn_model_path, map_location=device)
+        cnn_model.load_state_dict(cnn_state_dict)
         cnn_model.eval()  # Set to evaluation mode
         
         logger.info("CNN model loaded successfully")
     except Exception as e:
         logger.error(f"Failed to load CNN model: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
     
     # Create custom encoder-decoder model
@@ -203,8 +302,32 @@ def train_custom_model(args):
         dropout=args.dropout
     )
     
-    # Move model to GPU
-    model = model.to(torch.device("cuda"))
+    # Enable gradient checkpointing if requested
+    if args.gradient_checkpointing:
+        model.enable_gradient_checkpointing()
+    
+    # Move model to device
+    model = model.to(device)
+    
+    # Define optimizer with weight decay
+    from torch.optim import AdamW
+    from torch.optim.lr_scheduler import CosineAnnealingLR
+    
+    # Set up optimizer with weight decay
+    optimizer = AdamW(
+        model.parameters(),
+        lr=args.learning_rate,
+        weight_decay=args.weight_decay,
+        betas=(0.9, 0.999),
+        eps=1e-8
+    )
+    
+    # Set up learning rate scheduler
+    scheduler = CosineAnnealingLR(
+        optimizer,
+        T_max=args.epochs,
+        eta_min=1e-6
+    )
     
     # Load dataset
     logger.info("Loading dataset")
@@ -326,16 +449,6 @@ def train_custom_model(args):
     # Create data loader
     data_loader = DataLoader(tensor_dataset, batch_size=args.batch_size, shuffle=True)
     
-    # Create optimizer
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=args.learning_rate,
-        weight_decay=args.weight_decay
-    )
-    
-    # Create loss function
-    criterion = nn.CrossEntropyLoss()
-    
     # Train model
     logger.info("Training model")
     model.train()
@@ -409,6 +522,10 @@ if __name__ == "__main__":
     parser.add_argument("--dropout", type=float, default=0.1, help="Dropout")
     parser.add_argument("--log-every", type=int, default=10, help="Log every N batches")
     parser.add_argument("--use-improved-preprocessor", action="store_true", help="Use improved preprocessor")
+    parser.add_argument("--gradient-checkpointing", action="store_true", help="Enable gradient checkpointing")
+    parser.add_argument("--gradient-accumulation-steps", type=int, default=1, help="Gradient accumulation steps")
+    parser.add_argument("--auto-batch-size", action="store_true", help="Auto-adjust batch size based on available VRAM")
+    parser.add_argument("--force-gpu", action="store_true", help="Force GPU even if CUDA is not available")
     args = parser.parse_args()
     
     # Train custom model

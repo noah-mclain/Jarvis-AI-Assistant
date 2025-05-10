@@ -732,7 +732,8 @@ class JarvisAI:
 
     def determine_best_dataset(self, prompt: str) -> str:
         """
-        Determine the best dataset to use for a given prompt.
+        Determine the best dataset to use for a given prompt using more sophisticated 
+        heuristics that analyze content type, complexity, and intent.
 
         Args:
             prompt: User's input prompt
@@ -740,26 +741,95 @@ class JarvisAI:
         Returns:
             Name of the best dataset to use
         """
-        # Simple keyword matching for dataset selection
-        prompt = prompt.lower()
+        # Convert to lowercase for case-insensitive matching
+        prompt_lower = prompt.lower()
 
-        # Check for code-related queries
-        code_keywords = ["code", "function", "program", "script", "class", "method", "algorithm"]
-        if any(keyword in prompt for keyword in code_keywords):
+        # Check for code-related queries with more specific patterns
+        code_patterns = [
+            "code", "function", "program", "script", "class", "method", "algorithm",
+            "implementation", "syntax", "compile", "runtime", "function", "variable",
+            "import", "module", "library", "api", "interface", "debug", "exception",
+            "error", "bug", "fix", "python", "javascript", "java", "c++", "typescript",
+            "ruby", "go", "rust", "sql", "html", "css", "react", "node", "django", "flask"
+        ]
+        if any(pattern in prompt_lower for pattern in code_patterns):
+            # For highly technical code queries, DeepSeek is better
+            highly_technical = any(x in prompt_lower for x in [
+                "recursion", "optimization", "complexity", "algorithm", "data structure",
+                "binary", "tree", "hash", "graph", "dynamic programming", "concurrency"
+            ])
+            if highly_technical:
+                return "deepseek" if "deepseek" in self.AVAILABLE_DATASETS else "pile"
             return "pile"  # The Pile has more code examples
 
-        # Check for conversation and instruction following
-        conversation_keywords = ["explain", "how to", "help me", "what is", "can you"]
-        if any(keyword in prompt for keyword in conversation_keywords):
-            return "openassistant"  # OpenAssistant is better for conversational tasks
+        # Check for creative writing tasks
+        creative_patterns = [
+            "write a story", "creative", "fiction", "novel", "poem", "poetry", 
+            "story about", "narrative", "tale", "write me a", "generate a story",
+            "fantasy", "sci-fi", "science fiction", "adventure", "character", "plot"
+        ]
+        if any(pattern in prompt_lower for pattern in creative_patterns):
+            return "openassistant"  # OpenAssistant has more creative content
+
+        # Check for conversation and instruction following with improved pattern matching
+        conversation_patterns = [
+            "explain", "how to", "help me", "what is", "can you", "please",
+            "tell me", "describe", "why is", "why does", "how does", "is it possible",
+            "I need help", "I want to", "I'm trying to", "could you", "would you"
+        ]
+        if any(pattern in prompt_lower for pattern in conversation_patterns):
+            # For more complex explanations, OpenAssistant tends to be better
+            complex_explanation = any(x in prompt_lower for x in [
+                "concept", "theory", "philosophy", "principle", "detailed", "in depth",
+                "elaborate", "thorough", "comprehensive", "analyze", "compare", "contrast"
+            ])
+            return "openassistant"  # Better for conversational tasks
 
         # Check for teaching-related queries
-        teaching_keywords = ["teach", "learn", "understand", "concept", "example", "tutorial"]
-        if any(keyword in prompt for keyword in teaching_keywords):
+        teaching_patterns = [
+            "teach", "learn", "understand", "concept", "example", "tutorial",
+            "guide", "lesson", "course", "curriculum", "education", "training",
+            "explain step by step", "walk me through", "how do I learn", "beginner"
+        ]
+        if any(pattern in prompt_lower for pattern in teaching_patterns):
             return "gpteacher"  # GPTeacher is designed for educational content
 
         # Default to OpenAssistant for general queries
         return "openassistant"
+
+    def _enhance_prompt(self, prompt: str) -> str:
+        """
+        Enhance the prompt with additional context or modifications
+        to improve response quality.
+        
+        Args:
+            prompt: Original user prompt
+            
+        Returns:
+            Enhanced prompt
+        """
+        try:
+            # Try to import prompt_enhancer if available
+            from .prompt_enhancer import enhance_prompt
+            return enhance_prompt(prompt)
+        except ImportError:
+            # If prompt_enhancer module isn't available, use simple enhancements
+            
+            # For very short prompts, add a request for elaboration
+            if len(prompt.split()) < 3:
+                prompt = f"{prompt} Please provide a detailed and helpful response."
+                
+            # For prompts that seem to request creative content, encourage creativity
+            creative_indicators = ["story", "creative", "imagine", "fiction", "poem", "writing"]
+            if any(indicator in prompt.lower() for indicator in creative_indicators):
+                prompt += " Be creative and engaging in your response."
+                
+            # For technical questions, encourage precision and examples
+            technical_indicators = ["code", "function", "program", "how to", "explain"]
+            if any(indicator in prompt.lower() for indicator in technical_indicators):
+                prompt += " Please be precise and include examples where appropriate."
+                
+            return prompt
 
     def generate_response(
         self,
@@ -767,10 +837,14 @@ class JarvisAI:
         temperature: float = 0.7,
         max_length: int = None,
         dataset: Optional[str] = None,
-        from_path: Optional[str] = None
+        from_path: Optional[str] = None,
+        enhance_prompt: bool = True,
+        remember_conversation: bool = True,
+        extract_intent: bool = True
     ) -> str:
         """
-        Generate a response to a prompt.
+        Generate a response to a prompt with improved context management
+        and optional prompt enhancement.
 
         Args:
             prompt: User's input prompt
@@ -778,10 +852,47 @@ class JarvisAI:
             max_length: Maximum length of the generated response
             dataset: Dataset to use (will determine automatically if None)
             from_path: Path to a model to use instead of a dataset
+            enhance_prompt: Whether to enhance the prompt for better results
+            remember_conversation: Whether to add this exchange to conversation memory
+            extract_intent: Whether to extract and remember the user's intent
 
         Returns:
             Generated response
         """
+        start_time = time.time()
+        logger.info(f"Generating response for prompt: {prompt[:50]}{'...' if len(prompt) > 50 else ''}")
+        
+        # Extract and save user intent if enabled
+        if extract_intent and remember_conversation:
+            try:
+                # Simple intent extraction - would be more sophisticated in production
+                intent_keywords = {
+                    "question": ["what", "how", "why", "when", "where", "who", "?"],
+                    "request": ["can you", "could you", "please", "help me", "I need"],
+                    "command": ["do this", "make", "create", "find", "search", "show me"],
+                    "conversation": ["let's talk", "chat", "discuss", "tell me about"],
+                    "creative": ["write", "story", "poem", "imagine", "creative"]
+                }
+                
+                intent = "general"  # default intent
+                for intent_type, keywords in intent_keywords.items():
+                    if any(keyword in prompt.lower() for keyword in keywords):
+                        intent = intent_type
+                        break
+                        
+                # Save to conversation memory preferences
+                self.memory.update_preferences({"last_intent": intent})
+                logger.info(f"Extracted user intent: {intent}")
+            except Exception as e:
+                logger.warning(f"Failed to extract intent: {e}")
+        
+        # Enhance prompt if enabled
+        if enhance_prompt:
+            original_prompt = prompt
+            prompt = self._enhance_prompt(prompt)
+            if prompt != original_prompt:
+                logger.info("Prompt enhanced for better response quality")
+        
         # Set default max_length if not provided
         if max_length is None:
             max_length = self.max_new_tokens
@@ -803,44 +914,107 @@ class JarvisAI:
 
         logger.info(f"Generating response using {model_type} model")
 
-        # Format prompt with conversation history if it's a deepseek model
-        if from_path and "deepseek" in str(from_path):
+        # Format prompt based on model and include conversation history
+        if from_path and "deepseek" in str(from_path).lower():
             context = self.memory.get_context(format_style="deepseek")
             full_prompt = f"{context}USER: {prompt}\nASSISTANT:"
-        elif isinstance(model_type, str) and "deepseek" in model_type:
+        elif isinstance(model_type, str) and "deepseek" in model_type.lower():
             context = self.memory.get_context(format_style="deepseek")
             full_prompt = f"{context}USER: {prompt}\nASSISTANT:"
+        elif isinstance(model_type, str) and "flan" in model_type.lower():
+            # Special format for FLAN models
+            context = self.memory.get_context(format_style="flan")
+            full_prompt = f"{context}\nQ: {prompt}\nA:"
         else:
             # Standard format for other models
             context = self.memory.get_context()
             full_prompt = f"{context}User: {prompt}\nJarvis:"
 
-        # Tokenize prompt
-        inputs = tokenizer(full_prompt, return_tensors="pt")
-        if self.device == "cuda":
-            inputs = {k: v.to("cuda") for k, v in inputs.items()}
+        # Tokenize prompt with proper error handling
+        try:
+            inputs = tokenizer(full_prompt, return_tensors="pt", truncation=True, 
+                              max_length=tokenizer.model_max_length - max_length if hasattr(tokenizer, "model_max_length") else 1024)
+            if self.device == "cuda":
+                inputs = {k: v.to("cuda") for k, v in inputs.items()}
+        except Exception as e:
+            logger.error(f"Error tokenizing prompt: {e}")
+            # Fall back to a simpler prompt structure
+            simplified_prompt = f"User: {prompt}\nJarvis:"
+            inputs = tokenizer(simplified_prompt, return_tensors="pt")
+            if self.device == "cuda":
+                inputs = {k: v.to("cuda") for k, v in inputs.items()}
 
-        # Generate text with A100 optimizations
-        with torch.no_grad():
-            outputs = model.generate(
-                **inputs,
-                max_new_tokens=max_length,
-                do_sample=True,
-                temperature=temperature,
-                top_p=0.95,
-                top_k=40,
-                repetition_penalty=1.1,
-                pad_token_id=tokenizer.eos_token_id
-            )
+        # Clear CUDA cache before generation if needed
+        if self.device == "cuda" and hasattr(torch.cuda, "empty_cache"):
+            torch.cuda.empty_cache()
 
-        # Decode the generated text
-        generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        # Generate text with optimizations
+        try:
+            with torch.no_grad():
+                # Configure generation parameters
+                generation_config = {
+                    "max_new_tokens": max_length,
+                    "do_sample": True,
+                    "temperature": temperature,
+                    "top_p": 0.95,
+                    "top_k": 40,
+                    "repetition_penalty": 1.1,
+                    "pad_token_id": tokenizer.eos_token_id if hasattr(tokenizer, "eos_token_id") else tokenizer.pad_token_id
+                }
+                
+                # Add no_repeat_ngram_size for longer outputs to avoid repetition
+                if max_length > 100:
+                    generation_config["no_repeat_ngram_size"] = 3
+                
+                outputs = model.generate(
+                    **inputs,
+                    **generation_config
+                )
+
+            # Decode the generated text
+            generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        except RuntimeError as e:
+            if "CUDA out of memory" in str(e):
+                logger.error("CUDA out of memory during generation, attempting fallback...")
+                # Clear cache and retry with smaller parameters
+                if self.device == "cuda" and hasattr(torch.cuda, "empty_cache"):
+                    torch.cuda.empty_cache()
+                
+                # Retry with reduced parameters
+                outputs = model.generate(
+                    **inputs,
+                    max_new_tokens=min(max_length, 200),  # Reduce max tokens
+                    do_sample=True,
+                    temperature=temperature,
+                    top_p=0.95,
+                    pad_token_id=tokenizer.eos_token_id if hasattr(tokenizer, "eos_token_id") else tokenizer.pad_token_id
+                )
+                generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+            else:
+                logger.error(f"Error during generation: {e}")
+                return f"I apologize, but I encountered an error while generating a response. Error: {str(e)}"
 
         # Extract only the model's response (after the prompt)
-        response = generated_text[len(full_prompt):].strip()
+        if "USER:" in full_prompt and "ASSISTANT:" in full_prompt:
+            # Handle DeepSeek format
+            response = generated_text.split("ASSISTANT:", 1)[-1].strip()
+        elif "Q:" in full_prompt and "A:" in full_prompt:
+            # Handle FLAN format
+            response = generated_text.split("A:", 1)[-1].strip()
+        elif "User:" in full_prompt and "Jarvis:" in full_prompt:
+            # Handle standard format
+            response = generated_text.split("Jarvis:", 1)[-1].strip()
+        else:
+            # Fallback extraction - take everything after the original prompt
+            response = generated_text[len(full_prompt):].strip()
 
-        # Save to conversation memory
-        self.memory.add_exchange(prompt, response)
+        # Save to conversation memory if enabled
+        if remember_conversation:
+            self.memory.add_exchange(prompt, response)
+
+        # Performance logging
+        end_time = time.time()
+        logger.info(f"Response generated in {end_time - start_time:.2f} seconds")
 
         return response
 
