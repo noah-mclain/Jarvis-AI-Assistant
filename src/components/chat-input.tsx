@@ -72,8 +72,10 @@ export function ChatInput({
    * @param {string} defaultPrompt - The default prompt for the selected model
    */
   const handleModelSelect = (modelType: string, defaultPrompt: string) => {
-    // Update the input field with the default prompt
-    setInput(defaultPrompt);
+
+
+    // Update the input field with the default prompt + input
+    setInput(input);
 
     // Focus the textarea after updating the input
     if (textareaRef.current) {

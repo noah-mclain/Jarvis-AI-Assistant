@@ -61,6 +61,7 @@ export function ModelButtons({ onSelectModel }: ModelButtonsProps) {
     const defaultPrompt =
       defaultPrompts[modelType as keyof typeof defaultPrompts];
 
+    
     // Call the onSelectModel callback with the model type and default prompt
     onSelectModel(modelType, defaultPrompt);
 

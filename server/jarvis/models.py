@@ -128,8 +128,6 @@ class SpeechToTextHandler(ModelHandler):
             return "Audio failed. Please check the logs for details."
 
 
-
-
 class CodeGenerationHandler(ModelHandler):
     """Handler for code generation functionality"""
 
@@ -164,7 +162,6 @@ class CodeGenerationHandler(ModelHandler):
 
         # For now, just return a placeholder response
         return f"Code generation model would process: {query}\n\n```python\n# Example generated code\ndef hello_world():\n    print('Hello, world!')\n\nhello_world()\n```"
-
 
 
 class TextGenerationHandler(ModelHandler):
@@ -286,6 +283,7 @@ class TextGenerationHandler(ModelHandler):
         except Exception as e:
             logger.error(f"API request failed: {e}")
             return f"Error generating response: {str(e)}"
+
 
 class NLPHandler(ModelHandler):
     """Handler for natural language processing functionality"""
@@ -413,7 +411,7 @@ class ImageGenerationHandler(ModelHandler):
             "guidance_scale": 9.0,
             "seed": 12345
         }
-        response = requests.post("https://6b1c-35-240-193-205.ngrok-free.app/generate", json=json_query)
+        response = requests.post("https://f20d-34-125-240-149.ngrok-free.app/generate", json=json_query)
 
         if response.status_code == 200:
 

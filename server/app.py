@@ -300,6 +300,50 @@ def execute_command():
         logger.error(f"Error executing command: {e}")
         return jsonify({"error": "Failed to execute command"}), 500
 
+@app.route('/api/image/', methods=['POST'])
+def generate_image():
+    """
+    API endpoint to generate an image based on a prompt.
+
+    This endpoint:
+    1. Receives a prompt from the frontend
+    2. Processes the prompt through the Jarvis AI assistant
+    3. Returns the generated image
+
+    Request Body:
+        JSON object with 'prompt' field containing the image generation prompt
+
+    Returns:
+        JSON response with the generated image or error message
+    """
+    try:
+        # Get the prompt from the request body
+        data = request.json
+        prompt = data.get('prompt', '')
+
+        # Validate that the prompt is not empty
+        if not prompt.strip():
+            return jsonify({"error": "Prompt cannot be empty"}), 400
+
+        # Process the prompt through the Jarvis AI assistant
+        try:
+            # Use the same get_jarvis_response function that handles messages
+            response_content = get_jarvis_response(prompt)
+        except Exception as e:
+            # Handle any errors in AI processing with a fallback response
+            logger.error(f"Error generating image: {e}")
+            response_content = "I'm sorry, I encountered an error generating your image. Please try again."
+
+        # Return the response
+        return jsonify({
+            "success": True,
+            "result": response_content
+        })
+    except Exception as e:
+        # Log and return any errors that occur
+        logger.error(f"Error generating image: {e}")
+        return jsonify({"error": "Failed to generate image"}), 500
+
 @app.route('/api/speech-to-text', methods=['POST'])
 def process_speech():
     """

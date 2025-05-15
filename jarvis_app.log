@@ -2900,3 +2900,185 @@ content
 2025-05-16 01:00:27,083 - jarvis_app - INFO - Data saved successfully
 2025-05-16 01:00:27,084 - jarvis_app - INFO - Processed message in chat new-chat-1747345795
 2025-05-16 01:00:45,424 - jarvis_desktop - INFO - Application window closed
+2025-05-16 01:22:22,347 - jarvis_app - INFO - Using static folder: D:\Jarvis\Jarvis-AI-Assistant\server\static
+2025-05-16 01:22:22,349 - jarvis_app - INFO - Using data directory: D:\Jarvis\Jarvis-AI-Assistant\data
+2025-05-16 01:22:22,350 - jarvis_app - INFO - Chats file: D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-16 01:22:22,351 - jarvis_app - INFO - Messages file: D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 01:22:38,973 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: D:\Jarvis\Jarvis-AI-Assistant\data\models
+2025-05-16 01:22:38,974 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-16 01:22:38,974 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-16 01:22:38,975 - jarvis_app - INFO - Loaded 30 chats from D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-16 01:22:38,978 - jarvis_app - INFO - Loaded messages for 23 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 01:22:39,235 - jarvis_desktop - INFO - Application path: D:\Jarvis\Jarvis-AI-Assistant
+2025-05-16 01:22:39,236 - jarvis_desktop - INFO - Operating system: nt - win32
+2025-05-16 01:22:39,237 - jarvis_desktop - INFO - Setting up for Windows environment
+2025-05-16 01:22:39,238 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-16 01:22:39,239 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-16 01:22:39,239 - jarvis_desktop - INFO - Using 4 worker threads (detected 4 CPU cores)
+2025-05-16 01:22:39,240 - jarvis_desktop - INFO - Using Windows-optimized server configuration
+2025-05-16 01:22:39,246 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-16 01:22:39,747 - jarvis_desktop - INFO - Server is ready
+2025-05-16 01:22:40,762 - jarvis_desktop - INFO - Found index.html at: D:\Jarvis\Jarvis-AI-Assistant\dist\index.html
+2025-05-16 01:22:40,763 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-16 01:22:40,764 - jarvis_desktop - INFO - Using Windows-optimized window configuration
+2025-05-16 01:22:40,768 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-16 01:22:40,769 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-16 01:22:42,088 - jarvis_desktop - INFO - Application window shown
+2025-05-16 01:22:42,785 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-16 01:22:42,990 - jarvis_app - INFO - Serving path: 
+2025-05-16 01:22:42,994 - jarvis_app - INFO - Serving index.html for root path
+2025-05-16 01:22:43,185 - jarvis_app - INFO - Serving path: assets/index.CfYRZsIu.js
+2025-05-16 01:22:43,185 - jarvis_app - INFO - Serving path: assets/index.Czty9hQT.css
+2025-05-16 01:22:43,185 - jarvis_app - INFO - Serving asset: index.CfYRZsIu.js from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-16 01:22:43,186 - jarvis_app - INFO - Serving asset: index.Czty9hQT.css from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-16 01:22:43,496 - jarvis_desktop - INFO - Application window loaded
+2025-05-16 01:22:43,512 - jarvis_desktop - INFO - Setting up Windows-optimized offline mode
+2025-05-16 01:22:43,582 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-16 01:22:43,612 - jarvis_app - INFO - Serving path: favicon.ico
+2025-05-16 01:22:43,617 - jarvis_app - INFO - Serving file: favicon.ico
+2025-05-16 01:22:56,053 - jarvis_app - INFO - Sending query to Jarvis AI: Generate an image of: ...
+2025-05-16 01:22:56,053 - jarvis_assistant - INFO - Processing query: Generate an image of: 
+2025-05-16 01:22:56,054 - jarvis_assistant - INFO - Using specified model type: generativeImage
+2025-05-16 01:22:56,055 - jarvis_assistant - INFO - Using model handler: generativeImage
+2025-05-16 01:27:18,992 - jarvis_app - INFO - Received response from Jarvis AI: Image generated successfully and saved as 'generat...
+2025-05-16 01:27:18,998 - jarvis_app - INFO - Data saved successfully
+2025-05-16 01:27:19,003 - jarvis_app - INFO - Processed message in chat new-chat-1747346378
+2025-05-16 01:29:36,072 - jarvis_desktop - INFO - Application window closed
+2025-05-16 01:31:37,157 - jarvis_app - INFO - Using static folder: D:\Jarvis\Jarvis-AI-Assistant\server\static
+2025-05-16 01:31:37,158 - jarvis_app - INFO - Using data directory: D:\Jarvis\Jarvis-AI-Assistant\data
+2025-05-16 01:31:37,158 - jarvis_app - INFO - Chats file: D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-16 01:31:37,159 - jarvis_app - INFO - Messages file: D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 01:32:01,728 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: D:\Jarvis\Jarvis-AI-Assistant\data\models
+2025-05-16 01:32:01,729 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-16 01:32:01,730 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-16 01:32:01,754 - jarvis_app - INFO - Loaded 30 chats from D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-16 01:32:01,758 - jarvis_app - INFO - Loaded messages for 23 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 01:32:02,068 - jarvis_desktop - INFO - Application path: D:\Jarvis\Jarvis-AI-Assistant
+2025-05-16 01:32:02,069 - jarvis_desktop - INFO - Operating system: nt - win32
+2025-05-16 01:32:02,070 - jarvis_desktop - INFO - Setting up for Windows environment
+2025-05-16 01:32:02,072 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-16 01:32:02,072 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-16 01:32:02,073 - jarvis_desktop - INFO - Using 4 worker threads (detected 4 CPU cores)
+2025-05-16 01:32:02,073 - jarvis_desktop - INFO - Using Windows-optimized server configuration
+2025-05-16 01:32:02,082 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-16 01:32:02,576 - jarvis_desktop - INFO - Server is ready
+2025-05-16 01:32:03,581 - jarvis_desktop - INFO - Found index.html at: D:\Jarvis\Jarvis-AI-Assistant\dist\index.html
+2025-05-16 01:32:03,583 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-16 01:32:03,584 - jarvis_desktop - INFO - Using Windows-optimized window configuration
+2025-05-16 01:32:03,587 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-16 01:32:03,590 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-16 01:32:05,088 - jarvis_desktop - INFO - Application window shown
+2025-05-16 01:32:05,623 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-16 01:32:05,837 - jarvis_app - INFO - Serving path: 
+2025-05-16 01:32:05,839 - jarvis_app - INFO - Serving index.html for root path
+2025-05-16 01:32:06,000 - jarvis_app - INFO - Serving path: assets/index.CfYRZsIu.js
+2025-05-16 01:32:06,001 - jarvis_app - INFO - Serving asset: index.CfYRZsIu.js from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-16 01:32:06,002 - jarvis_app - INFO - Serving path: assets/index.Czty9hQT.css
+2025-05-16 01:32:06,003 - jarvis_app - INFO - Serving asset: index.Czty9hQT.css from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-16 01:32:06,394 - jarvis_desktop - INFO - Application window loaded
+2025-05-16 01:32:06,406 - jarvis_desktop - INFO - Setting up Windows-optimized offline mode
+2025-05-16 01:32:06,445 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-16 01:32:06,492 - jarvis_app - INFO - Serving path: favicon.ico
+2025-05-16 01:32:06,499 - jarvis_app - INFO - Serving file: favicon.ico
+2025-05-16 01:32:06,611 - jarvis_app - INFO - Data saved successfully
+2025-05-16 01:32:06,612 - jarvis_app - INFO - Created new chat: new-chat-1747348326
+2025-05-16 01:32:50,309 - jarvis_app - INFO - Sending query to Jarvis AI: Generate an image of: ...
+2025-05-16 01:32:50,310 - jarvis_assistant - INFO - Processing query: Generate an image of: 
+2025-05-16 01:32:50,311 - jarvis_assistant - INFO - Using specified model type: generativeImage
+2025-05-16 01:32:50,311 - jarvis_assistant - INFO - Using model handler: generativeImage
+2025-05-16 01:36:53,259 - jarvis_app - INFO - Received response from Jarvis AI: Image generated successfully and saved as 'generat...
+2025-05-16 01:36:53,265 - jarvis_app - INFO - Data saved successfully
+2025-05-16 01:36:53,265 - jarvis_app - INFO - Processed message in chat new-chat-1747348326
+2025-05-16 02:10:47,091 - jarvis_desktop - INFO - Application window closed
+2025-05-16 02:12:17,996 - jarvis_app - INFO - Using static folder: D:\Jarvis\Jarvis-AI-Assistant\server\static
+2025-05-16 02:12:17,997 - jarvis_app - INFO - Using data directory: D:\Jarvis\Jarvis-AI-Assistant\data
+2025-05-16 02:12:17,997 - jarvis_app - INFO - Chats file: D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-16 02:12:17,998 - jarvis_app - INFO - Messages file: D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 02:12:40,060 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: D:\Jarvis\Jarvis-AI-Assistant\data\models
+2025-05-16 02:12:40,060 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-16 02:12:40,061 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-16 02:12:40,063 - jarvis_app - INFO - Loaded 31 chats from D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-16 02:12:40,066 - jarvis_app - INFO - Loaded messages for 24 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 02:12:40,327 - jarvis_desktop - INFO - Application path: D:\Jarvis\Jarvis-AI-Assistant
+2025-05-16 02:12:40,328 - jarvis_desktop - INFO - Operating system: nt - win32
+2025-05-16 02:12:40,328 - jarvis_desktop - INFO - Setting up for Windows environment
+2025-05-16 02:12:40,330 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-16 02:12:40,330 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-16 02:12:40,331 - jarvis_desktop - INFO - Using 4 worker threads (detected 4 CPU cores)
+2025-05-16 02:12:40,332 - jarvis_desktop - INFO - Using Windows-optimized server configuration
+2025-05-16 02:12:40,337 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-16 02:12:40,840 - jarvis_desktop - INFO - Server is ready
+2025-05-16 02:12:41,856 - jarvis_desktop - INFO - Found index.html at: D:\Jarvis\Jarvis-AI-Assistant\dist\index.html
+2025-05-16 02:12:41,858 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-16 02:12:41,859 - jarvis_desktop - INFO - Using Windows-optimized window configuration
+2025-05-16 02:12:41,865 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-16 02:12:41,867 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-16 02:12:43,271 - jarvis_desktop - INFO - Application window shown
+2025-05-16 02:12:43,872 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-16 02:12:44,474 - jarvis_app - INFO - Serving path: 
+2025-05-16 02:12:44,476 - jarvis_app - INFO - Serving index.html for root path
+2025-05-16 02:12:44,981 - jarvis_app - INFO - Serving path: assets/index.DSlvtjNj.js
+2025-05-16 02:12:44,983 - jarvis_app - INFO - Serving asset: index.DSlvtjNj.js from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-16 02:12:44,983 - jarvis_app - INFO - Serving path: assets/index.Czty9hQT.css
+2025-05-16 02:12:44,985 - jarvis_app - INFO - Serving asset: index.Czty9hQT.css from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-16 02:12:45,358 - jarvis_desktop - INFO - Application window loaded
+2025-05-16 02:12:45,372 - jarvis_desktop - INFO - Setting up Windows-optimized offline mode
+2025-05-16 02:12:45,444 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-16 02:12:45,464 - jarvis_app - INFO - Serving path: favicon.ico
+2025-05-16 02:12:45,475 - jarvis_app - INFO - Serving file: favicon.ico
+2025-05-16 02:12:45,567 - jarvis_app - INFO - Data saved successfully
+2025-05-16 02:12:45,569 - jarvis_app - INFO - Created new chat: new-chat-1747350765
+2025-05-16 02:14:17,765 - jarvis_app - INFO - Sending query to Jarvis AI: Generate an image of: skscraper...
+2025-05-16 02:14:17,795 - jarvis_assistant - INFO - Processing query: Generate an image of: skscraper
+2025-05-16 02:14:17,931 - jarvis_assistant - INFO - Using specified model type: generativeImage
+2025-05-16 02:14:17,933 - jarvis_assistant - INFO - Using model handler: generativeImage
+2025-05-16 02:18:34,632 - jarvis_app - INFO - Received response from Jarvis AI: Image generated successfully and saved as 'generat...
+2025-05-16 02:18:34,637 - jarvis_app - INFO - Data saved successfully
+2025-05-16 02:18:34,637 - jarvis_app - INFO - Processed message in chat new-chat-1747350765
+2025-05-16 02:18:52,007 - jarvis_desktop - INFO - Application window closed
+2025-05-16 02:20:44,049 - jarvis_app - INFO - Using static folder: D:\Jarvis\Jarvis-AI-Assistant\server\static
+2025-05-16 02:20:44,050 - jarvis_app - INFO - Using data directory: D:\Jarvis\Jarvis-AI-Assistant\data
+2025-05-16 02:20:44,051 - jarvis_app - INFO - Chats file: D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-16 02:20:44,051 - jarvis_app - INFO - Messages file: D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 02:21:05,619 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: D:\Jarvis\Jarvis-AI-Assistant\data\models
+2025-05-16 02:21:05,620 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-16 02:21:05,620 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-16 02:21:05,642 - jarvis_app - INFO - Loaded 32 chats from D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-16 02:21:05,647 - jarvis_app - INFO - Loaded messages for 25 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 02:21:05,916 - jarvis_desktop - INFO - Application path: D:\Jarvis\Jarvis-AI-Assistant
+2025-05-16 02:21:05,916 - jarvis_desktop - INFO - Operating system: nt - win32
+2025-05-16 02:21:05,916 - jarvis_desktop - INFO - Setting up for Windows environment
+2025-05-16 02:21:05,918 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-16 02:21:05,918 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-16 02:21:05,920 - jarvis_desktop - INFO - Using 4 worker threads (detected 4 CPU cores)
+2025-05-16 02:21:05,920 - jarvis_desktop - INFO - Using Windows-optimized server configuration
+2025-05-16 02:21:05,924 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-16 02:21:06,433 - jarvis_desktop - INFO - Server is ready
+2025-05-16 02:21:07,448 - jarvis_desktop - INFO - Found index.html at: D:\Jarvis\Jarvis-AI-Assistant\dist\index.html
+2025-05-16 02:21:07,449 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-16 02:21:07,451 - jarvis_desktop - INFO - Using Windows-optimized window configuration
+2025-05-16 02:21:07,455 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-16 02:21:07,456 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-16 02:21:08,876 - jarvis_desktop - INFO - Application window shown
+2025-05-16 02:21:09,459 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-16 02:21:10,175 - jarvis_app - INFO - Serving path: 
+2025-05-16 02:21:10,177 - jarvis_app - INFO - Serving index.html for root path
+2025-05-16 02:21:10,488 - jarvis_app - INFO - Serving path: assets/index.Bw8yzX9l.js
+2025-05-16 02:21:10,489 - jarvis_app - INFO - Serving path: assets/index.Czty9hQT.css
+2025-05-16 02:21:10,489 - jarvis_app - INFO - Serving asset: index.Bw8yzX9l.js from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-16 02:21:10,490 - jarvis_app - INFO - Serving asset: index.Czty9hQT.css from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-16 02:21:10,837 - jarvis_desktop - INFO - Application window loaded
+2025-05-16 02:21:10,853 - jarvis_desktop - INFO - Setting up Windows-optimized offline mode
+2025-05-16 02:21:10,936 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-16 02:21:10,969 - jarvis_app - INFO - Serving path: favicon.ico
+2025-05-16 02:21:10,980 - jarvis_app - INFO - Serving file: favicon.ico
+2025-05-16 02:21:11,063 - jarvis_app - INFO - Data saved successfully
+2025-05-16 02:21:11,064 - jarvis_app - INFO - Created new chat: new-chat-1747351271
+2025-05-16 02:21:26,866 - jarvis_app - INFO - Sending query to Jarvis AI: skyscraper...
+2025-05-16 02:21:26,866 - jarvis_assistant - INFO - Processing query: skyscraper
+2025-05-16 02:21:26,867 - jarvis_assistant - INFO - Using specified model type: generativeImage
+2025-05-16 02:21:26,868 - jarvis_assistant - INFO - Using model handler: generativeImage
+2025-05-16 02:25:58,528 - jarvis_app - INFO - Received response from Jarvis AI: Image generated successfully and saved as 'generat...
+2025-05-16 02:25:58,535 - jarvis_app - INFO - Data saved successfully
+2025-05-16 02:25:58,535 - jarvis_app - INFO - Processed message in chat new-chat-1747351271
+2025-05-16 02:26:03,015 - jarvis_desktop - INFO - Application window closed
