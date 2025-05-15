@@ -228,6 +228,7 @@ def save_data():
 
     The data is saved with indentation for better readability if manually inspected.
     """
+    global chats, messages
     try:
         # Save chats data to JSON file
         with open(chats_file, 'w') as f:

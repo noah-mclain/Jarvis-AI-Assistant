@@ -19,7 +19,9 @@ License: MIT
 import os
 import logging
 from typing import Optional, Dict, Any
+import json
 
+global messages
 # Note: The actual model implementations will need to import the necessary libraries
 # such as torch, transformers, etc. These imports are left as TODOs for now.
 
@@ -164,24 +166,92 @@ class CodeGenerationHandler(ModelHandler):
         return f"Code generation model would process: {query}\n\n```python\n# Example generated code\ndef hello_world():\n    print('Hello, world!')\n\nhello_world()\n```"
 
 
+
 class TextGenerationHandler(ModelHandler):
     """Handler for text generation/conversation functionality"""
+    
+    def __init__(self, model_path: Optional[str] = None):
+        """Initialize with messages as instance variable"""
+        super().__init__(model_path)
+        self.messages = None  # Initialize messages as an instance variable
+        self.client = None  # Initialize client as an instance variable
+        self.chat = None  # Initialize chat as an instance variable
 
     def load_model(self) -> bool:
         """Load the text generation model"""
         try:
-            logger.info("Loading text generation model (FLAN-UL2)...")
+            from pathlib import Path
 
-            # TODO: Implement actual model loading
-            # This should import and initialize the TextGenerator from the generative_ai_module
-            # Example:
-            # from src.generative_ai_module.text_generator import TextGenerator, CNNTextGenerator
-            # Try to use CNNTextGenerator first, then fall back to TextGenerator if needed
-            # self.generator = CNNTextGenerator(model_name_or_path="google/flan-ul2-20b", force_gpu=True, load_in_4bit=True)
-            # or
-            # self.generator = TextGenerator(force_gpu=True)
+            # Get the directory of the current script
+            current_dir = Path(__file__).parent.resolve()
 
-            # For now, just simulate successful loading
+            # Navigate up two parents, then into 'data/messages.json'
+            messages_file = current_dir.parent.parent / 'data' / 'messages.json'
+            logger.info(f"Attempting to load messages from {messages_file}")
+            
+            try:
+                with open(messages_file, 'r') as f:
+                    self.messages = json.load(f)  # Store messages as instance variable
+                logger.info(f"Loaded messages for {len(self.messages)} chats from {messages_file}")
+            except FileNotFoundError:
+                logger.warning(f"Messages file not found at {messages_file}. Creating empty messages dictionary.")
+                self.messages = {}
+            except json.JSONDecodeError:
+                logger.warning(f"Invalid JSON in messages file at {messages_file}. Creating empty messages dictionary.")
+                self.messages = {}
+
+            # Initialize the Google Generative AI client
+            try:
+                from google import genai
+                self.client = genai.Client(api_key="AIzaSyB7qZ_-4axHQElsgZjqIXfWKSsVBL3BXdA")
+                logger.info("Successfully initialized Google Generative AI client")
+            except ImportError:
+                logger.error("Google Generative AI package not installed. Please install with: pip install google-generativeai")
+                return False
+            except Exception as e:
+                logger.error(f"Failed to initialize Google Generative AI client: {e}")
+                return False
+            
+            # Create a new chat if none exists
+            try:
+                # Extract messages for the active chat
+                chat_messages = []
+                
+                # If self.messages is a dictionary with chat IDs as keys
+                if isinstance(self.messages, dict) and self.messages:
+                    # Get the most recent chat
+                    recent_chat_id = list(self.messages.keys())[-1]
+                    chat_messages = self.messages[recent_chat_id]
+                    logger.info(f"Using messages from chat ID: {recent_chat_id}")
+                # If self.messages is directly a list of messages (flat structure)
+                elif isinstance(self.messages, list):
+                    chat_messages = self.messages
+                
+                # Create formatted history for the conversation
+                formatted_history = []
+                if chat_messages:
+                    # If messages have role/content format
+                    if isinstance(chat_messages[0], dict) and 'role' in chat_messages[0]:
+                        formatted_history = [
+                            {"role": msg["role"], "content": msg["content"]}
+                            for msg in chat_messages if "role" in msg and "content" in msg
+                        ]
+                        logger.info(f"Formatted {len(formatted_history)} messages for chat history")
+                
+                # Limit the context to avoid exceeding token limits
+                context_window = formatted_history[-10:] if formatted_history else []  
+
+                # First create a model instance
+                model = self.client.GenerativeModel(model_name="gemini-2.0-flash")
+
+                # Then start a chat with that model
+                self.chat = model.start_chat(history=context_window)
+                
+                logger.info("Successfully created new chat session")
+            except Exception as e:
+                logger.error(f"Chat creation failed: {e}")
+                return False
+
             self.is_initialized = True
             logger.info("Text generation model loaded successfully")
             return True
@@ -191,17 +261,24 @@ class TextGenerationHandler(ModelHandler):
 
     def process_query(self, query: str) -> str:
         """Process a text generation query"""
-        if not self.is_initialized and not self.load_model():
-            return "Text generation model could not be loaded. Please check the logs for details."
-
-        # TODO: Implement actual text generation
-        # This should use the FLAN-UL2 model to generate text based on the query
-        # Example:
-        # return self.generator.generate(initial_str=query, pred_len=300, temperature=0.7)
-
-        # For now, just return a placeholder response
-        return f"Text generation model would process: {query}\n\nThis is a simulated response from the FLAN-UL2 text generation model. In a real implementation, this would use the loaded model to generate a relevant response based on the query."
-
+        if not self.is_initialized:
+            success = self.load_model()
+            if not success:
+                return "Text generation model could not be loaded. Please check the logs for details."
+        
+        # Send the latest user message
+        try:
+            if self.chat is None:
+                logger.error("Chat session is None. Attempting to reload model.")
+                success = self.load_model()
+                if not success or self.chat is None:
+                    return "Failed to create chat session. Please check the logs for details."
+            
+            response = self.chat.send_message(query)
+            return response.text
+        except Exception as e:
+            logger.error(f"API request failed: {e}")
+            return f"Error generating response: {str(e)}"
 
 class NLPHandler(ModelHandler):
     """Handler for natural language processing functionality"""

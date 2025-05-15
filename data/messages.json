@@ -19,584 +19,284 @@
       "timestamp": "04:22 AM"
     }
   ],
-  "new-chat-1746667538": [
+  "new-chat-1747315952": [
     {
       "id": "welcome",
       "role": "assistant",
       "content": "How can I help you with this new conversation?",
-      "timestamp": "04:25 AM"
+      "timestamp": "04:32 PM"
     },
     {
-      "id": "msg-1746667546",
+      "id": "msg-1747315955",
       "role": "user",
-      "content": "hellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjds",
-      "timestamp": "04:25 AM"
+      "content": "hi",
+      "timestamp": "04:32 PM"
     },
     {
-      "id": "msg-1746667547",
+      "id": "msg-1747315956",
       "role": "assistant",
-      "content": "Hello! I'm Jarvis, your AI assistant. How can I help you today?",
-      "timestamp": "04:25 AM"
-    }
-  ],
-  "new-chat-1746667694": [
-    {
-      "id": "welcome",
-      "role": "assistant",
-      "content": "How can I help you with this new conversation?",
-      "timestamp": "04:28 AM"
+      "content": "Text generation model would process: hi\n\nThis is a simulated response from the FLAN-UL2 text generation model. In a real implementation, this would use the loaded model to generate a relevant response based on the query.",
+      "timestamp": "04:32 PM"
     },
     {
-      "id": "msg-1746667830",
-      "role": "user",
-      "content": "hellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjds",
-      "timestamp": "04:30 AM"
-    },
-    {
-      "id": "msg-1746667831",
-      "role": "assistant",
-      "content": "Hello! I'm Jarvis, your AI assistant. How can I help you today?",
-      "timestamp": "04:30 AM"
-    }
-  ],
-  "new-chat-1746668189": [
-    {
-      "id": "welcome",
-      "role": "assistant",
-      "content": "How can I help you with this new conversation?",
-      "timestamp": "04:36 AM"
-    },
-    {
-      "id": "msg-1746668285",
-      "role": "user",
-      "content": "hellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjdshellooookdfjhgkjfdshghkjfdshgjkhfdjkvjfdhgjhjhfdjvbjdfbvjhbdsfjhghjfdhsgjkhfdjhgjkfdhkjghjkfdhkgjfhdkjghkjfdhkgjhkjsdfhkgjhfdkjshgkjhfdkjhgkjds",
-      "timestamp": "04:38 AM"
-    },
-    {
-      "id": "msg-1746668286",
-      "role": "assistant",
-      "content": "Hello! I'm Jarvis, your AI assistant. How can I help you today?",
-      "timestamp": "04:38 AM"
-    }
-  ],
-  "new-chat-1746668692": [
-    {
-      "id": "welcome",
-      "role": "assistant",
-      "content": "How can I help you with this new conversation?",
-      "timestamp": "04:44 AM"
-    },
-    {
-      "id": "msg-1746669192",
-      "role": "user",
-      "content": "kfdjhsgkjfhdkjghksfd",
-      "timestamp": "04:53 AM"
-    },
-    {
-      "id": "msg-1746669193",
-      "role": "assistant",
-      "content": "I've received your query: 'kfdjhsgkjfhdkjghksfd'. This is a placeholder response. Replace this with your actual Jarvis AI implementation.",
-      "timestamp": "04:53 AM"
-    }
-  ],
-  "new-chat-1746673810": [
-    {
-      "id": "welcome",
-      "role": "assistant",
-      "content": "How can I help you with this new conversation?",
-      "timestamp": "06:10 AM"
-    },
-    {
-      "id": "msg-1746735213",
-      "role": "user",
-      "content": "Generate code for a function that: ",
-      "timestamp": "11:13 PM"
-    },
-    {
-      "id": "msg-1746735214",
-      "role": "assistant",
-      "content": "Code generation model would process: Generate code for a function that: \n\n```python\n# Example generated code\ndef hello_world():\n    print('Hello, world!')\n\nhello_world()\n```",
-      "timestamp": "11:13 PM"
-    },
-    {
-      "id": "msg-1746735219",
-      "role": "user",
-      "content": "Let's have a conversation about: ",
-      "timestamp": "11:13 PM"
-    },
-    {
-      "id": "msg-1746735220",
-      "role": "assistant",
-      "content": "Text generation model would process: Let's have a conversation about: \n\nThis is a simulated response from the FLAN-UL2 text generation model. In a real implementation, this would use the loaded model to generate a relevant response based on the query.",
-      "timestamp": "11:13 PM"
-    },
-    {
-      "id": "msg-1746735228",
-      "role": "user",
-      "content": "Analyze the sentiment, entities, and intent in this text: ",
-      "timestamp": "11:13 PM"
-    },
-    {
-      "id": "msg-1746735229",
-      "role": "assistant",
-      "content": "NLP model would analyze: Analyze the sentiment, entities, and intent in this text: \n\nSentiment: Positive\nEntities: None detected\nIntent: Information request",
-      "timestamp": "11:13 PM"
-    },
-    {
-      "id": "msg-1746735242",
-      "role": "user",
-      "content": "Write a creative story about: ",
-      "timestamp": "11:14 PM"
-    },
-    {
-      "id": "msg-1746735243",
-      "role": "assistant",
-      "content": "Story generation model would create a story about: Write a creative story about: \n\nOnce upon a time, in a land far away, there was a kingdom of wonder and magic. The people lived in harmony with nature, and the kingdom prospered under the wise rule of its benevolent monarch...",
-      "timestamp": "11:14 PM"
-    },
-    {
-      "id": "msg-1746735246",
+      "id": "msg-1747323994",
       "role": "user",
       "content": "Transcribe the following audio file (provide a path to the audio file): ",
-      "timestamp": "11:14 PM"
+      "timestamp": "06:46 PM"
     },
     {
-      "id": "msg-1746735247",
-      "role": "assistant",
-      "content": "Speech-to-text model would process: Transcribe the following audio file (provide a path to the audio file): ",
-      "timestamp": "11:14 PM"
-    }
-  ],
-  "new-chat-1746735413": [
-    {
-      "id": "welcome",
-      "role": "assistant",
-      "content": "How can I help you with this new conversation?",
-      "timestamp": "11:16 PM"
-    },
-    {
-      "id": "msg-1746735649",
-      "role": "user",
-      "content": "Generate code for a function that: ",
-      "timestamp": "11:20 PM"
-    },
-    {
-      "id": "msg-1746735650",
-      "role": "assistant",
-      "content": "Code generation model would process: Generate code for a function that: \n\n```python\n# Example generated code\ndef hello_world():\n    print('Hello, world!')\n\nhello_world()\n```",
-      "timestamp": "11:20 PM"
-    },
-    {
-      "id": "msg-1746735652",
-      "role": "user",
-      "content": "Write a creative story about: ",
-      "timestamp": "11:20 PM"
-    },
-    {
-      "id": "msg-1746735653",
-      "role": "assistant",
-      "content": "Story generation model would create a story about: Write a creative story about: \n\nOnce upon a time, in a land far away, there was a kingdom of wonder and magic. The people lived in harmony with nature, and the kingdom prospered under the wise rule of its benevolent monarch...",
-      "timestamp": "11:20 PM"
-    },
-    {
-      "id": "msg-1746735656",
-      "role": "user",
-      "content": "Analyze the sentiment, entities, and intent in this text: ",
-      "timestamp": "11:20 PM"
-    },
-    {
-      "id": "msg-1746735657",
-      "role": "assistant",
-      "content": "NLP model would analyze: Analyze the sentiment, entities, and intent in this text: \n\nSentiment: Positive\nEntities: None detected\nIntent: Information request",
-      "timestamp": "11:20 PM"
-    },
-    {
-      "id": "msg-1746735857",
-      "role": "user",
-      "content": "Transcribe the following audio file (provide a path to the audio file): ",
-      "timestamp": "11:24 PM"
-    },
-    {
-      "id": "msg-1746735858",
-      "role": "assistant",
-      "content": "Speech-to-text model would process: Transcribe the following audio file (provide a path to the audio file): ",
-      "timestamp": "11:24 PM"
-    },
-    {
-      "id": "msg-1746735902",
-      "role": "user",
-      "content": "Analyze the sentiment, entities, and intent in this text: ",
-      "timestamp": "11:25 PM"
-    },
-    {
-      "id": "msg-1746735903",
-      "role": "assistant",
-      "content": "NLP model would analyze: Analyze the sentiment, entities, and intent in this text: \n\nSentiment: Positive\nEntities: None detected\nIntent: Information request",
-      "timestamp": "11:25 PM"
-    },
-    {
-      "id": "msg-1746735910",
-      "role": "user",
-      "content": "Let's have a conversation about: ",
-      "timestamp": "11:25 PM"
-    },
-    {
-      "id": "msg-1746735911",
-      "role": "assistant",
-      "content": "Text generation model would process: Let's have a conversation about: \n\nThis is a simulated response from the FLAN-UL2 text generation model. In a real implementation, this would use the loaded model to generate a relevant response based on the query.",
-      "timestamp": "11:25 PM"
-    },
-    {
-      "id": "msg-1746735916",
-      "role": "user",
-      "content": "Generate code for a function that: ",
-      "timestamp": "11:25 PM"
-    },
-    {
-      "id": "msg-1746735917",
-      "role": "assistant",
-      "content": "Code generation model would process: Generate code for a function that: \n\n```python\n# Example generated code\ndef hello_world():\n    print('Hello, world!')\n\nhello_world()\n```",
-      "timestamp": "11:25 PM"
-    },
-    {
-      "id": "msg-1746735917",
-      "role": "user",
-      "content": "Generate code for a function that: ",
-      "timestamp": "11:25 PM"
-    },
-    {
-      "id": "msg-1746735918",
-      "role": "assistant",
-      "content": "Code generation model would process: Generate code for a function that: \n\n```python\n# Example generated code\ndef hello_world():\n    print('Hello, world!')\n\nhello_world()\n```",
-      "timestamp": "11:25 PM"
-    }
-  ],
-  "new-chat-1746736120": [
-    {
-      "id": "welcome",
-      "role": "assistant",
-      "content": "How can I help you with this new conversation?",
-      "timestamp": "11:28 PM"
-    },
-    {
-      "id": "msg-1746736140",
-      "role": "user",
-      "content": "Write a creative story about: ",
-      "timestamp": "11:29 PM"
-    },
-    {
-      "id": "msg-1746736141",
-      "role": "assistant",
-      "content": "Story generation model would create a story about: Write a creative story about: \n\nOnce upon a time, in a land far away, there was a kingdom of wonder and magic. The people lived in harmony with nature, and the kingdom prospered under the wise rule of its benevolent monarch...",
-      "timestamp": "11:29 PM"
-    },
-    {
-      "id": "msg-1746736147",
-      "role": "user",
-      "content": "Generate code for a function that: ",
-      "timestamp": "11:29 PM"
-    },
-    {
-      "id": "msg-1746736148",
-      "role": "assistant",
-      "content": "Code generation model would process: Generate code for a function that: \n\n```python\n# Example generated code\ndef hello_world():\n    print('Hello, world!')\n\nhello_world()\n```",
-      "timestamp": "11:29 PM"
-    }
-  ],
-  "new-chat-1746736481": [
-    {
-      "id": "welcome",
-      "role": "assistant",
-      "content": "How can I help you with this new conversation?",
-      "timestamp": "11:34 PM"
-    },
-    {
-      "id": "msg-1746736536",
-      "role": "user",
-      "content": "Write a creative story about: ",
-      "timestamp": "11:35 PM"
-    },
-    {
-      "id": "msg-1746736537",
-      "role": "assistant",
-      "content": "Story generation model would create a story about: Write a creative story about: \n\nOnce upon a time, in a land far away, there was a kingdom of wonder and magic. The people lived in harmony with nature, and the kingdom prospered under the wise rule of its benevolent monarch...",
-      "timestamp": "11:35 PM"
-    },
-    {
-      "id": "msg-1746736540",
-      "role": "user",
-      "content": "Analyze the sentiment, entities, and intent in this text: ",
-      "timestamp": "11:35 PM"
-    },
-    {
-      "id": "msg-1746736541",
-      "role": "assistant",
-      "content": "NLP model would analyze: Analyze the sentiment, entities, and intent in this text: \n\nSentiment: Positive\nEntities: None detected\nIntent: Information request",
-      "timestamp": "11:35 PM"
-    },
-    {
-      "id": "msg-1746736625",
-      "role": "user",
-      "content": "Let's have a conversation about: ",
-      "timestamp": "11:37 PM"
-    },
-    {
-      "id": "msg-1746736626",
-      "role": "assistant",
-      "content": "Text generation model would process: Let's have a conversation about: \n\nThis is a simulated response from the FLAN-UL2 text generation model. In a real implementation, this would use the loaded model to generate a relevant response based on the query.",
-      "timestamp": "11:37 PM"
-    }
-  ],
-  "new-chat-1746736684": [
-    {
-      "id": "welcome",
-      "role": "assistant",
-      "content": "How can I help you with this new conversation?",
-      "timestamp": "11:38 PM"
-    },
-    {
-      "id": "msg-1746736686",
-      "role": "user",
-      "content": "Generate code for a function that: ",
-      "timestamp": "11:38 PM"
-    },
-    {
-      "id": "msg-1746736687",
-      "role": "assistant",
-      "content": "Code generation model would process: Generate code for a function that: \n\n```python\n# Example generated code\ndef hello_world():\n    print('Hello, world!')\n\nhello_world()\n```",
-      "timestamp": "11:38 PM"
-    },
-    {
-      "id": "msg-1746736696",
-      "role": "user",
-      "content": "Let's have a conversation about: ",
-      "timestamp": "11:38 PM"
-    },
-    {
-      "id": "msg-1746736697",
-      "role": "assistant",
-      "content": "Text generation model would process: Let's have a conversation about: \n\nThis is a simulated response from the FLAN-UL2 text generation model. In a real implementation, this would use the loaded model to generate a relevant response based on the query.",
-      "timestamp": "11:38 PM"
-    }
-  ],
-  "new-chat-1746736941": [
-    {
-      "id": "welcome",
-      "role": "assistant",
-      "content": "How can I help you with this new conversation?",
-      "timestamp": "11:42 PM"
-    },
-    {
-      "id": "msg-1746736943",
-      "role": "user",
-      "content": "Generate code for a function that: ",
-      "timestamp": "11:42 PM"
-    },
-    {
-      "id": "msg-1746736944",
-      "role": "assistant",
-      "content": "Code generation model would process: Generate code for a function that: \n\n```python\n# Example generated code\ndef hello_world():\n    print('Hello, world!')\n\nhello_world()\n```",
-      "timestamp": "11:42 PM"
-    },
-    {
-      "id": "msg-1746736951",
-      "role": "user",
-      "content": "Let's have a conversation about: ",
-      "timestamp": "11:42 PM"
-    },
-    {
-      "id": "msg-1746736952",
-      "role": "assistant",
-      "content": "Text generation model would process: Let's have a conversation about: \n\nThis is a simulated response from the FLAN-UL2 text generation model. In a real implementation, this would use the loaded model to generate a relevant response based on the query.",
-      "timestamp": "11:42 PM"
-    },
-    {
-      "id": "msg-1746736962",
-      "role": "user",
-      "content": "Transcribe the following audio file (provide a path to the audio file): ",
-      "timestamp": "11:42 PM"
-    },
-    {
-      "id": "msg-1746736963",
-      "role": "assistant",
-      "content": "Speech-to-text model would process: Transcribe the following audio file (provide a path to the audio file): ",
-      "timestamp": "11:42 PM"
-    }
-  ],
-  "new-chat-1746742572": [
-    {
-      "id": "welcome",
-      "role": "assistant",
-      "content": "How can I help you with this new conversation?",
-      "timestamp": "01:16 AM"
-    },
-    {
-      "id": "msg-1746742574",
-      "role": "user",
-      "content": "Generate an image of: ",
-      "timestamp": "01:16 AM"
-    },
-    {
-      "id": "msg-1746742575",
-      "role": "assistant",
-      "content": "I've received your query: 'Generate an image of: '. I'm not sure how to process this with the current configuration.",
-      "timestamp": "01:16 AM"
-    }
-  ],
-  "new-chat-1746812487": [
-    {
-      "id": "welcome",
-      "role": "assistant",
-      "content": "How can I help you with this new conversation?",
-      "timestamp": "08:41 PM"
-    },
-    {
-      "id": "msg-1746812491",
-      "role": "user",
-      "content": "Generate an image of: ",
-      "timestamp": "08:41 PM"
-    },
-    {
-      "id": "msg-1746812492",
-      "role": "assistant",
-      "content": "Image generation model would create an image of: Generate an image of: \n\nImage would be generated using Stable Diffusion and saved to the data/generated_images directory.",
-      "timestamp": "08:41 PM"
-    },
-    {
-      "id": "msg-1746812491",
-      "role": "user",
-      "content": "Generate an image of: ",
-      "timestamp": "08:41 PM"
-    },
-    {
-      "id": "msg-1746812492",
-      "role": "assistant",
-      "content": "Image generation model would create an image of: Generate an image of: \n\nImage would be generated using Stable Diffusion and saved to the data/generated_images directory.",
-      "timestamp": "08:41 PM"
-    },
-    {
-      "id": "msg-1746812501",
-      "role": "user",
-      "content": "Generate an image of: ",
-      "timestamp": "08:41 PM"
-    },
-    {
-      "id": "msg-1746812502",
-      "role": "assistant",
-      "content": "Image generation model would create an image of: Generate an image of: \n\nImage would be generated using Stable Diffusion and saved to the data/generated_images directory.",
-      "timestamp": "08:41 PM"
-    },
-    {
-      "id": "msg-1746812506",
-      "role": "user",
-      "content": "Generate an image of: ",
-      "timestamp": "08:41 PM"
-    },
-    {
-      "id": "msg-1746812507",
-      "role": "assistant",
-      "content": "Image generation model would create an image of: Generate an image of: \n\nImage would be generated using Stable Diffusion and saved to the data/generated_images directory.",
-      "timestamp": "08:41 PM"
-    },
-    {
-      "id": "msg-1746812535",
-      "role": "user",
-      "content": "Generate code for a function that: ",
-      "timestamp": "08:42 PM"
-    },
-    {
-      "id": "msg-1746812536",
-      "role": "assistant",
-      "content": "Code generation model would process: Generate code for a function that: \n\n```python\n# Example generated code\ndef hello_world():\n    print('Hello, world!')\n\nhello_world()\n```",
-      "timestamp": "08:42 PM"
-    },
-    {
-      "id": "msg-1746812541",
-      "role": "user",
-      "content": "can you kms me",
-      "timestamp": "08:42 PM"
-    },
-    {
-      "id": "msg-1746812542",
-      "role": "assistant",
-      "content": "Code generation model would process: can you kms me\n\n```python\n# Example generated code\ndef hello_world():\n    print('Hello, world!')\n\nhello_world()\n```",
-      "timestamp": "08:42 PM"
-    }
-  ],
-  "new-chat-1746814829": [
-    {
-      "id": "welcome",
-      "role": "assistant",
-      "content": "How can I help you with this new conversation?",
-      "timestamp": "09:20 PM"
-    },
-    {
-      "id": "msg-1746818608",
-      "role": "user",
-      "content": "Transcribe the following audio file (provide a path to the audio file): ",
-      "timestamp": "10:23 PM"
-    },
-    {
-      "id": "msg-1746818697",
+      "id": "msg-1747324026",
       "role": "assistant",
       "content": "I'm sorry, I encountered an error processing your request. Please try again.",
-      "timestamp": "10:24 PM"
+      "timestamp": "06:47 PM"
     }
   ],
-  "new-chat-1746818952": [
+  "new-chat-1747316885": [
     {
       "id": "welcome",
       "role": "assistant",
       "content": "How can I help you with this new conversation?",
-      "timestamp": "10:29 PM"
+      "timestamp": "04:48 PM"
     },
     {
-      "id": "msg-1746819090",
+      "id": "msg-1747316959",
       "role": "user",
-      "content": "Generate an image of: ",
-      "timestamp": "10:31 PM"
+      "content": "hi",
+      "timestamp": "04:49 PM"
     },
     {
-      "id": "msg-1746819350",
+      "id": "msg-1747316960",
       "role": "assistant",
-      "content": "Image generated successfully and saved as 'generated_image.png'.",
-      "timestamp": "10:35 PM"
+      "content": "Text generation model could not be loaded. Please check the logs for details.",
+      "timestamp": "04:49 PM"
+    }
+  ],
+  "new-chat-1747317111": [
+    {
+      "id": "welcome",
+      "role": "assistant",
+      "content": "How can I help you with this new conversation?",
+      "timestamp": "04:51 PM"
     },
     {
-      "id": "msg-1746819361",
+      "id": "msg-1747317114",
       "role": "user",
-      "content": "Transcribe the following audio file (provide a path to the audio file): ",
-      "timestamp": "10:36 PM"
+      "content": "hi",
+      "timestamp": "04:51 PM"
     },
     {
-      "id": "msg-1746819362",
+      "id": "msg-1747317115",
+      "role": "assistant",
+      "content": "Text generation model could not be loaded. Please check the logs for details.",
+      "timestamp": "04:51 PM"
+    }
+  ],
+  "new-chat-1747317278": [
+    {
+      "id": "welcome",
+      "role": "assistant",
+      "content": "How can I help you with this new conversation?",
+      "timestamp": "04:54 PM"
+    },
+    {
+      "id": "msg-1747317445",
+      "role": "user",
+      "content": "hi",
+      "timestamp": "04:57 PM"
+    },
+    {
+      "id": "msg-1747317446",
+      "role": "assistant",
+      "content": "Text generation model could not be loaded. Please check the logs for details.",
+      "timestamp": "04:57 PM"
+    }
+  ],
+  "new-chat-1747317828": [
+    {
+      "id": "welcome",
+      "role": "assistant",
+      "content": "How can I help you with this new conversation?",
+      "timestamp": "05:03 PM"
+    },
+    {
+      "id": "msg-1747318086",
+      "role": "user",
+      "content": "hi",
+      "timestamp": "05:08 PM"
+    },
+    {
+      "id": "msg-1747318091",
       "role": "assistant",
       "content": "I'm sorry, I encountered an error processing your request. Please try again.",
-      "timestamp": "10:36 PM"
+      "timestamp": "05:08 PM"
+    }
+  ],
+  "new-chat-1747318570": [
+    {
+      "id": "welcome",
+      "role": "assistant",
+      "content": "How can I help you with this new conversation?",
+      "timestamp": "05:16 PM"
     },
     {
-      "id": "msg-1746819367",
+      "id": "msg-1747318591",
       "role": "user",
-      "content": "Transcribe the following audio file (provide a path to the audio file): ",
-      "timestamp": "10:36 PM"
+      "content": "hi",
+      "timestamp": "05:16 PM"
     },
     {
-      "id": "msg-1746819368",
+      "id": "msg-1747318595",
       "role": "assistant",
       "content": "I'm sorry, I encountered an error processing your request. Please try again.",
-      "timestamp": "10:36 PM"
-    },
+      "timestamp": "05:16 PM"
+    }
+  ],
+  "new-chat-1747319227": [
     {
-      "id": "msg-1746819512",
-      "role": "user",
-      "content": "Generate an image of: ",
-      "timestamp": "10:38 PM"
-    },
-    {
-      "id": "msg-1746819643",
+      "id": "welcome",
       "role": "assistant",
-      "content": "Image generated successfully and saved as 'generated_image.png'.",
-      "timestamp": "10:40 PM"
+      "content": "How can I help you with this new conversation?",
+      "timestamp": "05:27 PM"
+    },
+    {
+      "id": "msg-1747319231",
+      "role": "user",
+      "content": "hi",
+      "timestamp": "05:27 PM"
+    },
+    {
+      "id": "msg-1747319235",
+      "role": "assistant",
+      "content": "I'm sorry, I encountered an error processing your request. Please try again.",
+      "timestamp": "05:27 PM"
+    }
+  ],
+  "new-chat-1747319355": [
+    {
+      "id": "welcome",
+      "role": "assistant",
+      "content": "How can I help you with this new conversation?",
+      "timestamp": "05:29 PM"
+    },
+    {
+      "id": "msg-1747319374",
+      "role": "user",
+      "content": "how are you model",
+      "timestamp": "05:29 PM"
+    },
+    {
+      "id": "msg-1747319380",
+      "role": "assistant",
+      "content": "I'm sorry, I encountered an error processing your request. Please try again.",
+      "timestamp": "05:29 PM"
+    }
+  ],
+  "new-chat-1747320146": [
+    {
+      "id": "welcome",
+      "role": "assistant",
+      "content": "How can I help you with this new conversation?",
+      "timestamp": "05:42 PM"
+    },
+    {
+      "id": "msg-1747320173",
+      "role": "user",
+      "content": "how are you model",
+      "timestamp": "05:42 PM"
+    },
+    {
+      "id": "msg-1747320177",
+      "role": "assistant",
+      "content": "Error initializing conversation: Chats.create() got an unexpected keyword argument 'messages'",
+      "timestamp": "05:42 PM"
+    }
+  ],
+  "new-chat-1747321010": [
+    {
+      "id": "welcome",
+      "role": "assistant",
+      "content": "How can I help you with this new conversation?",
+      "timestamp": "05:56 PM"
+    },
+    {
+      "id": "msg-1747321058",
+      "role": "user",
+      "content": "i'm tired",
+      "timestamp": "05:57 PM"
+    },
+    {
+      "id": "msg-1747321061",
+      "role": "assistant",
+      "content": "Error generating response: 'TextGenerationHandler' object has no attribute 'chat'",
+      "timestamp": "05:57 PM"
+    }
+  ],
+  "new-chat-1747321159": [
+    {
+      "id": "welcome",
+      "role": "assistant",
+      "content": "How can I help you with this new conversation?",
+      "timestamp": "05:59 PM"
+    },
+    {
+      "id": "msg-1747321166",
+      "role": "user",
+      "content": "i'm tired",
+      "timestamp": "05:59 PM"
+    },
+    {
+      "id": "msg-1747321167",
+      "role": "assistant",
+      "content": "Error generating response: 'NoneType' object has no attribute 'send_message'",
+      "timestamp": "05:59 PM"
+    }
+  ],
+  "new-chat-1747321263": [
+    {
+      "id": "welcome",
+      "role": "assistant",
+      "content": "How can I help you with this new conversation?",
+      "timestamp": "06:01 PM"
+    },
+    {
+      "id": "msg-1747321297",
+      "role": "user",
+      "content": "i'm tired",
+      "timestamp": "06:01 PM"
+    },
+    {
+      "id": "msg-1747321298",
+      "role": "assistant",
+      "content": "Error generating response: 'NoneType' object has no attribute 'send_message'",
+      "timestamp": "06:01 PM"
+    }
+  ],
+  "new-chat-1747321779": [
+    {
+      "id": "welcome",
+      "role": "assistant",
+      "content": "How can I help you with this new conversation?",
+      "timestamp": "06:09 PM"
+    },
+    {
+      "id": "msg-1747321785",
+      "role": "user",
+      "content": "i'm tired",
+      "timestamp": "06:09 PM"
+    },
+    {
+      "id": "msg-1747321789",
+      "role": "assistant",
+      "content": "Text generation model could not be loaded. Please check the logs for details.",
+      "timestamp": "06:09 PM"
+    }
+  ],
+  "new-chat-1747323879": [
+    {
+      "id": "welcome",
+      "role": "assistant",
+      "content": "How can I help you with this new conversation?",
+      "timestamp": "06:44 PM"
     }
   ]
 }
