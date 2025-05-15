@@ -2900,3 +2900,212 @@ content
 2025-05-16 01:00:27,083 - jarvis_app - INFO - Data saved successfully
 2025-05-16 01:00:27,084 - jarvis_app - INFO - Processed message in chat new-chat-1747345795
 2025-05-16 01:00:45,424 - jarvis_desktop - INFO - Application window closed
+2025-05-16 01:22:56,658 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static
+2025-05-16 01:22:56,659 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data
+2025-05-16 01:22:56,659 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-16 01:22:56,659 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-16 01:23:07,942 - numexpr.utils - INFO - NumExpr defaulting to 12 threads.
+2025-05-16 01:23:11,505 - jarvis_app - ERROR - Error initializing Jarvis AI assistant: No module named 'soundfile'
+2025-05-16 01:23:11,505 - jarvis_app - WARNING - Using fallback response generation
+2025-05-16 01:23:11,506 - jarvis_app - INFO - Loaded 30 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-16 01:23:11,506 - jarvis_app - INFO - Loaded messages for 23 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-16 01:23:11,509 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant
+2025-05-16 01:23:11,509 - jarvis_desktop - INFO - Operating system: posix - darwin
+2025-05-16 01:23:11,509 - jarvis_desktop - INFO - Setting up for macOS environment
+2025-05-16 01:23:11,510 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-16 01:23:11,510 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-16 01:23:11,510 - jarvis_desktop - INFO - Using 8 worker threads (detected 12 CPU cores)
+2025-05-16 01:23:11,510 - jarvis_desktop - INFO - Using macOS-optimized server configuration
+2025-05-16 01:23:11,510 - jarvis_desktop - INFO - Server is ready
+2025-05-16 01:23:11,511 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-16 01:23:12,511 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/dist/index.html
+2025-05-16 01:23:12,511 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-16 01:23:12,511 - jarvis_desktop - INFO - Using macOS-optimized window configuration
+2025-05-16 01:23:12,511 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-16 01:23:12,511 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-16 01:23:14,153 - jarvis_desktop - INFO - Application window shown
+2025-05-16 01:23:14,514 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-16 01:23:15,114 - jarvis_app - INFO - Serving path: 
+2025-05-16 01:23:15,115 - jarvis_app - INFO - Serving index.html for root path
+2025-05-16 01:23:15,195 - jarvis_app - INFO - Serving path: assets/index.CfYRZsIu.js
+2025-05-16 01:23:15,199 - jarvis_app - INFO - Serving asset: index.CfYRZsIu.js from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-16 01:23:15,200 - jarvis_app - INFO - Serving path: assets/index.Czty9hQT.css
+2025-05-16 01:23:15,200 - jarvis_app - INFO - Serving asset: index.Czty9hQT.css from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-16 01:23:15,300 - jarvis_desktop - INFO - Application window loaded
+2025-05-16 01:23:15,301 - jarvis_desktop - INFO - Setting up macOS-optimized offline mode
+2025-05-16 01:23:15,371 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-16 01:23:47,685 - jarvis_app - ERROR - Error processing message: 'NoneType' object has no attribute 'model_handlers'
+2025-05-16 01:23:53,033 - jarvis_app - ERROR - Error processing message: 'NoneType' object has no attribute 'model_handlers'
+2025-05-16 01:23:54,120 - jarvis_app - ERROR - Error processing message: 'NoneType' object has no attribute 'model_handlers'
+2025-05-16 01:24:40,365 - jarvis_app - ERROR - Error processing message: 'NoneType' object has no attribute 'model_handlers'
+2025-05-16 01:25:10,309 - jarvis_app - INFO - Data saved successfully
+2025-05-16 01:25:10,309 - jarvis_app - INFO - Deleted chat: new-chat-1747346378
+2025-05-16 01:25:11,418 - jarvis_app - INFO - Data saved successfully
+2025-05-16 01:25:11,418 - jarvis_app - INFO - Created new chat: new-chat-1747347911
+2025-05-16 01:25:18,383 - jarvis_app - ERROR - Error processing message: 'NoneType' object has no attribute 'model_handlers'
+2025-05-16 01:41:19,664 - jarvis_desktop - INFO - Application window closed
+2025-05-16 01:56:22,429 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static
+2025-05-16 01:56:22,430 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data
+2025-05-16 01:56:22,430 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-16 01:56:22,430 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-16 01:56:26,197 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/models
+2025-05-16 01:56:26,197 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-16 01:56:26,197 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-16 01:56:26,198 - jarvis_app - INFO - Loaded 30 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-16 01:56:26,198 - jarvis_app - INFO - Loaded messages for 23 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-16 01:56:26,203 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant
+2025-05-16 01:56:26,203 - jarvis_desktop - INFO - Operating system: posix - darwin
+2025-05-16 01:56:26,203 - jarvis_desktop - INFO - Setting up for macOS environment
+2025-05-16 01:56:26,203 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-16 01:56:26,203 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-16 01:56:26,203 - jarvis_desktop - INFO - Using 8 worker threads (detected 12 CPU cores)
+2025-05-16 01:56:26,203 - jarvis_desktop - INFO - Using macOS-optimized server configuration
+2025-05-16 01:56:26,204 - jarvis_desktop - INFO - Server is ready
+2025-05-16 01:56:26,206 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-16 01:56:27,207 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/dist/index.html
+2025-05-16 01:56:27,207 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-16 01:56:27,207 - jarvis_desktop - INFO - Using macOS-optimized window configuration
+2025-05-16 01:56:27,207 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-16 01:56:27,208 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-16 01:56:29,277 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-16 01:56:30,667 - jarvis_desktop - INFO - Application window shown
+2025-05-16 01:56:31,801 - jarvis_app - INFO - Serving path: 
+2025-05-16 01:56:31,802 - jarvis_app - INFO - Serving index.html for root path
+2025-05-16 01:56:31,848 - jarvis_app - INFO - Serving path: assets/index.CfYRZsIu.js
+2025-05-16 01:56:31,849 - jarvis_app - INFO - Serving asset: index.CfYRZsIu.js from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-16 01:56:31,851 - jarvis_app - INFO - Serving path: assets/index.Czty9hQT.css
+2025-05-16 01:56:31,851 - jarvis_app - INFO - Serving asset: index.Czty9hQT.css from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-16 01:56:31,924 - jarvis_desktop - INFO - Application window loaded
+2025-05-16 01:56:31,925 - jarvis_desktop - INFO - Setting up macOS-optimized offline mode
+2025-05-16 01:56:32,074 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-16 01:56:55,044 - jarvis_app - INFO - Sending query to Jarvis AI: hello...
+2025-05-16 01:56:55,046 - jarvis_assistant - INFO - Processing query: hello
+2025-05-16 01:56:55,046 - jarvis_assistant - INFO - Detected model type from query: textGeneration
+2025-05-16 01:56:55,046 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-16 01:56:55,046 - jarvis_models - INFO - Attempting to load messages from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-16 01:56:55,047 - jarvis_models - INFO - Loaded messages for 23 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-16 01:56:55,047 - jarvis_models - ERROR - Google Generative AI package not installed. Please install with: pip install google-generativeai
+2025-05-16 01:56:55,047 - jarvis_app - INFO - Received response from Jarvis AI: Text generation model could not be loaded. Please ...
+2025-05-16 01:56:55,052 - jarvis_app - INFO - Data saved successfully
+2025-05-16 01:56:55,052 - jarvis_app - INFO - Processed message in chat new-chat-1747347911
+2025-05-16 01:57:01,873 - jarvis_desktop - INFO - Application window closed
+2025-05-16 02:06:44,288 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static
+2025-05-16 02:06:44,289 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data
+2025-05-16 02:06:44,289 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-16 02:06:44,289 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-16 02:07:07,474 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/models
+2025-05-16 02:07:07,485 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-16 02:07:07,486 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-16 02:07:07,505 - jarvis_app - INFO - Loaded 30 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-16 02:07:07,509 - jarvis_app - INFO - Loaded messages for 23 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-16 02:07:07,559 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant
+2025-05-16 02:07:07,559 - jarvis_desktop - INFO - Operating system: posix - darwin
+2025-05-16 02:07:07,559 - jarvis_desktop - INFO - Setting up for macOS environment
+2025-05-16 02:07:07,560 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-16 02:07:07,560 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-16 02:07:07,560 - jarvis_desktop - INFO - Using 8 worker threads (detected 12 CPU cores)
+2025-05-16 02:07:07,566 - jarvis_desktop - INFO - Using macOS-optimized server configuration
+2025-05-16 02:07:07,573 - jarvis_desktop - INFO - Server is ready
+2025-05-16 02:07:07,624 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-16 02:07:08,586 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/dist/index.html
+2025-05-16 02:07:08,586 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-16 02:07:08,586 - jarvis_desktop - INFO - Using macOS-optimized window configuration
+2025-05-16 02:07:08,587 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-16 02:07:08,587 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-16 02:07:09,404 - jarvis_desktop - INFO - Application window shown
+2025-05-16 02:07:10,280 - jarvis_app - INFO - Serving path: 
+2025-05-16 02:07:10,280 - jarvis_app - INFO - Serving index.html for root path
+2025-05-16 02:07:10,321 - jarvis_app - INFO - Serving path: assets/index.CfYRZsIu.js
+2025-05-16 02:07:10,321 - jarvis_app - INFO - Serving asset: index.CfYRZsIu.js from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-16 02:07:10,323 - jarvis_app - INFO - Serving path: assets/index.Czty9hQT.css
+2025-05-16 02:07:10,323 - jarvis_app - INFO - Serving asset: index.Czty9hQT.css from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-16 02:07:10,398 - jarvis_desktop - INFO - Application window loaded
+2025-05-16 02:07:10,398 - jarvis_desktop - INFO - Setting up macOS-optimized offline mode
+2025-05-16 02:07:10,502 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-16 02:07:10,592 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-16 02:07:10,604 - jarvis_app - INFO - Data saved successfully
+2025-05-16 02:07:10,604 - jarvis_app - INFO - Created new chat: new-chat-1747350430
+2025-05-16 02:07:15,311 - jarvis_app - INFO - Sending query to Jarvis AI: heeloooo...
+2025-05-16 02:07:15,311 - jarvis_assistant - INFO - Processing query: heeloooo
+2025-05-16 02:07:15,311 - jarvis_assistant - INFO - Detected model type from query: textGeneration
+2025-05-16 02:07:15,311 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-16 02:07:15,311 - jarvis_models - INFO - Attempting to load messages from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-16 02:07:15,312 - jarvis_models - INFO - Loaded messages for 24 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-16 02:07:15,312 - jarvis_models - ERROR - Google Generative AI package not installed. Please install with: pip install google-generativeai
+2025-05-16 02:07:15,312 - jarvis_app - INFO - Received response from Jarvis AI: Text generation model could not be loaded. Please ...
+2025-05-16 02:07:15,314 - jarvis_app - INFO - Data saved successfully
+2025-05-16 02:07:15,314 - jarvis_app - INFO - Processed message in chat new-chat-1747350430
+2025-05-16 02:12:40,630 - jarvis_app - INFO - Using static folder: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static
+2025-05-16 02:12:40,630 - jarvis_app - INFO - Using data directory: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data
+2025-05-16 02:12:40,630 - jarvis_app - INFO - Chats file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-16 02:12:40,630 - jarvis_app - INFO - Messages file: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-16 02:12:56,102 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/models
+2025-05-16 02:12:56,102 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-16 02:12:56,103 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-16 02:12:56,103 - jarvis_app - INFO - Loaded 31 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/chats.json
+2025-05-16 02:12:56,104 - jarvis_app - INFO - Loaded messages for 24 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-16 02:12:56,107 - jarvis_desktop - INFO - Application path: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant
+2025-05-16 02:12:56,107 - jarvis_desktop - INFO - Operating system: posix - darwin
+2025-05-16 02:12:56,107 - jarvis_desktop - INFO - Setting up for macOS environment
+2025-05-16 02:12:56,107 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-16 02:12:56,107 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-16 02:12:56,107 - jarvis_desktop - INFO - Using 8 worker threads (detected 12 CPU cores)
+2025-05-16 02:12:56,107 - jarvis_desktop - INFO - Using macOS-optimized server configuration
+2025-05-16 02:12:56,107 - jarvis_desktop - INFO - Server is ready
+2025-05-16 02:12:56,108 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-16 02:12:57,111 - jarvis_desktop - INFO - Found index.html at: /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/dist/index.html
+2025-05-16 02:12:57,111 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-16 02:12:57,111 - jarvis_desktop - INFO - Using macOS-optimized window configuration
+2025-05-16 02:12:57,112 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-16 02:12:57,112 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-16 02:12:57,857 - jarvis_desktop - INFO - Application window shown
+2025-05-16 02:12:58,949 - jarvis_app - INFO - Serving path: 
+2025-05-16 02:12:58,949 - jarvis_app - INFO - Serving index.html for root path
+2025-05-16 02:12:58,999 - jarvis_app - INFO - Serving path: assets/index.CfYRZsIu.js
+2025-05-16 02:12:58,999 - jarvis_app - INFO - Serving asset: index.CfYRZsIu.js from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-16 02:12:59,002 - jarvis_app - INFO - Serving path: assets/index.Czty9hQT.css
+2025-05-16 02:12:59,002 - jarvis_app - INFO - Serving asset: index.Czty9hQT.css from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/server/static/assets
+2025-05-16 02:12:59,077 - jarvis_desktop - INFO - Application window loaded
+2025-05-16 02:12:59,077 - jarvis_desktop - INFO - Setting up macOS-optimized offline mode
+2025-05-16 02:12:59,114 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-16 02:12:59,204 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-16 02:12:59,339 - jarvis_app - INFO - Data saved successfully
+2025-05-16 02:12:59,339 - jarvis_app - INFO - Created new chat: new-chat-1747350779
+2025-05-16 02:13:15,345 - jarvis_app - INFO - Sending query to Jarvis AI: helloooo...
+2025-05-16 02:13:15,346 - jarvis_assistant - INFO - Processing query: helloooo
+2025-05-16 02:13:15,346 - jarvis_assistant - INFO - Detected model type from query: textGeneration
+2025-05-16 02:13:15,346 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-16 02:13:15,347 - jarvis_models - INFO - Attempting to load messages from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-16 02:13:15,347 - jarvis_models - INFO - Loaded messages for 25 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-16 02:13:16,478 - jarvis_models - INFO - Successfully initialized Google Generative AI client
+2025-05-16 02:13:16,478 - jarvis_models - INFO - Using messages from chat ID: new-chat-1747350779
+2025-05-16 02:13:16,478 - jarvis_models - WARNING - Removed model message at start of history (Gemini requires user to start)
+2025-05-16 02:13:16,478 - jarvis_models - INFO - Formatted 0 messages for Gemini chat history
+2025-05-16 02:13:16,478 - jarvis_models - INFO - Successfully created new chat session
+2025-05-16 02:13:16,478 - jarvis_models - INFO - Text generation model loaded successfully
+2025-05-16 02:13:16,479 - google_genai.models - INFO - AFC is enabled with max remote calls: 10.
+2025-05-16 02:13:17,333 - httpx - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 200 OK"
+2025-05-16 02:13:17,335 - google_genai.models - INFO - AFC remote call 1 is done.
+2025-05-16 02:13:17,335 - jarvis_app - INFO - Received response from Jarvis AI: Hello there! How can I help you today?
+...
+2025-05-16 02:13:17,338 - jarvis_app - INFO - Data saved successfully
+2025-05-16 02:13:17,339 - jarvis_app - INFO - Processed message in chat new-chat-1747350779
+2025-05-16 02:14:01,978 - jarvis_app - INFO - Sending query to Jarvis AI: how can i sleep like a normal human being...
+2025-05-16 02:14:01,980 - jarvis_assistant - INFO - Processing query: how can i sleep like a normal human being
+2025-05-16 02:14:01,980 - jarvis_assistant - INFO - Detected model type from query: textGeneration
+2025-05-16 02:14:01,980 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-16 02:14:01,981 - jarvis_models - INFO - Attempting to load messages from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-16 02:14:01,981 - jarvis_models - INFO - Loaded messages for 25 chats from /Users/nadamohamed/Documents/GitHub/Jarvis-AI-Assistant/data/messages.json
+2025-05-16 02:14:02,010 - jarvis_models - INFO - Successfully initialized Google Generative AI client
+2025-05-16 02:14:02,010 - jarvis_models - INFO - Using messages from chat ID: new-chat-1747350779
+2025-05-16 02:14:02,010 - jarvis_models - WARNING - Removed model message at start of history (Gemini requires user to start)
+2025-05-16 02:14:02,010 - jarvis_models - INFO - Formatted 2 messages for Gemini chat history
+2025-05-16 02:14:02,011 - jarvis_models - INFO - Successfully created new chat session
+2025-05-16 02:14:02,011 - jarvis_models - INFO - Text generation model loaded successfully
+2025-05-16 02:14:02,012 - google_genai.models - INFO - AFC is enabled with max remote calls: 10.
+2025-05-16 02:14:10,003 - httpx - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 200 OK"
+2025-05-16 02:14:10,007 - google_genai.models - INFO - AFC remote call 1 is done.
+2025-05-16 02:14:10,008 - jarvis_app - INFO - Received response from Jarvis AI: Okay, so you're having trouble sleeping. That's re...
+2025-05-16 02:14:10,011 - jarvis_app - INFO - Data saved successfully
+2025-05-16 02:14:10,011 - jarvis_app - INFO - Processed message in chat new-chat-1747350779
+2025-05-16 02:21:07,657 - jarvis_desktop - INFO - Application window closed
