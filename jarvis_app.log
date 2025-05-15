@@ -2281,3 +2281,622 @@ This is a...
 2025-05-15 18:47:05,494 - jarvis_app - INFO - Data saved successfully
 2025-05-15 18:47:05,496 - jarvis_app - INFO - Processed message in chat new-chat-1747315952
 2025-05-15 18:47:53,139 - jarvis_desktop - INFO - Application window closed
+2025-05-15 23:46:11,348 - jarvis_app - INFO - Using static folder: D:\Jarvis\Jarvis-AI-Assistant\server\static
+2025-05-15 23:46:11,350 - jarvis_app - INFO - Using data directory: D:\Jarvis\Jarvis-AI-Assistant\data
+2025-05-15 23:46:11,351 - jarvis_app - INFO - Chats file: D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-15 23:46:11,351 - jarvis_app - INFO - Messages file: D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-15 23:46:54,210 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: D:\Jarvis\Jarvis-AI-Assistant\data\models
+2025-05-15 23:46:54,210 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-15 23:46:54,211 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-15 23:46:54,213 - jarvis_app - INFO - Loaded 22 chats from D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-15 23:46:54,215 - jarvis_app - INFO - Loaded messages for 15 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-15 23:46:54,236 - jarvis_desktop - INFO - Application path: D:\Jarvis\Jarvis-AI-Assistant
+2025-05-15 23:46:54,236 - jarvis_desktop - INFO - Operating system: nt - win32
+2025-05-15 23:46:54,237 - jarvis_desktop - INFO - Setting up for Windows environment
+2025-05-15 23:46:54,239 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-15 23:46:54,239 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-15 23:46:54,241 - jarvis_desktop - INFO - Using 4 worker threads (detected 4 CPU cores)
+2025-05-15 23:46:54,243 - jarvis_desktop - INFO - Using Windows-optimized server configuration
+2025-05-15 23:46:54,518 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-15 23:46:54,754 - jarvis_desktop - INFO - Server is ready
+2025-05-15 23:46:55,758 - jarvis_desktop - INFO - Found index.html at: D:\Jarvis\Jarvis-AI-Assistant\dist\index.html
+2025-05-15 23:46:55,761 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-15 23:46:55,762 - jarvis_desktop - INFO - Using Windows-optimized window configuration
+2025-05-15 23:46:55,766 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-15 23:46:55,767 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-15 23:46:58,096 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-15 23:46:59,797 - jarvis_desktop - INFO - Application window shown
+2025-05-15 23:47:02,953 - jarvis_app - INFO - Serving path: 
+2025-05-15 23:47:02,967 - jarvis_app - INFO - Serving index.html for root path
+2025-05-15 23:47:03,341 - jarvis_app - INFO - Serving path: assets/index.CfYRZsIu.js
+2025-05-15 23:47:03,341 - jarvis_app - INFO - Serving asset: index.CfYRZsIu.js from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-15 23:47:03,342 - jarvis_app - INFO - Serving path: assets/index.Czty9hQT.css
+2025-05-15 23:47:03,343 - jarvis_app - INFO - Serving asset: index.Czty9hQT.css from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-15 23:47:03,891 - jarvis_desktop - INFO - Application window loaded
+2025-05-15 23:47:03,934 - jarvis_desktop - INFO - Setting up Windows-optimized offline mode
+2025-05-15 23:47:04,016 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-15 23:47:04,034 - jarvis_app - INFO - Serving path: favicon.ico
+2025-05-15 23:47:04,045 - jarvis_app - INFO - Serving file: favicon.ico
+2025-05-15 23:47:18,958 - jarvis_app - INFO - Sending query to Jarvis AI: i'm tired...
+2025-05-15 23:47:18,958 - jarvis_assistant - INFO - Processing query: i'm tired
+2025-05-15 23:47:18,959 - jarvis_assistant - INFO - Detected model type from query: textGeneration
+2025-05-15 23:47:18,959 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-15 23:47:18,960 - jarvis_models - INFO - Attempting to load messages from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-15 23:47:18,961 - jarvis_models - INFO - Loaded messages for 15 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-15 23:47:21,167 - jarvis_models - INFO - Successfully initialized Google Generative AI client
+2025-05-15 23:47:21,168 - jarvis_models - INFO - Using messages from chat ID: new-chat-1747323879
+2025-05-15 23:47:21,170 - jarvis_models - INFO - Formatted 1 messages for chat history
+2025-05-15 23:47:21,171 - jarvis_models - ERROR - Chat creation failed: 'Client' object has no attribute 'GenerativeModel'
+2025-05-15 23:47:21,172 - jarvis_app - INFO - Received response from Jarvis AI: Text generation model could not be loaded. Please ...
+2025-05-15 23:47:21,176 - jarvis_app - INFO - Data saved successfully
+2025-05-15 23:47:21,176 - jarvis_app - INFO - Processed message in chat new-chat-1747323879
+2025-05-15 23:53:20,567 - jarvis_desktop - INFO - Application window closed
+2025-05-15 23:54:36,225 - jarvis_app - INFO - Using static folder: D:\Jarvis\Jarvis-AI-Assistant\server\static
+2025-05-15 23:54:36,226 - jarvis_app - INFO - Using data directory: D:\Jarvis\Jarvis-AI-Assistant\data
+2025-05-15 23:54:36,227 - jarvis_app - INFO - Chats file: D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-15 23:54:36,227 - jarvis_app - INFO - Messages file: D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-15 23:54:53,411 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: D:\Jarvis\Jarvis-AI-Assistant\data\models
+2025-05-15 23:54:53,412 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-15 23:54:53,412 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-15 23:54:53,433 - jarvis_app - INFO - Loaded 22 chats from D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-15 23:54:53,450 - jarvis_app - INFO - Loaded messages for 15 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-15 23:54:53,463 - jarvis_desktop - INFO - Application path: D:\Jarvis\Jarvis-AI-Assistant
+2025-05-15 23:54:53,464 - jarvis_desktop - INFO - Operating system: nt - win32
+2025-05-15 23:54:53,466 - jarvis_desktop - INFO - Setting up for Windows environment
+2025-05-15 23:54:53,467 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-15 23:54:53,468 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-15 23:54:53,468 - jarvis_desktop - INFO - Using 4 worker threads (detected 4 CPU cores)
+2025-05-15 23:54:53,469 - jarvis_desktop - INFO - Using Windows-optimized server configuration
+2025-05-15 23:54:53,719 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-15 23:54:53,974 - jarvis_desktop - INFO - Server is ready
+2025-05-15 23:54:54,985 - jarvis_desktop - INFO - Found index.html at: D:\Jarvis\Jarvis-AI-Assistant\dist\index.html
+2025-05-15 23:54:54,986 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-15 23:54:54,987 - jarvis_desktop - INFO - Using Windows-optimized window configuration
+2025-05-15 23:54:54,990 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-15 23:54:54,991 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-15 23:54:56,211 - jarvis_desktop - INFO - Application window shown
+2025-05-15 23:54:56,994 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-15 23:54:57,039 - jarvis_app - INFO - Serving path: 
+2025-05-15 23:54:57,045 - jarvis_app - INFO - Serving index.html for root path
+2025-05-15 23:54:57,181 - jarvis_app - INFO - Serving path: assets/index.CfYRZsIu.js
+2025-05-15 23:54:57,181 - jarvis_app - INFO - Serving asset: index.CfYRZsIu.js from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-15 23:54:57,182 - jarvis_app - INFO - Serving path: assets/index.Czty9hQT.css
+2025-05-15 23:54:57,183 - jarvis_app - INFO - Serving asset: index.Czty9hQT.css from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-15 23:54:57,485 - jarvis_desktop - INFO - Application window loaded
+2025-05-15 23:54:57,507 - jarvis_desktop - INFO - Setting up Windows-optimized offline mode
+2025-05-15 23:54:57,537 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-15 23:54:57,589 - jarvis_app - INFO - Serving path: favicon.ico
+2025-05-15 23:54:57,590 - jarvis_app - INFO - Serving file: favicon.ico
+2025-05-15 23:54:57,687 - jarvis_app - INFO - Data saved successfully
+2025-05-15 23:54:57,688 - jarvis_app - INFO - Created new chat: new-chat-1747342497
+2025-05-15 23:55:02,719 - jarvis_app - INFO - Sending query to Jarvis AI: hi...
+2025-05-15 23:55:02,721 - jarvis_assistant - INFO - Processing query: hi
+2025-05-15 23:55:02,722 - jarvis_assistant - INFO - Detected model type from query: textGeneration
+2025-05-15 23:55:02,722 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-15 23:55:02,724 - jarvis_models - INFO - Attempting to load messages from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-15 23:55:02,751 - jarvis_models - INFO - Loaded messages for 16 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-15 23:55:04,406 - jarvis_models - ERROR - Failed to initialize Google Generative AI client: module 'google.genai' has no attribute 'configure'
+2025-05-15 23:55:04,407 - jarvis_app - INFO - Received response from Jarvis AI: Text generation model could not be loaded. Please ...
+2025-05-15 23:55:04,410 - jarvis_app - INFO - Data saved successfully
+2025-05-15 23:55:04,413 - jarvis_app - INFO - Processed message in chat new-chat-1747342497
+2025-05-15 23:55:39,007 - jarvis_desktop - INFO - Application window closed
+2025-05-15 23:56:33,322 - jarvis_app - INFO - Using static folder: D:\Jarvis\Jarvis-AI-Assistant\server\static
+2025-05-15 23:56:33,323 - jarvis_app - INFO - Using data directory: D:\Jarvis\Jarvis-AI-Assistant\data
+2025-05-15 23:56:33,324 - jarvis_app - INFO - Chats file: D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-15 23:56:33,324 - jarvis_app - INFO - Messages file: D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-15 23:56:49,779 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: D:\Jarvis\Jarvis-AI-Assistant\data\models
+2025-05-15 23:56:49,780 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-15 23:56:49,781 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-15 23:56:49,799 - jarvis_app - INFO - Loaded 23 chats from D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-15 23:56:49,815 - jarvis_app - INFO - Loaded messages for 16 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-15 23:56:49,825 - jarvis_desktop - INFO - Application path: D:\Jarvis\Jarvis-AI-Assistant
+2025-05-15 23:56:49,826 - jarvis_desktop - INFO - Operating system: nt - win32
+2025-05-15 23:56:49,828 - jarvis_desktop - INFO - Setting up for Windows environment
+2025-05-15 23:56:49,830 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-15 23:56:49,830 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-15 23:56:49,831 - jarvis_desktop - INFO - Using 4 worker threads (detected 4 CPU cores)
+2025-05-15 23:56:49,833 - jarvis_desktop - INFO - Using Windows-optimized server configuration
+2025-05-15 23:56:50,085 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-15 23:56:50,341 - jarvis_desktop - INFO - Server is ready
+2025-05-15 23:56:51,346 - jarvis_desktop - INFO - Found index.html at: D:\Jarvis\Jarvis-AI-Assistant\dist\index.html
+2025-05-15 23:56:51,347 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-15 23:56:51,349 - jarvis_desktop - INFO - Using Windows-optimized window configuration
+2025-05-15 23:56:51,353 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-15 23:56:51,354 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-15 23:56:52,456 - jarvis_desktop - INFO - Application window shown
+2025-05-15 23:56:53,303 - jarvis_app - INFO - Serving path: 
+2025-05-15 23:56:53,304 - jarvis_app - INFO - Serving index.html for root path
+2025-05-15 23:56:53,369 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-15 23:56:53,451 - jarvis_app - INFO - Serving path: assets/index.CfYRZsIu.js
+2025-05-15 23:56:53,452 - jarvis_app - INFO - Serving path: assets/index.Czty9hQT.css
+2025-05-15 23:56:53,452 - jarvis_app - INFO - Serving asset: index.CfYRZsIu.js from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-15 23:56:53,452 - jarvis_app - INFO - Serving asset: index.Czty9hQT.css from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-15 23:56:53,773 - jarvis_desktop - INFO - Application window loaded
+2025-05-15 23:56:53,791 - jarvis_desktop - INFO - Setting up Windows-optimized offline mode
+2025-05-15 23:56:53,830 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-15 23:56:53,877 - jarvis_app - INFO - Serving path: favicon.ico
+2025-05-15 23:56:53,890 - jarvis_app - INFO - Serving file: favicon.ico
+2025-05-15 23:56:53,990 - jarvis_app - INFO - Data saved successfully
+2025-05-15 23:56:53,990 - jarvis_app - INFO - Created new chat: new-chat-1747342613
+2025-05-15 23:56:57,719 - jarvis_app - INFO - Sending query to Jarvis AI: hi...
+2025-05-15 23:56:57,720 - jarvis_assistant - INFO - Processing query: hi
+2025-05-15 23:56:57,721 - jarvis_assistant - INFO - Detected model type from query: textGeneration
+2025-05-15 23:56:57,721 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-15 23:56:57,723 - jarvis_models - INFO - Attempting to load messages from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-15 23:56:57,749 - jarvis_models - INFO - Loaded messages for 17 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-15 23:56:59,529 - jarvis_models - INFO - Successfully initialized Google Generative AI client
+2025-05-15 23:56:59,533 - jarvis_models - INFO - Using messages from chat ID: new-chat-1747342613
+2025-05-15 23:56:59,534 - jarvis_models - INFO - Formatted 1 messages for chat history
+2025-05-15 23:56:59,539 - jarvis_models - ERROR - Chat creation failed: 1 validation error for Content
+content
+  Extra inputs are not permitted [type=extra_forbidden, input_value='How can I help you with this new conversation?', input_type=str]
+    For further information visit https://errors.pydantic.dev/2.10/v/extra_forbidden
+2025-05-15 23:56:59,540 - jarvis_app - INFO - Received response from Jarvis AI: Text generation model could not be loaded. Please ...
+2025-05-15 23:56:59,551 - jarvis_app - INFO - Data saved successfully
+2025-05-15 23:56:59,552 - jarvis_app - INFO - Processed message in chat new-chat-1747342613
+2025-05-16 00:03:57,501 - jarvis_desktop - INFO - Application window closed
+2025-05-16 00:16:13,417 - jarvis_app - INFO - Using static folder: D:\Jarvis\Jarvis-AI-Assistant\server\static
+2025-05-16 00:16:13,418 - jarvis_app - INFO - Using data directory: D:\Jarvis\Jarvis-AI-Assistant\data
+2025-05-16 00:16:13,419 - jarvis_app - INFO - Chats file: D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-16 00:16:13,420 - jarvis_app - INFO - Messages file: D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:16:31,435 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: D:\Jarvis\Jarvis-AI-Assistant\data\models
+2025-05-16 00:16:31,435 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-16 00:16:31,436 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-16 00:16:31,453 - jarvis_app - INFO - Loaded 24 chats from D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-16 00:16:31,454 - jarvis_app - INFO - Loaded messages for 17 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:16:31,469 - jarvis_desktop - INFO - Application path: D:\Jarvis\Jarvis-AI-Assistant
+2025-05-16 00:16:31,470 - jarvis_desktop - INFO - Operating system: nt - win32
+2025-05-16 00:16:31,472 - jarvis_desktop - INFO - Setting up for Windows environment
+2025-05-16 00:16:31,474 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-16 00:16:31,474 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-16 00:16:31,475 - jarvis_desktop - INFO - Using 4 worker threads (detected 4 CPU cores)
+2025-05-16 00:16:31,476 - jarvis_desktop - INFO - Using Windows-optimized server configuration
+2025-05-16 00:16:31,757 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-16 00:16:31,984 - jarvis_desktop - INFO - Server is ready
+2025-05-16 00:16:33,000 - jarvis_desktop - INFO - Found index.html at: D:\Jarvis\Jarvis-AI-Assistant\dist\index.html
+2025-05-16 00:16:33,005 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-16 00:16:33,006 - jarvis_desktop - INFO - Using Windows-optimized window configuration
+2025-05-16 00:16:33,012 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-16 00:16:33,014 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-16 00:16:34,422 - jarvis_desktop - INFO - Application window shown
+2025-05-16 00:16:35,023 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-16 00:16:35,278 - jarvis_app - INFO - Serving path: 
+2025-05-16 00:16:35,283 - jarvis_app - INFO - Serving index.html for root path
+2025-05-16 00:16:35,524 - jarvis_app - INFO - Serving path: assets/index.CfYRZsIu.js
+2025-05-16 00:16:35,525 - jarvis_app - INFO - Serving path: assets/index.Czty9hQT.css
+2025-05-16 00:16:35,525 - jarvis_app - INFO - Serving asset: index.CfYRZsIu.js from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-16 00:16:35,526 - jarvis_app - INFO - Serving asset: index.Czty9hQT.css from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-16 00:16:35,832 - jarvis_desktop - INFO - Application window loaded
+2025-05-16 00:16:35,843 - jarvis_desktop - INFO - Setting up Windows-optimized offline mode
+2025-05-16 00:16:35,918 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-16 00:16:35,933 - jarvis_app - INFO - Serving path: favicon.ico
+2025-05-16 00:16:35,938 - jarvis_app - INFO - Serving file: favicon.ico
+2025-05-16 00:16:35,969 - jarvis_app - INFO - Data saved successfully
+2025-05-16 00:16:35,978 - jarvis_app - INFO - Created new chat: new-chat-1747343795
+2025-05-16 00:16:51,555 - jarvis_app - INFO - Sending query to Jarvis AI: i'm very tired...
+2025-05-16 00:16:51,555 - jarvis_assistant - INFO - Processing query: i'm very tired
+2025-05-16 00:16:51,557 - jarvis_assistant - INFO - Detected model type from query: textGeneration
+2025-05-16 00:16:51,558 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-16 00:16:51,559 - jarvis_models - INFO - Attempting to load messages from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:16:51,560 - jarvis_models - INFO - Loaded messages for 18 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:16:53,366 - jarvis_models - INFO - Successfully initialized Google Generative AI client
+2025-05-16 00:16:53,367 - jarvis_models - INFO - Using messages from chat ID: new-chat-1747343795
+2025-05-16 00:16:53,367 - jarvis_models - INFO - Formatted 1 messages for Gemini chat history
+2025-05-16 00:16:53,368 - jarvis_models - ERROR - Chat creation failed: History must start with a user turn.
+2025-05-16 00:16:53,369 - jarvis_app - INFO - Received response from Jarvis AI: Text generation model could not be loaded. Please ...
+2025-05-16 00:16:53,374 - jarvis_app - INFO - Data saved successfully
+2025-05-16 00:16:53,375 - jarvis_app - INFO - Processed message in chat new-chat-1747343795
+2025-05-16 00:18:44,617 - jarvis_desktop - INFO - Application window closed
+2025-05-16 00:20:15,066 - jarvis_app - INFO - Using static folder: D:\Jarvis\Jarvis-AI-Assistant\server\static
+2025-05-16 00:20:15,067 - jarvis_app - INFO - Using data directory: D:\Jarvis\Jarvis-AI-Assistant\data
+2025-05-16 00:20:15,068 - jarvis_app - INFO - Chats file: D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-16 00:20:15,068 - jarvis_app - INFO - Messages file: D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:20:31,835 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: D:\Jarvis\Jarvis-AI-Assistant\data\models
+2025-05-16 00:20:31,836 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-16 00:20:31,837 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-16 00:20:31,852 - jarvis_app - INFO - Loaded 25 chats from D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-16 00:20:31,855 - jarvis_app - INFO - Loaded messages for 18 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:20:31,866 - jarvis_desktop - INFO - Application path: D:\Jarvis\Jarvis-AI-Assistant
+2025-05-16 00:20:31,866 - jarvis_desktop - INFO - Operating system: nt - win32
+2025-05-16 00:20:31,867 - jarvis_desktop - INFO - Setting up for Windows environment
+2025-05-16 00:20:31,871 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-16 00:20:31,871 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-16 00:20:31,872 - jarvis_desktop - INFO - Using 4 worker threads (detected 4 CPU cores)
+2025-05-16 00:20:31,873 - jarvis_desktop - INFO - Using Windows-optimized server configuration
+2025-05-16 00:20:32,119 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-16 00:20:32,384 - jarvis_desktop - INFO - Server is ready
+2025-05-16 00:20:33,399 - jarvis_desktop - INFO - Found index.html at: D:\Jarvis\Jarvis-AI-Assistant\dist\index.html
+2025-05-16 00:20:33,401 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-16 00:20:33,402 - jarvis_desktop - INFO - Using Windows-optimized window configuration
+2025-05-16 00:20:33,407 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-16 00:20:33,408 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-16 00:20:34,649 - jarvis_desktop - INFO - Application window shown
+2025-05-16 00:20:35,423 - jarvis_app - INFO - Serving path: 
+2025-05-16 00:20:35,424 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-16 00:20:35,427 - jarvis_app - INFO - Serving index.html for root path
+2025-05-16 00:20:35,599 - jarvis_app - INFO - Serving path: assets/index.CfYRZsIu.js
+2025-05-16 00:20:35,601 - jarvis_app - INFO - Serving path: assets/index.Czty9hQT.css
+2025-05-16 00:20:35,601 - jarvis_app - INFO - Serving asset: index.CfYRZsIu.js from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-16 00:20:35,602 - jarvis_app - INFO - Serving asset: index.Czty9hQT.css from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-16 00:20:35,932 - jarvis_desktop - INFO - Application window loaded
+2025-05-16 00:20:35,944 - jarvis_desktop - INFO - Setting up Windows-optimized offline mode
+2025-05-16 00:20:36,022 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-16 00:20:36,043 - jarvis_app - INFO - Serving path: favicon.ico
+2025-05-16 00:20:36,052 - jarvis_app - INFO - Serving file: favicon.ico
+2025-05-16 00:20:36,158 - jarvis_app - INFO - Data saved successfully
+2025-05-16 00:20:36,161 - jarvis_app - INFO - Created new chat: new-chat-1747344036
+2025-05-16 00:21:01,713 - jarvis_app - INFO - Sending query to Jarvis AI: i'm very tired...
+2025-05-16 00:21:01,713 - jarvis_assistant - INFO - Processing query: i'm very tired
+2025-05-16 00:21:01,714 - jarvis_assistant - INFO - Detected model type from query: textGeneration
+2025-05-16 00:21:01,715 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-16 00:21:01,717 - jarvis_models - INFO - Attempting to load messages from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:21:01,718 - jarvis_models - INFO - Loaded messages for 19 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:21:03,534 - jarvis_models - INFO - Successfully initialized Google Generative AI client
+2025-05-16 00:21:03,536 - jarvis_models - INFO - Using messages from chat ID: new-chat-1747344036
+2025-05-16 00:21:03,538 - jarvis_models - WARNING - Removed model message at start of history (Gemini requires user to start)
+2025-05-16 00:21:03,540 - jarvis_models - INFO - Formatted 0 messages for Gemini chat history
+2025-05-16 00:21:03,546 - jarvis_models - INFO - Successfully created new chat session
+2025-05-16 00:21:03,546 - jarvis_models - INFO - Text generation model loaded successfully
+2025-05-16 00:21:03,555 - google_genai.models - INFO - AFC is enabled with max remote calls: 10.
+2025-05-16 00:21:07,339 - httpx - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 200 OK"
+2025-05-16 00:21:07,359 - google_genai.models - INFO - AFC remote call 1 is done.
+2025-05-16 00:21:07,365 - jarvis_app - INFO - Received response from Jarvis AI: Okay, I understand. Being tired can be really toug...
+2025-05-16 00:21:07,378 - jarvis_app - INFO - Data saved successfully
+2025-05-16 00:21:07,378 - jarvis_app - INFO - Processed message in chat new-chat-1747344036
+2025-05-16 00:21:28,215 - jarvis_app - INFO - Sending query to Jarvis AI: repeat your last response it may help me...
+2025-05-16 00:21:28,216 - jarvis_assistant - INFO - Processing query: repeat your last response it may help me
+2025-05-16 00:21:28,217 - jarvis_assistant - INFO - Detected model type from query: textGeneration
+2025-05-16 00:21:28,217 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-16 00:21:28,218 - google_genai.models - INFO - AFC is enabled with max remote calls: 10.
+2025-05-16 00:21:31,516 - httpx - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 200 OK"
+2025-05-16 00:21:31,525 - google_genai.models - INFO - AFC remote call 1 is done.
+2025-05-16 00:21:31,527 - jarvis_app - INFO - Received response from Jarvis AI: Okay, here's my last response again, in case it he...
+2025-05-16 00:21:31,554 - jarvis_app - INFO - Data saved successfully
+2025-05-16 00:21:31,558 - jarvis_app - INFO - Processed message in chat new-chat-1747344036
+2025-05-16 00:21:51,705 - jarvis_app - INFO - Sending query to Jarvis AI: hi model how are you...
+2025-05-16 00:21:51,707 - jarvis_assistant - INFO - Processing query: hi model how are you
+2025-05-16 00:21:51,708 - jarvis_assistant - INFO - Detected model type from query: textGeneration
+2025-05-16 00:21:51,709 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-16 00:21:51,710 - google_genai.models - INFO - AFC is enabled with max remote calls: 10.
+2025-05-16 00:21:53,029 - httpx - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 200 OK"
+2025-05-16 00:21:53,032 - google_genai.models - INFO - AFC remote call 1 is done.
+2025-05-16 00:21:53,032 - jarvis_app - INFO - Received response from Jarvis AI: Hello! As a large language model, I don't experien...
+2025-05-16 00:21:53,038 - jarvis_app - INFO - Data saved successfully
+2025-05-16 00:21:53,043 - jarvis_app - INFO - Processed message in chat new-chat-1747319355
+2025-05-16 00:22:18,738 - jarvis_app - INFO - Sending query to Jarvis AI: do you remember anything about me saying i'm tired...
+2025-05-16 00:22:18,738 - jarvis_assistant - INFO - Processing query: do you remember anything about me saying i'm tired ?
+2025-05-16 00:22:18,739 - jarvis_assistant - INFO - Detected model type from query: textGeneration
+2025-05-16 00:22:18,740 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-16 00:22:18,741 - google_genai.models - INFO - AFC is enabled with max remote calls: 10.
+2025-05-16 00:22:19,903 - httpx - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 200 OK"
+2025-05-16 00:22:19,905 - google_genai.models - INFO - AFC remote call 1 is done.
+2025-05-16 00:22:19,906 - jarvis_app - INFO - Received response from Jarvis AI: Yes, I do. I remember you told me earlier that you...
+2025-05-16 00:22:19,910 - jarvis_app - INFO - Data saved successfully
+2025-05-16 00:22:19,911 - jarvis_app - INFO - Processed message in chat new-chat-1747319355
+2025-05-16 00:25:10,000 - jarvis_desktop - INFO - Application window closed
+2025-05-16 00:39:22,980 - jarvis_app - INFO - Using static folder: D:\Jarvis\Jarvis-AI-Assistant\server\static
+2025-05-16 00:39:22,981 - jarvis_app - INFO - Using data directory: D:\Jarvis\Jarvis-AI-Assistant\data
+2025-05-16 00:39:22,982 - jarvis_app - INFO - Chats file: D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-16 00:39:22,982 - jarvis_app - INFO - Messages file: D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:39:48,516 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: D:\Jarvis\Jarvis-AI-Assistant\data\models
+2025-05-16 00:39:48,516 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-16 00:39:48,517 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-16 00:39:48,568 - jarvis_app - INFO - Loaded 26 chats from D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-16 00:39:48,583 - jarvis_app - INFO - Loaded messages for 19 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:39:48,598 - jarvis_desktop - INFO - Application path: D:\Jarvis\Jarvis-AI-Assistant
+2025-05-16 00:39:48,599 - jarvis_desktop - INFO - Operating system: nt - win32
+2025-05-16 00:39:48,600 - jarvis_desktop - INFO - Setting up for Windows environment
+2025-05-16 00:39:48,606 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-16 00:39:48,606 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-16 00:39:48,867 - jarvis_desktop - INFO - Using 4 worker threads (detected 4 CPU cores)
+2025-05-16 00:39:48,869 - jarvis_desktop - INFO - Using Windows-optimized server configuration
+2025-05-16 00:39:48,874 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-16 00:39:49,381 - jarvis_desktop - INFO - Server is ready
+2025-05-16 00:39:50,392 - jarvis_desktop - INFO - Found index.html at: D:\Jarvis\Jarvis-AI-Assistant\dist\index.html
+2025-05-16 00:39:50,394 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-16 00:39:50,395 - jarvis_desktop - INFO - Using Windows-optimized window configuration
+2025-05-16 00:39:50,398 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-16 00:39:50,399 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-16 00:39:52,410 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-16 00:39:52,475 - jarvis_desktop - INFO - Application window shown
+2025-05-16 00:39:53,753 - jarvis_app - INFO - Serving path: 
+2025-05-16 00:39:53,755 - jarvis_app - INFO - Serving index.html for root path
+2025-05-16 00:39:54,091 - jarvis_app - INFO - Serving path: assets/index.CfYRZsIu.js
+2025-05-16 00:39:54,092 - jarvis_app - INFO - Serving asset: index.CfYRZsIu.js from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-16 00:39:54,093 - jarvis_app - INFO - Serving path: assets/index.Czty9hQT.css
+2025-05-16 00:39:54,094 - jarvis_app - INFO - Serving asset: index.Czty9hQT.css from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-16 00:39:54,454 - jarvis_desktop - INFO - Application window loaded
+2025-05-16 00:39:54,470 - jarvis_desktop - INFO - Setting up Windows-optimized offline mode
+2025-05-16 00:39:54,544 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-16 00:39:54,586 - jarvis_app - INFO - Serving path: favicon.ico
+2025-05-16 00:39:54,606 - jarvis_app - INFO - Serving file: favicon.ico
+2025-05-16 00:39:54,659 - jarvis_app - INFO - Data saved successfully
+2025-05-16 00:39:54,659 - jarvis_app - INFO - Created new chat: new-chat-1747345194
+2025-05-16 00:40:07,453 - jarvis_app - INFO - Sending query to Jarvis AI: say number 57...
+2025-05-16 00:40:07,454 - jarvis_assistant - INFO - Processing query: say number 57
+2025-05-16 00:40:07,454 - jarvis_assistant - INFO - Detected model type from query: textGeneration
+2025-05-16 00:40:07,455 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-16 00:40:07,456 - jarvis_models - INFO - Attempting to load messages from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:40:07,458 - jarvis_models - INFO - Loaded messages for 20 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:40:09,731 - jarvis_models - INFO - Successfully initialized Google Generative AI client
+2025-05-16 00:40:09,732 - jarvis_models - INFO - Using messages from chat ID: new-chat-1747345194
+2025-05-16 00:40:09,733 - jarvis_models - WARNING - Removed model message at start of history (Gemini requires user to start)
+2025-05-16 00:40:09,733 - jarvis_models - INFO - Formatted 0 messages for Gemini chat history
+2025-05-16 00:40:09,733 - jarvis_models - INFO - Successfully created new chat session
+2025-05-16 00:40:09,734 - jarvis_models - INFO - Text generation model loaded successfully
+2025-05-16 00:40:09,734 - google_genai.models - INFO - AFC is enabled with max remote calls: 10.
+2025-05-16 00:40:10,472 - httpx - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 200 OK"
+2025-05-16 00:40:10,479 - google_genai.models - INFO - AFC remote call 1 is done.
+2025-05-16 00:40:10,480 - jarvis_app - INFO - Received response from Jarvis AI: 57
+...
+2025-05-16 00:40:10,485 - jarvis_app - INFO - Data saved successfully
+2025-05-16 00:40:10,486 - jarvis_app - INFO - Processed message in chat new-chat-1747345194
+2025-05-16 00:40:30,986 - jarvis_app - INFO - Sending query to Jarvis AI: do you remember the number i told you ?...
+2025-05-16 00:40:30,986 - jarvis_assistant - INFO - Processing query: do you remember the number i told you ?
+2025-05-16 00:40:30,987 - jarvis_assistant - INFO - Detected model type from query: textGeneration
+2025-05-16 00:40:30,987 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-16 00:40:30,988 - google_genai.models - INFO - AFC is enabled with max remote calls: 10.
+2025-05-16 00:40:31,885 - httpx - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 200 OK"
+2025-05-16 00:40:31,888 - google_genai.models - INFO - AFC remote call 1 is done.
+2025-05-16 00:40:31,889 - jarvis_app - INFO - Received response from Jarvis AI: Yes, you told me the number 57.
+...
+2025-05-16 00:40:31,900 - jarvis_app - INFO - Data saved successfully
+2025-05-16 00:40:31,902 - jarvis_app - INFO - Processed message in chat new-chat-1747342613
+2025-05-16 00:44:43,696 - jarvis_desktop - INFO - Application window closed
+2025-05-16 00:45:21,797 - jarvis_app - INFO - Using static folder: D:\Jarvis\Jarvis-AI-Assistant\server\static
+2025-05-16 00:45:21,798 - jarvis_app - INFO - Using data directory: D:\Jarvis\Jarvis-AI-Assistant\data
+2025-05-16 00:45:21,799 - jarvis_app - INFO - Chats file: D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-16 00:45:21,799 - jarvis_app - INFO - Messages file: D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:45:38,266 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: D:\Jarvis\Jarvis-AI-Assistant\data\models
+2025-05-16 00:45:38,267 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-16 00:45:38,267 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-16 00:45:38,283 - jarvis_app - INFO - Loaded 27 chats from D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-16 00:45:38,284 - jarvis_app - INFO - Loaded messages for 20 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:45:38,296 - jarvis_desktop - INFO - Application path: D:\Jarvis\Jarvis-AI-Assistant
+2025-05-16 00:45:38,298 - jarvis_desktop - INFO - Operating system: nt - win32
+2025-05-16 00:45:38,299 - jarvis_desktop - INFO - Setting up for Windows environment
+2025-05-16 00:45:38,301 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-16 00:45:38,548 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-16 00:45:38,548 - jarvis_desktop - INFO - Using 4 worker threads (detected 4 CPU cores)
+2025-05-16 00:45:38,549 - jarvis_desktop - INFO - Using Windows-optimized server configuration
+2025-05-16 00:45:38,554 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-16 00:45:39,061 - jarvis_desktop - INFO - Server is ready
+2025-05-16 00:45:40,066 - jarvis_desktop - INFO - Found index.html at: D:\Jarvis\Jarvis-AI-Assistant\dist\index.html
+2025-05-16 00:45:40,067 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-16 00:45:40,067 - jarvis_desktop - INFO - Using Windows-optimized window configuration
+2025-05-16 00:45:40,069 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-16 00:45:40,070 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-16 00:45:41,142 - jarvis_desktop - INFO - Application window shown
+2025-05-16 00:45:42,076 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-16 00:45:42,083 - jarvis_app - INFO - Serving path: 
+2025-05-16 00:45:42,084 - jarvis_app - INFO - Serving index.html for root path
+2025-05-16 00:45:42,207 - jarvis_app - INFO - Serving path: assets/index.CfYRZsIu.js
+2025-05-16 00:45:42,208 - jarvis_app - INFO - Serving path: assets/index.Czty9hQT.css
+2025-05-16 00:45:42,208 - jarvis_app - INFO - Serving asset: index.CfYRZsIu.js from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-16 00:45:42,208 - jarvis_app - INFO - Serving asset: index.Czty9hQT.css from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-16 00:45:42,523 - jarvis_desktop - INFO - Application window loaded
+2025-05-16 00:45:42,533 - jarvis_desktop - INFO - Setting up Windows-optimized offline mode
+2025-05-16 00:45:42,607 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-16 00:45:42,628 - jarvis_app - INFO - Serving path: favicon.ico
+2025-05-16 00:45:42,634 - jarvis_app - INFO - Serving file: favicon.ico
+2025-05-16 00:45:42,739 - jarvis_app - INFO - Data saved successfully
+2025-05-16 00:45:42,741 - jarvis_app - INFO - Created new chat: new-chat-1747345542
+2025-05-16 00:45:58,287 - jarvis_app - INFO - Sending query to Jarvis AI: say number 258...
+2025-05-16 00:45:58,288 - jarvis_assistant - INFO - Processing query: say number 258
+2025-05-16 00:45:58,289 - jarvis_assistant - INFO - Detected model type from query: textGeneration
+2025-05-16 00:45:58,290 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-16 00:45:58,291 - jarvis_models - INFO - Attempting to load messages from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:45:58,292 - jarvis_models - INFO - Loaded messages for 21 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:46:00,086 - jarvis_models - INFO - Successfully initialized Google Generative AI client
+2025-05-16 00:46:00,087 - jarvis_models - INFO - Using messages from chat ID: new-chat-1747345542
+2025-05-16 00:46:00,088 - jarvis_models - WARNING - Removed model message at start of history (Gemini requires user to start)
+2025-05-16 00:46:00,088 - jarvis_models - INFO - Formatted 0 messages for Gemini chat history
+2025-05-16 00:46:00,089 - jarvis_models - INFO - Successfully created new chat session
+2025-05-16 00:46:00,089 - jarvis_models - INFO - Text generation model loaded successfully
+2025-05-16 00:46:00,090 - google_genai.models - INFO - AFC is enabled with max remote calls: 10.
+2025-05-16 00:46:01,075 - httpx - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 200 OK"
+2025-05-16 00:46:01,080 - google_genai.models - INFO - AFC remote call 1 is done.
+2025-05-16 00:46:01,081 - jarvis_app - INFO - Received response from Jarvis AI: Two hundred fifty-eight.
+...
+2025-05-16 00:46:01,091 - jarvis_app - INFO - Data saved successfully
+2025-05-16 00:46:01,092 - jarvis_app - INFO - Processed message in chat new-chat-1747345542
+2025-05-16 00:46:29,403 - jarvis_app - INFO - Sending query to Jarvis AI: do you remember the number i told you...
+2025-05-16 00:46:29,405 - jarvis_assistant - INFO - Processing query: do you remember the number i told you
+2025-05-16 00:46:29,407 - jarvis_assistant - INFO - Detected model type from query: textGeneration
+2025-05-16 00:46:29,409 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-16 00:46:29,410 - google_genai.models - INFO - AFC is enabled with max remote calls: 10.
+2025-05-16 00:46:30,279 - httpx - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 200 OK"
+2025-05-16 00:46:30,283 - google_genai.models - INFO - AFC remote call 1 is done.
+2025-05-16 00:46:30,284 - jarvis_app - INFO - Received response from Jarvis AI: Yes, you told me the number 258 (two hundred fifty...
+2025-05-16 00:46:30,296 - jarvis_app - INFO - Data saved successfully
+2025-05-16 00:46:30,298 - jarvis_app - INFO - Processed message in chat new-chat-1747344036
+2025-05-16 00:48:48,447 - jarvis_desktop - INFO - Application window closed
+2025-05-16 00:49:33,072 - jarvis_app - INFO - Using static folder: D:\Jarvis\Jarvis-AI-Assistant\server\static
+2025-05-16 00:49:33,073 - jarvis_app - INFO - Using data directory: D:\Jarvis\Jarvis-AI-Assistant\data
+2025-05-16 00:49:33,073 - jarvis_app - INFO - Chats file: D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-16 00:49:33,074 - jarvis_app - INFO - Messages file: D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:49:50,318 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: D:\Jarvis\Jarvis-AI-Assistant\data\models
+2025-05-16 00:49:50,318 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-16 00:49:50,319 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-16 00:49:50,337 - jarvis_app - INFO - Loaded 28 chats from D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-16 00:49:50,339 - jarvis_app - INFO - Loaded messages for 21 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:49:50,354 - jarvis_desktop - INFO - Application path: D:\Jarvis\Jarvis-AI-Assistant
+2025-05-16 00:49:50,355 - jarvis_desktop - INFO - Operating system: nt - win32
+2025-05-16 00:49:50,356 - jarvis_desktop - INFO - Setting up for Windows environment
+2025-05-16 00:49:50,713 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-16 00:49:50,713 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-16 00:49:50,714 - jarvis_desktop - INFO - Using 4 worker threads (detected 4 CPU cores)
+2025-05-16 00:49:50,715 - jarvis_desktop - INFO - Using Windows-optimized server configuration
+2025-05-16 00:49:50,720 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-16 00:49:51,215 - jarvis_desktop - INFO - Server is ready
+2025-05-16 00:49:52,221 - jarvis_desktop - INFO - Found index.html at: D:\Jarvis\Jarvis-AI-Assistant\dist\index.html
+2025-05-16 00:49:52,221 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-16 00:49:52,222 - jarvis_desktop - INFO - Using Windows-optimized window configuration
+2025-05-16 00:49:52,224 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-16 00:49:52,224 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-16 00:49:53,828 - jarvis_desktop - INFO - Application window shown
+2025-05-16 00:49:54,226 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-16 00:49:54,864 - jarvis_app - INFO - Serving path: 
+2025-05-16 00:49:54,866 - jarvis_app - INFO - Serving index.html for root path
+2025-05-16 00:49:55,090 - jarvis_app - INFO - Serving path: assets/index.CfYRZsIu.js
+2025-05-16 00:49:55,091 - jarvis_app - INFO - Serving path: assets/index.Czty9hQT.css
+2025-05-16 00:49:55,092 - jarvis_app - INFO - Serving asset: index.CfYRZsIu.js from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-16 00:49:55,092 - jarvis_app - INFO - Serving asset: index.Czty9hQT.css from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-16 00:49:55,459 - jarvis_desktop - INFO - Application window loaded
+2025-05-16 00:49:55,476 - jarvis_desktop - INFO - Setting up Windows-optimized offline mode
+2025-05-16 00:49:55,560 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-16 00:49:55,589 - jarvis_app - INFO - Serving path: favicon.ico
+2025-05-16 00:49:55,598 - jarvis_app - INFO - Serving file: favicon.ico
+2025-05-16 00:49:55,691 - jarvis_app - INFO - Data saved successfully
+2025-05-16 00:49:55,693 - jarvis_app - INFO - Created new chat: new-chat-1747345795
+2025-05-16 00:50:17,355 - jarvis_app - INFO - Sending query to Jarvis AI: say number 789...
+2025-05-16 00:50:17,356 - jarvis_assistant - INFO - Processing query: say number 789
+2025-05-16 00:50:17,357 - jarvis_assistant - INFO - Detected model type from query: textGeneration
+2025-05-16 00:50:17,358 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-16 00:50:17,359 - jarvis_models - INFO - Attempting to load messages from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:50:17,361 - jarvis_models - INFO - Loaded messages for 22 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:50:19,151 - jarvis_models - INFO - Successfully initialized Google Generative AI client
+2025-05-16 00:50:19,152 - jarvis_models - INFO - Using messages from chat ID: new-chat-1747345795
+2025-05-16 00:50:19,152 - jarvis_models - WARNING - Removed model message at start of history (Gemini requires user to start)
+2025-05-16 00:50:19,153 - jarvis_models - INFO - Formatted 0 messages for Gemini chat history
+2025-05-16 00:50:19,153 - jarvis_models - INFO - Successfully created new chat session
+2025-05-16 00:50:19,154 - jarvis_models - INFO - Text generation model loaded successfully
+2025-05-16 00:50:19,154 - google_genai.models - INFO - AFC is enabled with max remote calls: 10.
+2025-05-16 00:50:20,169 - httpx - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 200 OK"
+2025-05-16 00:50:20,173 - google_genai.models - INFO - AFC remote call 1 is done.
+2025-05-16 00:50:20,174 - jarvis_app - INFO - Received response from Jarvis AI: Seven hundred eighty-nine.
+...
+2025-05-16 00:50:20,181 - jarvis_app - INFO - Data saved successfully
+2025-05-16 00:50:20,184 - jarvis_app - INFO - Processed message in chat new-chat-1747344036
+2025-05-16 00:50:41,865 - jarvis_app - INFO - Sending query to Jarvis AI: do you remember the number i told you ?...
+2025-05-16 00:50:41,865 - jarvis_assistant - INFO - Processing query: do you remember the number i told you ?
+2025-05-16 00:50:41,866 - jarvis_assistant - INFO - Detected model type from query: textGeneration
+2025-05-16 00:50:41,867 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-16 00:50:41,869 - jarvis_models - INFO - Attempting to load messages from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:50:41,870 - jarvis_models - INFO - Loaded messages for 22 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:50:41,928 - jarvis_models - INFO - Successfully initialized Google Generative AI client
+2025-05-16 00:50:41,929 - jarvis_models - INFO - Using messages from chat ID: new-chat-1747345795
+2025-05-16 00:50:41,930 - jarvis_models - WARNING - Removed model message at start of history (Gemini requires user to start)
+2025-05-16 00:50:41,930 - jarvis_models - INFO - Formatted 0 messages for Gemini chat history
+2025-05-16 00:50:41,930 - jarvis_models - INFO - Successfully created new chat session
+2025-05-16 00:50:41,931 - jarvis_models - INFO - Text generation model loaded successfully
+2025-05-16 00:50:41,931 - google_genai.models - INFO - AFC is enabled with max remote calls: 10.
+2025-05-16 00:50:42,884 - httpx - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 200 OK"
+2025-05-16 00:50:42,888 - google_genai.models - INFO - AFC remote call 1 is done.
+2025-05-16 00:50:42,889 - jarvis_app - INFO - Received response from Jarvis AI: As a large language model, I have no memory of pas...
+2025-05-16 00:50:42,905 - jarvis_app - INFO - Data saved successfully
+2025-05-16 00:50:42,910 - jarvis_app - INFO - Processed message in chat new-chat-1747342613
+2025-05-16 00:51:06,749 - jarvis_app - INFO - Sending query to Jarvis AI: do you remember the number i told you ?...
+2025-05-16 00:51:06,750 - jarvis_assistant - INFO - Processing query: do you remember the number i told you ?
+2025-05-16 00:51:06,751 - jarvis_assistant - INFO - Detected model type from query: textGeneration
+2025-05-16 00:51:06,751 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-16 00:51:06,752 - jarvis_models - INFO - Attempting to load messages from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:51:06,754 - jarvis_models - INFO - Loaded messages for 22 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:51:06,808 - jarvis_models - INFO - Successfully initialized Google Generative AI client
+2025-05-16 00:51:06,809 - jarvis_models - INFO - Using messages from chat ID: new-chat-1747345795
+2025-05-16 00:51:06,810 - jarvis_models - WARNING - Removed model message at start of history (Gemini requires user to start)
+2025-05-16 00:51:06,811 - jarvis_models - INFO - Formatted 0 messages for Gemini chat history
+2025-05-16 00:51:06,811 - jarvis_models - INFO - Successfully created new chat session
+2025-05-16 00:51:06,812 - jarvis_models - INFO - Text generation model loaded successfully
+2025-05-16 00:51:06,812 - google_genai.models - INFO - AFC is enabled with max remote calls: 10.
+2025-05-16 00:51:07,614 - httpx - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 200 OK"
+2025-05-16 00:51:07,625 - google_genai.models - INFO - AFC remote call 1 is done.
+2025-05-16 00:51:07,628 - jarvis_app - INFO - Received response from Jarvis AI: As a large language model, I have no memory of pas...
+2025-05-16 00:51:07,641 - jarvis_app - INFO - Data saved successfully
+2025-05-16 00:51:07,642 - jarvis_app - INFO - Processed message in chat new-chat-1747344036
+2025-05-16 00:51:53,240 - jarvis_desktop - INFO - Application window closed
+2025-05-16 00:58:56,642 - jarvis_app - INFO - Using static folder: D:\Jarvis\Jarvis-AI-Assistant\server\static
+2025-05-16 00:58:56,643 - jarvis_app - INFO - Using data directory: D:\Jarvis\Jarvis-AI-Assistant\data
+2025-05-16 00:58:56,644 - jarvis_app - INFO - Chats file: D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-16 00:58:56,644 - jarvis_app - INFO - Messages file: D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:59:14,030 - jarvis_assistant - INFO - Initializing Jarvis AI with model path: D:\Jarvis\Jarvis-AI-Assistant\data\models
+2025-05-16 00:59:14,031 - jarvis_assistant - INFO - Jarvis AI initialized
+2025-05-16 00:59:14,031 - jarvis_app - INFO - Jarvis AI assistant initialized successfully
+2025-05-16 00:59:14,046 - jarvis_app - INFO - Loaded 29 chats from D:\Jarvis\Jarvis-AI-Assistant\data\chats.json
+2025-05-16 00:59:14,048 - jarvis_app - INFO - Loaded messages for 22 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:59:14,066 - jarvis_desktop - INFO - Application path: D:\Jarvis\Jarvis-AI-Assistant
+2025-05-16 00:59:14,069 - jarvis_desktop - INFO - Operating system: nt - win32
+2025-05-16 00:59:14,071 - jarvis_desktop - INFO - Setting up for Windows environment
+2025-05-16 00:59:14,337 - jarvis_desktop - INFO - Starting Jarvis AI Assistant server on http://127.0.0.1:5000
+2025-05-16 00:59:14,337 - jarvis_desktop - INFO - Waiting for server to be ready...
+2025-05-16 00:59:14,338 - jarvis_desktop - INFO - Using 4 worker threads (detected 4 CPU cores)
+2025-05-16 00:59:14,338 - jarvis_desktop - INFO - Using Windows-optimized server configuration
+2025-05-16 00:59:14,343 - waitress - INFO - Serving on http://127.0.0.1:5000
+2025-05-16 00:59:14,845 - jarvis_desktop - INFO - Server is ready
+2025-05-16 00:59:15,851 - jarvis_desktop - INFO - Found index.html at: D:\Jarvis\Jarvis-AI-Assistant\dist\index.html
+2025-05-16 00:59:15,852 - jarvis_desktop - INFO - Creating window with root URL
+2025-05-16 00:59:15,852 - jarvis_desktop - INFO - Using Windows-optimized window configuration
+2025-05-16 00:59:15,854 - jarvis_desktop - INFO - Window event handlers set up successfully
+2025-05-16 00:59:15,854 - jarvis_desktop - INFO - Starting PyWebView event loop
+2025-05-16 00:59:17,017 - jarvis_desktop - INFO - Application window shown
+2025-05-16 00:59:17,766 - jarvis_app - INFO - Serving path: 
+2025-05-16 00:59:17,767 - jarvis_app - INFO - Serving index.html for root path
+2025-05-16 00:59:17,862 - jarvis_desktop - INFO - Checking if window needs to be reloaded
+2025-05-16 00:59:17,950 - jarvis_app - INFO - Serving path: assets/index.CfYRZsIu.js
+2025-05-16 00:59:17,950 - jarvis_app - INFO - Serving path: assets/index.Czty9hQT.css
+2025-05-16 00:59:17,951 - jarvis_app - INFO - Serving asset: index.CfYRZsIu.js from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-16 00:59:17,952 - jarvis_app - INFO - Serving asset: index.Czty9hQT.css from D:\Jarvis\Jarvis-AI-Assistant\server\static\assets
+2025-05-16 00:59:18,280 - jarvis_desktop - INFO - Application window loaded
+2025-05-16 00:59:18,292 - jarvis_desktop - INFO - Setting up Windows-optimized offline mode
+2025-05-16 00:59:18,364 - jarvis_desktop - INFO - Offline mode configured successfully
+2025-05-16 00:59:18,390 - jarvis_app - INFO - Serving path: favicon.ico
+2025-05-16 00:59:18,395 - jarvis_app - INFO - Serving file: favicon.ico
+2025-05-16 00:59:31,147 - jarvis_app - INFO - Sending query to Jarvis AI: say number 8462...
+2025-05-16 00:59:31,147 - jarvis_assistant - INFO - Processing query: say number 8462
+2025-05-16 00:59:31,148 - jarvis_assistant - INFO - Detected model type from query: textGeneration
+2025-05-16 00:59:31,148 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-16 00:59:31,150 - jarvis_models - INFO - Attempting to load messages from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:59:31,151 - jarvis_models - INFO - Loaded messages for 22 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 00:59:33,025 - jarvis_models - INFO - Successfully initialized Google Generative AI client
+2025-05-16 00:59:33,026 - jarvis_models - INFO - Using messages from chat ID: new-chat-1747345795
+2025-05-16 00:59:33,026 - jarvis_models - WARNING - Removed model message at start of history (Gemini requires user to start)
+2025-05-16 00:59:33,027 - jarvis_models - INFO - Formatted 0 messages for Gemini chat history
+2025-05-16 00:59:33,027 - jarvis_models - INFO - Successfully created new chat session
+2025-05-16 00:59:33,028 - jarvis_models - INFO - Text generation model loaded successfully
+2025-05-16 00:59:33,030 - google_genai.models - INFO - AFC is enabled with max remote calls: 10.
+2025-05-16 00:59:34,237 - httpx - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 200 OK"
+2025-05-16 00:59:34,242 - google_genai.models - INFO - AFC remote call 1 is done.
+2025-05-16 00:59:34,242 - jarvis_app - INFO - Received response from Jarvis AI: Eight thousand, four hundred sixty-two.
+...
+2025-05-16 00:59:34,257 - jarvis_app - INFO - Data saved successfully
+2025-05-16 00:59:34,259 - jarvis_app - INFO - Processed message in chat new-chat-1747345795
+2025-05-16 00:59:38,913 - jarvis_app - INFO - Data saved successfully
+2025-05-16 00:59:38,913 - jarvis_app - INFO - Created new chat: new-chat-1747346378
+2025-05-16 01:00:04,289 - jarvis_app - INFO - Sending query to Jarvis AI: do you remember the number i just told you ?...
+2025-05-16 01:00:04,290 - jarvis_assistant - INFO - Processing query: do you remember the number i just told you ?
+2025-05-16 01:00:04,291 - jarvis_assistant - INFO - Detected model type from query: textGeneration
+2025-05-16 01:00:04,292 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-16 01:00:04,293 - jarvis_models - INFO - Attempting to load messages from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 01:00:04,296 - jarvis_models - INFO - Loaded messages for 23 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 01:00:04,346 - jarvis_models - INFO - Successfully initialized Google Generative AI client
+2025-05-16 01:00:04,348 - jarvis_models - INFO - Using messages from chat ID: new-chat-1747345542
+2025-05-16 01:00:04,350 - jarvis_models - WARNING - Removed model message at start of history (Gemini requires user to start)
+2025-05-16 01:00:04,350 - jarvis_models - INFO - Formatted 2 messages for Gemini chat history
+2025-05-16 01:00:04,351 - jarvis_models - INFO - Successfully created new chat session
+2025-05-16 01:00:04,351 - jarvis_models - INFO - Text generation model loaded successfully
+2025-05-16 01:00:04,352 - google_genai.models - INFO - AFC is enabled with max remote calls: 10.
+2025-05-16 01:00:05,603 - httpx - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 200 OK"
+2025-05-16 01:00:05,612 - google_genai.models - INFO - AFC remote call 1 is done.
+2025-05-16 01:00:05,620 - jarvis_app - INFO - Received response from Jarvis AI: Yes, the number you just told me was 258.
+...
+2025-05-16 01:00:05,629 - jarvis_app - INFO - Data saved successfully
+2025-05-16 01:00:05,630 - jarvis_app - INFO - Processed message in chat new-chat-1747345542
+2025-05-16 01:00:26,037 - jarvis_app - INFO - Sending query to Jarvis AI: do you remember the number i just told you ?...
+2025-05-16 01:00:26,038 - jarvis_assistant - INFO - Processing query: do you remember the number i just told you ?
+2025-05-16 01:00:26,039 - jarvis_assistant - INFO - Detected model type from query: textGeneration
+2025-05-16 01:00:26,039 - jarvis_assistant - INFO - Using model handler: textGeneration
+2025-05-16 01:00:26,040 - jarvis_models - INFO - Attempting to load messages from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 01:00:26,042 - jarvis_models - INFO - Loaded messages for 23 chats from D:\Jarvis\Jarvis-AI-Assistant\data\messages.json
+2025-05-16 01:00:26,101 - jarvis_models - INFO - Successfully initialized Google Generative AI client
+2025-05-16 01:00:26,102 - jarvis_models - INFO - Using messages from chat ID: new-chat-1747345795
+2025-05-16 01:00:26,109 - jarvis_models - WARNING - Removed model message at start of history (Gemini requires user to start)
+2025-05-16 01:00:26,110 - jarvis_models - INFO - Formatted 2 messages for Gemini chat history
+2025-05-16 01:00:26,110 - jarvis_models - INFO - Successfully created new chat session
+2025-05-16 01:00:26,111 - jarvis_models - INFO - Text generation model loaded successfully
+2025-05-16 01:00:26,111 - google_genai.models - INFO - AFC is enabled with max remote calls: 10.
+2025-05-16 01:00:27,076 - httpx - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 200 OK"
+2025-05-16 01:00:27,078 - google_genai.models - INFO - AFC remote call 1 is done.
+2025-05-16 01:00:27,079 - jarvis_app - INFO - Received response from Jarvis AI: Yes, I remember the number you just told me. It's ...
+2025-05-16 01:00:27,083 - jarvis_app - INFO - Data saved successfully
+2025-05-16 01:00:27,084 - jarvis_app - INFO - Processed message in chat new-chat-1747345795
+2025-05-16 01:00:45,424 - jarvis_desktop - INFO - Application window closed

@@ -203,7 +203,7 @@ class TextGenerationHandler(ModelHandler):
             # Initialize the Google Generative AI client
             try:
                 from google import genai
-                self.client = genai.Client(api_key="AIzaSyB7qZ_-4axHQElsgZjqIXfWKSsVBL3BXdA")
+                self.client = genai.client.Client(api_key="AIzaSyB7qZ_-4axHQElsgZjqIXfWKSsVBL3BXdA")
                 logger.info("Successfully initialized Google Generative AI client")
             except ImportError:
                 logger.error("Google Generative AI package not installed. Please install with: pip install google-generativeai")
@@ -218,34 +218,41 @@ class TextGenerationHandler(ModelHandler):
                 chat_messages = []
                 
                 # If self.messages is a dictionary with chat IDs as keys
+
                 if isinstance(self.messages, dict) and self.messages:
-                    # Get the most recent chat
-                    recent_chat_id = list(self.messages.keys())[-1]
-                    chat_messages = self.messages[recent_chat_id]
-                    logger.info(f"Using messages from chat ID: {recent_chat_id}")
-                # If self.messages is directly a list of messages (flat structure)
-                elif isinstance(self.messages, list):
-                    chat_messages = self.messages
-                
+                   # Use the chat_id that was set externally, or fall back to most recent
+                    chat_id = getattr(self, "active_chat_id", None)
+                    if chat_id and chat_id in self.messages:
+                       chat_messages = self.messages[chat_id]
+                       logger.info(f"Using messages from chat ID: {chat_id}")
+                    else:
+                        recent = list(self.messages.keys())[-1]
+                        chat_messages = self.messages[recent]
+                        logger.info(f"Using messages from chat ID: {recent}")
+                print(chat_messages)
+
                 # Create formatted history for the conversation
-                formatted_history = []
                 if chat_messages:
                     # If messages have role/content format
                     if isinstance(chat_messages[0], dict) and 'role' in chat_messages[0]:
                         formatted_history = [
-                            {"role": msg["role"], "content": msg["content"]}
-                            for msg in chat_messages if "role" in msg and "content" in msg
+                            {
+                                "role": "user" if msg["role"] == "user" else "model",  # Gemini uses "model", not "assistant"
+                                "parts": [{"text": msg["content"]}]
+                            }
+                            for msg in chat_messages
+                            if "role" in msg and "content" in msg
                         ]
-                        logger.info(f"Formatted {len(formatted_history)} messages for chat history")
-                
-                # Limit the context to avoid exceeding token limits
-                context_window = formatted_history[-10:] if formatted_history else []  
 
-                # First create a model instance
-                model = self.client.GenerativeModel(model_name="gemini-2.0-flash")
+                        while formatted_history and formatted_history[0]["role"] != "user":
+                            logger.warning("Removed model message at start of history (Gemini requires user to start)")
+                            formatted_history.pop(0)
+                        logger.info(f"Formatted {len(formatted_history)} messages for Gemini chat history")
 
-                # Then start a chat with that model
-                self.chat = model.start_chat(history=context_window)
+                    # Limit the context to avoid exceeding token limits
+                    context_window = formatted_history[-10:] if formatted_history else []
+
+                self.chat = self.client.chats.create(model = "gemini-2.0-flash", history=context_window,)
                 
                 logger.info("Successfully created new chat session")
             except Exception as e:

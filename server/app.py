@@ -84,6 +84,8 @@ try:
 
     # Initialize the Jarvis AI assistant
     # This will load any necessary models and prepare the assistant for processing queries
+    global jarvis_ai
+
     jarvis_ai = JarvisAI()
     logger.info("Jarvis AI assistant initialized successfully")
     JARVIS_AVAILABLE = True  # Flag to indicate that Jarvis AI is available
@@ -574,6 +576,13 @@ def send_message(chat_id):
 
             # Get response from Jarvis AI
             try:
+                global jarvis_ai
+                jarvis_ai = JarvisAI()
+
+                tg = jarvis_ai.model_handlers['textGeneration']
+                tg.is_initialized = False
+                tg.chat           = None
+
                 ai_response_content = get_jarvis_response(message_content, model_type)
             except Exception as e:
                 logger.error(f"Error getting AI response in fallback mode: {e}")
@@ -625,7 +634,10 @@ def send_message(chat_id):
                     chat["title"] = new_title
                     chat_title_updated = True
                     break
-
+        tg = jarvis_ai.model_handlers['textGeneration']
+        tg.is_initialized = False
+        tg.active_chat_id = chat_id
+        tg.chat           = None
         # Get response from Jarvis AI assistant
         try:
             # Process the user message through the Jarvis AI assistant
