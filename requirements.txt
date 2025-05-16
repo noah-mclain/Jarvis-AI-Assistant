@@ -3,3 +3,13 @@ pywebview==4.4.1
 waitress==2.1.2
 werkzeug==2.3.7
 python-dotenv==1.0.0
+google-generativeai
+transformers
+torch
+torchvision
+torchaudio
+torchaudio
+pillow
+huggingface_hub
+requests
+google-genai
